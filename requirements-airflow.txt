@@ -1,0 +1,7 @@
+# Separate from requirements.txt on purpose. Airflow is a heavy dependency
+# (see README: it pulled in ~140 packages during testing) that belongs in
+# its own environment/container, not bundled into the lightweight
+# redact-service image. Install this only where you're actually running the
+# DAG (a dedicated Airflow container/venv, or your existing Airflow
+# deployment), not alongside the Flask service.
+apache-airflow

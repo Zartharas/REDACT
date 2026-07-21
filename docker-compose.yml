@@ -1,0 +1,94 @@
+# REDACT stack: OpenSearch (storage), redact-service (tested detection/
+# anonymization/audit logic behind an HTTP API), and Logstash (ingestion,
+# calling redact-service, writing to OpenSearch). Airflow is deliberately
+# NOT included here -- it runs as a separate weekly batch job against this
+# stack's output, not as a live pipeline component, and bundling a full
+# Airflow deployment (webserver + scheduler + metadata DB) into this
+# compose file would conflate two different operational concerns. See
+# requirements-airflow.txt and dags/redact_weekly_validation.py for that
+# piece, run separately.
+#
+# VERIFICATION STATUS, stated plainly: no Docker runtime was available in
+# the environment this chapter's code was developed and tested in, so
+# nothing in this file has actually been run. It reflects OpenSearch's and
+# Logstash's currently documented configuration as of this writing
+# (verified via web search against docs.opensearch.org rather than
+# asserted from memory), not a verified build. redact-service is the
+# lowest-risk piece here -- it's a standard Python/Flask container with no
+# version-sensitive plugin behavior, and its underlying code has been
+# tested extensively outside Docker (see README). OpenSearch's
+# security-disabled single-node config and Logstash's OpenSearch output
+# plugin installation are both documented approaches but unverified in
+# this specific compose file. opensearch-dashboards is intentionally
+# omitted: OpenSearch's own documentation states that a security-disabled
+# Dashboards image is not a published image but something you build
+# locally after modifying its config, which is a separate setup step
+# outside the scope of this file, not something to gloss over as if it
+# were a one-line service addition.
+
+services:
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: redact-opensearch
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true  # demo/test only -- see chapter Section 9 on why
+                                        # this must not be used for real PII-bearing data
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"  # tune to your host; see OpenSearch's own
+                                                # Docker tuning guidance for production sizing
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    networks:
+      - redact-net
+
+  redact-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: redact-service
+    environment:
+      - REDACT_PSEUDO_KEY=${REDACT_PSEUDO_KEY:?set a real key in .env, do not use a default}
+      - REDACT_AUDIT_KEY=${REDACT_AUDIT_KEY:?set a real key in .env, do not use a default}
+      - REDACT_TOKEN_STORE_PATH=/app/output/token_store.json
+    volumes:
+      - redact-output:/app/output
+    ports:
+      - "8080:8080"
+    networks:
+      - redact-net
+
+  logstash:
+    build:
+      context: ./logstash
+      dockerfile: Dockerfile
+    container_name: redact-logstash
+    depends_on:
+      - opensearch
+      - redact-service
+    environment:
+      - REDACT_SERVICE_URL=http://redact-service:8080/anonymize
+      - OPENSEARCH_HOST=http://opensearch:9200  # http, not https, matching
+                                                  # DISABLE_SECURITY_PLUGIN above
+    volumes:
+      - ./data/raw:/var/log/security:ro  # run `python src/export_raw_logs.py` first to
+                                           # populate this from data/synthetic_logs.jsonl --
+                                           # the generator's JSONL output isn't itself in the
+                                           # raw per-source format redact-pipeline.conf reads
+    networks:
+      - redact-net
+
+volumes:
+  opensearch-data:
+  redact-output:
+
+networks:
+  redact-net:
+    driver: bridge
