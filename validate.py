@@ -143,13 +143,15 @@ def main():
     # ------------------------------------------------------------------
     import audit
     audit_key = "validation-audit-key"
+    fingerprint_key = "validation-fingerprint-key"
     events = []
     for e in entries[:200]:
         for span in e["pii"]:
             original = e["log"][span["start"]:span["end"]]
             events.append(audit.build_audit_event(
                 field_type=span["type"], method="tokenize", policy_version="v-test",
-                original_value=original, audit_key=audit_key))
+                original_value=original, audit_key=audit_key,
+                fingerprint_key=fingerprint_key))
 
     all_valid = all(audit.verify_audit_event(ev, audit_key) for ev in events)
     check("every genuine audit event verifies correctly", all_valid, f"{len(events)} events")

@@ -74,7 +74,7 @@ def redact(text: str, spans: list[dict], placeholder: str = "[REDACTED]") -> str
     return _apply_right_to_left(text, spans, lambda original, span: placeholder)
 
 
-def pseudonymize(text: str, spans: list[dict], key: str, token_len: int = 12) -> str:
+def pseudonymize(text: str, spans: list[dict], key: str, token_len: int = 32) -> str:
     def transform(original: str, span: dict) -> str:
         digest = hmac.new(key.encode(), original.encode(), hashlib.sha256).hexdigest()
         prefix = span["type"].lower()[:4]
@@ -92,8 +92,15 @@ class TokenStore:
     to demonstrate and evaluate the tokenize/detokenize round trip honestly.
     """
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, token_key: str = "demo-token-key-do-not-use-in-prod"):
         self.path = path
+        # Keyed, not a plain hash: the mapping is already fully reversible via
+        # this store for anyone with file access, so the token's own
+        # resistance to guessing matters for a different audience — someone
+        # who sees only the anonymized log output, without store access, and
+        # should not be able to enumerate candidates against an unkeyed hash
+        # to recover the original value directly from what the log shows.
+        self.token_key = token_key
         self._forward: dict[str, str] = {}   # original -> token
         self._reverse: dict[str, str] = {}    # token -> original
         if os.path.exists(path):
@@ -109,7 +116,7 @@ class TokenStore:
     def get_or_create_token(self, original: str, pii_type: str) -> str:
         if original in self._forward:
             return self._forward[original]
-        digest = hashlib.sha256(original.encode()).hexdigest()[:12]
+        digest = hmac.new(self.token_key.encode(), original.encode(), hashlib.sha256).hexdigest()[:32]
         token = f"tok_{pii_type.lower()}_{digest}"
         self._forward[original] = token
         self._reverse[token] = original
@@ -117,6 +124,7 @@ class TokenStore:
 
     def resolve(self, token: str) -> str | None:
         return self._reverse.get(token)
+
 
 
 def tokenize(text: str, spans: list[dict], store: TokenStore) -> str:
@@ -169,7 +177,7 @@ def anonymize_by_policy(text: str, spans: list[dict], key: str, store: TokenStor
             return "[REDACTED]"
         if span["type"] in PSEUDONYMIZE_TYPES:
             digest = hmac.new(key.encode(), original.encode(), hashlib.sha256).hexdigest()
-            return f"{span['type'].lower()[:4]}_{digest[:12]}"
+            return f"{span['type'].lower()[:4]}_{digest[:32]}"
         if span["type"] in TOKENIZE_TYPES:
             return store.get_or_create_token(original, span["type"])
         return original  # unknown type: leave untouched rather than guess

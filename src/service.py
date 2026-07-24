@@ -30,10 +30,18 @@ app = Flask(__name__)
 POLICY_VERSION = "redact-v0.1"
 PSEUDO_KEY = os.environ.get("REDACT_PSEUDO_KEY", "demo-pseudonymization-key-do-not-use-in-prod")
 AUDIT_KEY = os.environ.get("REDACT_AUDIT_KEY", "demo-audit-signing-key-do-not-use-in-prod")
+# Deliberately a separate key from AUDIT_KEY: the audit-signing key authenticates
+# the event as a whole, while this key protects the low-entropy fingerprint inside
+# it. Using one key for both would mean anyone who can verify an event's
+# authenticity (which is meant to be a relatively wide audience, an auditor,
+# a regulator) can also brute-force the fingerprint, which is meant to be
+# usable by a much narrower audience.
+FINGERPRINT_KEY = os.environ.get("REDACT_FINGERPRINT_KEY", "demo-fingerprint-key-do-not-use-in-prod")
+TOKEN_KEY = os.environ.get("REDACT_TOKEN_KEY", "demo-token-key-do-not-use-in-prod")
 TOKEN_STORE_PATH = os.environ.get("REDACT_TOKEN_STORE_PATH", "output/token_store.json")
 
 os.makedirs(os.path.dirname(TOKEN_STORE_PATH) or ".", exist_ok=True)
-_store = anonymize.TokenStore(TOKEN_STORE_PATH)
+_store = anonymize.TokenStore(TOKEN_STORE_PATH, token_key=TOKEN_KEY)
 
 
 @app.route("/health", methods=["GET"])
@@ -71,6 +79,7 @@ def anonymize_endpoint():
             field_type=span["type"], method=method,
             policy_version=POLICY_VERSION,
             original_value=original_value, audit_key=AUDIT_KEY,
+            fingerprint_key=FINGERPRINT_KEY,
         ))
 
     _store.save()

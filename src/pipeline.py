@@ -22,11 +22,13 @@ import audit        # noqa: E402
 POLICY_VERSION = "redact-v0.1"
 PSEUDO_KEY = "demo-pseudonymization-key-do-not-use-in-prod"
 AUDIT_KEY = "demo-audit-signing-key-do-not-use-in-prod"
+FINGERPRINT_KEY = "demo-fingerprint-key-do-not-use-in-prod"
+TOKEN_KEY = "demo-token-key-do-not-use-in-prod"
 
 
 def process_file(in_path: str, out_path: str, audit_out_path: str,
                   token_store_path: str, limit: int | None = None):
-    store = anonymize.TokenStore(token_store_path)
+    store = anonymize.TokenStore(token_store_path, token_key=TOKEN_KEY)
     n_processed = 0
     n_findings = 0
 
@@ -69,6 +71,7 @@ def process_file(in_path: str, out_path: str, audit_out_path: str,
                     field_type=span["type"], method=method,
                     policy_version=POLICY_VERSION,
                     original_value=original_value, audit_key=AUDIT_KEY,
+                    fingerprint_key=FINGERPRINT_KEY,
                 )
                 f_audit.write(json.dumps(event) + "\n")
                 n_findings += 1
