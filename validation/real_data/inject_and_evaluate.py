@@ -31,7 +31,7 @@ production use. Injecting PII into them would test a fabricated scenario,
 not a real one, and the paper says so explicitly rather than padding the
 result count.
 """
-import re, json, random, sys, os
+import re, json, random, sys, os, time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 import detect
@@ -103,6 +103,7 @@ def evaluate(entries, label):
     person_spaced_tp = person_spaced_total = 0
     ip_tp = ip_fn = 0
 
+    t0 = time.perf_counter()
     for e in entries:
         gold = e['pii']
         preds = detect.scan_regex(e['log']) + detect.scan_ner(e['log'])
@@ -141,6 +142,8 @@ def evaluate(entries, label):
                 else:
                     person_flat_total += 1
 
+    elapsed = time.perf_counter() - t0
+
     prec = tp / (tp + fp) if (tp + fp) else 0
     rec = tp / (tp + fn) if (tp + fn) else 0
     print(f"=== {label} ===")
@@ -153,6 +156,8 @@ def evaluate(entries, label):
               f"{person_flat_tp/person_flat_total:.1%}")
     if ip_tp + ip_fn:
         print(f"  IP recall:      {ip_tp}/{ip_tp+ip_fn} = {ip_tp/(ip_tp+ip_fn):.1%}")
+    rate = len(entries) / elapsed if elapsed else float('inf')
+    print(f"  timing: {len(entries)} lines in {elapsed:.2f}s -> {rate:.1f} events/sec")
     print()
 
 
