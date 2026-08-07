@@ -15,25 +15,24 @@ One methodological detail worth knowing if you're comparing your own run against
 
 Same integrity discipline as the synthetic generator: every injected offset is verified against the actual injected text before evaluation, and the script asserts on any mismatch rather than silently continuing.
 
-## Confirmed results
+## Confirmed results (corrected 2026-08-07 — see Bug 10 in `BUGS_AND_FIXES.md`)
 
-Run twice independently (fixed seed 42, deterministic), against the synthetic corpus baseline for comparison:
+**The table originally here (precision 0.34–0.51 across all five real datasets) was substantially wrong, not just imprecise.** `inject_and_evaluate.py` lacked the prediction-dedup step `evaluate.py` already has; whenever regex and NER independently agreed on the same real span (routine for IP addresses), the second correct detection was counted as a false positive instead of a harmless duplicate. Recall was never affected — only precision. Fixed and re-run against all five datasets, corrected numbers below; full quantified before/after and root cause in `BUGS_AND_FIXES.md` Bug 10.
 
-| Dataset | Precision | Recall | PERSON spaced | PERSON flat | IP recall |
-|---|---|---|---|---|---|
-| Synthetic corpus (baseline) | 0.588 | 0.745 | 98.8% | 5.9% | 100.0% |
-| OpenSSH (real) | 0.507 | 0.945 | 99.1% | 0.0% | 99.8% |
-| Linux (real) | 0.498 | 0.961 | 98.4% | 3.4% | 100.0% |
-| Thunderbird (real) | 0.414 | 0.982 | 100.0% | 0.0% | 100.0% |
-| OpenStack (real, IP only) | 0.497 | 1.000 | n/a | n/a | 100.0% |
-| Zookeeper (real, IP only) | 0.340 | 1.000 | n/a | n/a | 100.0% |
+| Dataset | Precision | Recall | PERSON spaced | PERSON flat (regex+NER) | PERSON flat (+ Layer 4) | IP recall |
+|---|---|---|---|---|---|---|
+| Synthetic corpus (baseline, naive regex+NER) | 0.588 | 0.706 | 98.8% | 4.9% | 68.1%* | 100.0% |
+| OpenSSH (real) | **0.974** | 0.945 | 99.1% | 0.0% | 45.5% | 99.8% |
+| Linux (real) | **0.920** | 0.961 | 98.4% | 3.4% | 50.0% | 100.0% |
+| Thunderbird (real) | **0.701** | 0.982 | 100.0% | 0.0% | 75.0%† | 100.0% |
+| OpenStack (real, IP only) | **0.989** | 1.000 | n/a | n/a | n/a | 100.0% |
+| Zookeeper (real, IP only) | **0.476** | 1.000 | n/a | n/a | n/a | 100.0% |
 
-The format-sensitivity gap central to this project, near-total success on spaced names, near-total failure on flattened ones, replicates across three independent real sources, not just the synthetic corpus. Precision is lower on every real dataset than on synthetic (0.34–0.51 vs. 0.588), an honest sign that synthetic-only evaluation likely overstates real-world precision. IP recall stays near-perfect everywhere, consistent with IP detection being a comparatively solved, format-based problem next to name detection.
+\* Synthetic PERSON-flat recall with Layer 4 is the full-ensemble number from the main `README.md` (2,038/2,993 overall PERSON, i.e. 68.1% including both formats) — kept here for reference, not a like-for-like flat-only figure; see the main README for the flat-only 50.3% number.
+† Thunderbird's flat-name sample is small (n=12 injected), so 0.0% → 75.0% is a real but noisy result — treat the direction (Layer 4 helps) as more reliable than the exact percentage at this sample size.
+
+**Revised interpretation:** the format-sensitivity gap (near-total success on spaced names, sharply lower on flattened ones) still replicates across all three PERSON-bearing real sources — that finding holds. What does **not** hold anymore is the previously stated "precision is consistently lower on real data than synthetic": three of five real datasets (OpenSSH, Linux, OpenStack) now show *higher* precision than the synthetic baseline's 0.588, and only Zookeeper and Thunderbird show real degradation, driven by the same private/internal-IP-range false positives documented as Finding 1 in the main `README.md` — a genuine detector limitation on datasets with heavier internal-IP traffic, not a synthetic-vs-real generalization gap. **The flattened-username layer (Layer 4) also generalizes to real, unmodified log text**: recall gains of similar magnitude to the synthetic corpus's 50.3% (OpenSSH 0.0%→45.5%, Linux 3.4%→50.0%, Thunderbird 0.0%→75.0% on a small n=12 sample) show up on real Loghub lines, at effectively unchanged precision (e.g. OpenSSH 0.974→0.975, Linux 0.920→0.921).
+
+**What this does and doesn't prove, stated plainly:** the injected PERSON values in these three datasets are still drawn from Faker (`fake.user_name()` / `fake.name()`), the same generator whose name lists the flattened-username layer's own dictionary is built from — see `flattened_names.py`'s own documented limitation. This test validates the layer against **real surrounding log text** (genuine Loghub lines this project didn't write), which is a real and useful generalization check, but it does **not** validate the dictionary against a name population outside Faker's own list — the dictionary-matches-itself concern from the synthetic-corpus result isn't resolved by this test alone. A true test of that would need a name-frequency source independent of Faker (e.g. US Census given/surname data) injected into these same real-text datasets — a separate, not-yet-built follow-up, ROADMAP item 10.
 
 Reproduce with `bash download_loghub.sh && python inject_and_evaluate.py`. Requires `faker`, `presidio_analyzer`, `presidio_anonymizer`, and a spaCy English model (`python -m spacy download en_core_web_lg`) installed in whichever Python environment runs the script.
-
-## Layer 4 (flattened-username dictionary) on real data
-
-`inject_and_evaluate.py` now runs a second condition (`regex + NER + flattened-username layer`) for each of the three PERSON-bearing datasets (OpenSSH, Linux, Thunderbird), alongside the original `regex + NER` condition, so the layer's contribution is visible against real log text.
-
-**What this test can and cannot show, stated plainly before running it:** the injected PERSON values in these three datasets are drawn from Faker (`fake.user_name()` / `fake.name()`), the same generator whose name lists the flattened-username layer's own dictionary is built from — see `flattened_names.py`'s own documented limitation. This test therefore validates the layer against **real surrounding log text** (genuine Loghub lines this project didn't write), which is a real and useful generalization check, but it does **not** validate the dictionary against a name population outside Faker's own list — the dictionary-matches-itself concern from the synthetic-corpus result isn't resolved by this test alone. A true test of that would need a name-frequency source independent of Faker (e.g. US Census given/surname data) injected into these same real-text datasets, which is a separate, not-yet-built follow-up (see `ROADMAP.md` item 10).

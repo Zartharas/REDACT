@@ -376,6 +376,71 @@ full updated tables.
 
 ---
 
+## 10. Real-data evaluation script silently double-counted agreeing detections as false positives
+
+**Impact:** Critical (measurement integrity, not a pipeline defect — but the
+kind of silent-wrong-number failure this document exists to catch).
+**Status:** Verified fixed, 2026-08-07, via a live before/after comparison
+against all five Loghub datasets (source: `validation/real_data/inject_and_evaluate.py`).
+
+Found while extending `inject_and_evaluate.py` to add a flattened-username-layer
+condition (ROADMAP item 5). `evaluate()`'s matching loop combined
+`detect.scan_regex()` and `detect.scan_ner()` predictions into one list and
+matched them against gold spans one at a time, in order, marking each gold
+span "matched" after the first prediction that hit it. Any *second*
+prediction that correctly overlapped an **already-matched** gold span (e.g.
+regex and NER both correctly flagging the same real IP address, which
+happens on nearly every line with an IP) fell through to the `if not hit:
+fp += 1` branch — a real, correct detection, from a second layer
+independently agreeing with the first, counted as a false positive. This is
+the exact class of bug `evaluate.py`'s own `run_evaluation()` already
+guards against with an explicit dedup step; `inject_and_evaluate.py` never
+had the equivalent.
+
+**Effect, quantified:** estimated recovered false-positive counts (old
+precision and TP held constant, solved for old FP, compared to the newly
+measured FP with dedup in place):
+
+| Dataset | Old reported precision | New precision (same TP, same recall) | Estimated old FP | New FP |
+|---|---|---|---|---|
+| OpenSSH | 0.507 | **0.974** | ~1,786 | 49 |
+| Linux | 0.498 | **0.920** | ~1,413 | 122 |
+| Thunderbird | 0.414 | **0.701** | ~914 | 276 |
+| OpenStack | 0.497 | **0.989** | ~1,240 | 14 |
+| Zookeeper | 0.340 | **0.476** | ~2,743 | 1,557 |
+
+Recall is unaffected in every case (TP/FN counting was never wrong — only
+FP was). This is not a small correction: on three of the five datasets,
+corrected precision is now *higher* than the synthetic corpus's own
+regex+NER precision (0.588), which directly contradicts this project's
+previously stated finding that "precision is consistently lower than the
+synthetic numbers alone would suggest" (`README.md`, "Does it hold up on
+real data" section). That claim was true under the buggy measurement and is
+no longer true under the corrected one — Zookeeper and, to a lesser extent,
+Thunderbird still show real precision degradation (dominated by the same
+private/internal-IP-range false positives documented in Finding 1 of the
+main measurement section, a real detector limitation, not a script bug),
+but OpenSSH, Linux, and OpenStack do not.
+
+**Fix:** added the same prediction-dedup step `evaluate.py`'s
+`run_evaluation()` already uses — before matching, drop any prediction
+that overlaps an already-kept prediction of the same type — applied
+uniformly whether or not the flattened layer is included.
+
+**Compliance/integrity note, stated plainly:** this is the same failure
+shape as bugs 1, 4, 5, and 7 above — no crash, no error, a plausible-looking
+number that was silently wrong — just found in an evaluation script instead
+of the production pipeline. It's flagged here with the same weight as those
+because the numbers it produced were cited as this project's central
+generalization evidence (synthetic-to-real precision comparison). Anyone
+who has cited the original 0.34–0.51 real-data precision range from this
+project's earlier README, chapter, or paper drafts should treat those
+specific numbers as retracted and superseded by the table above — that
+correction is outside this document's scope to make in those other
+documents, but it needs to happen wherever those numbers were cited.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7) shared the same shape:
