@@ -78,6 +78,13 @@ overlapping I/O. A production deployment should run this behind a
 multi-process WSGI server (e.g. gunicorn, worker count matched to CPU
 cores).
 
+**Done, 2026-08-07:** `Dockerfile`'s `CMD` now runs `redact-service` under
+gunicorn (`--workers $(nproc)`) instead of `app.run(...)`. Smoke-tested
+(stub Flask app, identical `--chdir src ... service:app` invocation,
+correct worker count, `/health` responding) but not yet re-run through the
+full Docker Compose stack the way the rest of this file's numbers are —
+see ROADMAP.md item 7 for the follow-up verification this still needs.
+
 **Residual timeout cluster, root-caused and fixed 2026-08-07:** the
 startup-only timeout burst mentioned above (previously "not yet fully
 explained") was found while re-verifying Bug 6 below. Root cause:

@@ -91,29 +91,44 @@ def anonymize_endpoint():
     })
 
 
-if __name__ == "__main__":
-    # Warm the NER model before accepting traffic. Root-caused 2026-08-07:
-    # detect._get_analyzer() is @lru_cache(maxsize=1)'d, so the expensive
-    # spaCy/Presidio model load only happens on the *first* real /anonymize
-    # call, not at process startup. Docker Compose's healthcheck only hits
-    # /health, which never touches the analyzer -- so redact-service reports
-    # "healthy" and Logstash starts sending its configured 8 concurrent
-    # requests (pipeline.workers => 8) before the model is loaded. During
-    # that multi-second, GIL-holding load, every request queues; enough of
-    # them exceed the http filter's timeout to get tagged
-    # _httprequestfailure and quarantined. Confirmed live: a fresh
-    # `docker compose up --build` produced a burst of "Read timed out"
-    # errors in Logstash's log in the first ~30-60s, then zero for the
-    # remainder of the run; final reconciliation still landed at exactly
-    # 9,968 anonymized + 32 quarantined = 10,000 (quarantine doing its job,
-    # nothing lost), but a production deployment shouldn't rely on
-    # Logstash's timeout/quarantine fallback to paper over a predictable
-    # cold-start window. This is the previously-undiagnosed "residual
-    # startup-only cluster of timeouts" flagged as unexplained in Bug 3
-    # (BUGS_AND_FIXES.md) -- now explained and fixed here, not there,
-    # since the actual fix belongs at the service-startup level.
-    detect._get_analyzer()
+# Warm the NER model before accepting traffic. Root-caused 2026-08-07:
+# detect._get_analyzer() is @lru_cache(maxsize=1)'d, so the expensive
+# spaCy/Presidio model load only happens on the *first* real /anonymize
+# call, not at process startup. Docker Compose's healthcheck only hits
+# /health, which never touches the analyzer -- so redact-service reports
+# "healthy" and Logstash starts sending its configured 8 concurrent
+# requests (pipeline.workers => 8) before the model is loaded. During
+# that multi-second, GIL-holding load, every request queues; enough of
+# them exceed the http filter's timeout to get tagged
+# _httprequestfailure and quarantined. Confirmed live: a fresh
+# `docker compose up --build` produced a burst of "Read timed out"
+# errors in Logstash's log in the first ~30-60s, then zero for the
+# remainder of the run; final reconciliation still landed at exactly
+# 9,968 anonymized + 32 quarantined = 10,000 (quarantine doing its job,
+# nothing lost), but a production deployment shouldn't rely on
+# Logstash's timeout/quarantine fallback to paper over a predictable
+# cold-start window. This is the previously-undiagnosed "residual
+# startup-only cluster of timeouts" flagged as unexplained in Bug 3
+# (BUGS_AND_FIXES.md) -- now explained and fixed here, not there,
+# since the actual fix belongs at the service-startup level.
+#
+# Deliberately at MODULE level, not inside `if __name__ == "__main__":`.
+# gunicorn (see the production CMD in Dockerfile) imports this module
+# directly -- it never executes the `__main__` block -- so if this call
+# stayed inside that guard, gunicorn workers would silently regain the
+# exact cold-start race this fix exists to close. Under gunicorn's default
+# (non-preload) worker model, each worker process imports this module
+# independently after forking, so each worker warms its own copy of the
+# model in parallel with its siblings at startup; this is more memory
+# (model size x worker count) than gunicorn's --preload flag would use
+# (one shared copy-on-write load in the master before forking), but avoids
+# the fork-after-model-load edge cases some native-extension-heavy
+# libraries (spaCy included) can hit with --preload, and hasn't been
+# tested against --preload specifically, so plain worker-level loading is
+# the safer default until that's verified.
+detect._get_analyzer()
 
+if __name__ == "__main__":
     # threaded=True added after live testing showed Logstash's http filter
     # (pipeline.workers => 8, see logstash/redact-pipeline.conf) timing out
     # against this server ("Read timed out" in Logstash's log) under
