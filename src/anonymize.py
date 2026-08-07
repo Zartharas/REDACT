@@ -37,6 +37,7 @@ import hmac
 import json
 import os
 import threading
+from abc import ABC, abstractmethod
 
 
 def _overlaps(a: dict, b: dict) -> bool:
@@ -83,27 +84,144 @@ def pseudonymize(text: str, spans: list[dict], key: str, token_len: int = 32) ->
     return _apply_right_to_left(text, spans, transform)
 
 
-class TokenStore:
-    """Reversible token <-> original-value mapping, persisted as JSON.
+class StorageProvider(ABC):
+    """Persistence backend for TokenStore's forward/reverse mapping.
 
-    This is the open-source, zero-budget stand-in for a proper secrets store
-    (HashiCorp Vault, AWS Secrets Manager). The chapter is explicit that a
-    flat JSON file is not an acceptable production token store on its own —
-    see the limitations note at the bottom of this file — but it is enough
-    to demonstrate and evaluate the tokenize/detokenize round trip honestly.
+    TokenStore owns the business logic (token generation, the in-memory
+    dicts, the thread lock); a StorageProvider only owns getting those two
+    dicts to and from durable storage. This split exists because the flat
+    JSON file (FileStorageProvider, TokenStore's original and still-default
+    behavior) was always explicitly documented as a demo/local-dev stand-in,
+    not a production secrets store -- see FileStorageProvider's own
+    docstring. Swapping in RedisStorageProvider (or a future
+    HashiCorpVaultStorageProvider) should not require touching
+    get_or_create_token, resolve, or anything in TokenStore's threading
+    model.
     """
 
-    def __init__(self, path: str, token_key: str = "demo-token-key-do-not-use-in-prod"):
+    @abstractmethod
+    def load(self) -> tuple[dict[str, str], dict[str, str]]:
+        """Return (forward, reverse) dicts. Empty dicts if nothing stored yet."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def save(self, forward: dict[str, str], reverse: dict[str, str]) -> None:
+        """Persist the full forward/reverse mapping. Called after every new
+        token is minted (see TokenStore.save()), so this needs to be cheap
+        enough to call frequently -- not necessarily on every single
+        get_or_create_token() call, but on whatever cadence the caller
+        chooses to call TokenStore.save()."""
+        raise NotImplementedError
+
+
+class FileStorageProvider(StorageProvider):
+    """Flat-JSON persistence. This is the open-source, zero-budget stand-in
+    for a proper secrets store (HashiCorp Vault, AWS Secrets Manager) --
+    explicitly NOT an acceptable production token store on its own (see the
+    limitations note at the bottom of this file): no access control beyond
+    filesystem permissions, no encryption at rest, no key rotation, and a
+    full-file rewrite on every save() rather than an incremental write. It
+    is enough to demonstrate and evaluate the tokenize/detokenize round trip
+    honestly, and remains the default for local dev and testing (including
+    everything in validate.py and evaluate.py) since it needs no external
+    service running."""
+
+    def __init__(self, path: str):
         self.path = path
+
+    def load(self) -> tuple[dict[str, str], dict[str, str]]:
+        if not os.path.exists(self.path):
+            return {}, {}
+        with open(self.path) as f:
+            data = json.load(f)
+            return data.get("forward", {}), data.get("reverse", {})
+
+    def save(self, forward: dict[str, str], reverse: dict[str, str]) -> None:
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+        with open(self.path, "w") as f:
+            json.dump({"forward": forward, "reverse": reverse}, f)
+
+
+class RedisStorageProvider(StorageProvider):
+    """Redis-backed persistence, for a real multi-instance production
+    deployment where a flat local JSON file (FileStorageProvider) can't be
+    shared across redact-service replicas or survive a container restart
+    without a mounted volume.
+
+    STATUS, stated plainly rather than implied: this has been written
+    against the documented `redis-py` client API and is straightforward
+    (two hashes, HSET/HGET/HGETALL), but it has NOT been run against a live
+    Redis instance in this project's own testing -- unlike everything else
+    in BUGS_AND_FIXES.md, which is only ever marked verified after an actual
+    execution, not just a plausible-looking implementation. Treat this class
+    as unverified until it has been exercised the same way: point it at a
+    real `redis` container, run the tokenize/detokenize round-trip and the
+    concurrent-access test that originally found the TokenStore race
+    condition (see Bug 6), and update this docstring with the result before
+    relying on it in production.
+
+    Stores the forward map as a Redis hash at `{key_prefix}:forward` and the
+    reverse map at `{key_prefix}:reverse`, mirroring the two-dict structure
+    TokenStore already uses in memory -- this keeps load()/save() simple
+    (HGETALL / one HSET per entry) rather than re-deriving one direction
+    from the other on every load.
+    """
+
+    def __init__(self, redis_url: str = "redis://localhost:6379/0",
+                 key_prefix: str = "redact:tokenstore"):
+        # Imported lazily so importing this module doesn't require the
+        # redis package to be installed for callers who only use
+        # FileStorageProvider (the default) -- same pattern detect.py uses
+        # for presidio_analyzer.
+        import redis  # noqa: E402
+        self._client = redis.from_url(redis_url, decode_responses=True)
+        self._forward_key = f"{key_prefix}:forward"
+        self._reverse_key = f"{key_prefix}:reverse"
+
+    def load(self) -> tuple[dict[str, str], dict[str, str]]:
+        forward = self._client.hgetall(self._forward_key) or {}
+        reverse = self._client.hgetall(self._reverse_key) or {}
+        return forward, reverse
+
+    def save(self, forward: dict[str, str], reverse: dict[str, str]) -> None:
+        # Redis HSET can't set an empty mapping; skip rather than error on
+        # an empty store (e.g. the very first save() before any token has
+        # been minted).
+        pipe = self._client.pipeline()
+        pipe.delete(self._forward_key, self._reverse_key)
+        if forward:
+            pipe.hset(self._forward_key, mapping=forward)
+        if reverse:
+            pipe.hset(self._reverse_key, mapping=reverse)
+        pipe.execute()
+
+
+class TokenStore:
+    """Reversible token <-> original-value mapping. Owns the business logic
+    (token generation, in-memory dicts, thread-safety); persistence is
+    delegated to a StorageProvider (see above) so the backend -- flat JSON
+    file for local dev/testing, Redis or a future Vault provider for
+    production -- can be swapped without touching this class.
+    """
+
+    def __init__(self, path_or_provider: "str | StorageProvider",
+                 token_key: str = "demo-token-key-do-not-use-in-prod"):
+        # Accepts a bare path (original call signature, still the default
+        # everywhere in this project -- service.py, pipeline.py, validate.py)
+        # for backward compatibility, wrapping it in a FileStorageProvider.
+        # Pass a StorageProvider instance directly (e.g. RedisStorageProvider(...))
+        # to use a different backend.
+        if isinstance(path_or_provider, StorageProvider):
+            self._provider: StorageProvider = path_or_provider
+        else:
+            self._provider = FileStorageProvider(path_or_provider)
         # Keyed, not a plain hash: the mapping is already fully reversible via
-        # this store for anyone with file access, so the token's own
+        # this store for anyone with storage access, so the token's own
         # resistance to guessing matters for a different audience — someone
         # who sees only the anonymized log output, without store access, and
         # should not be able to enumerate candidates against an unkeyed hash
         # to recover the original value directly from what the log shows.
         self.token_key = token_key
-        self._forward: dict[str, str] = {}   # original -> token
-        self._reverse: dict[str, str] = {}    # token -> original
         # Guards every read-modify-write against _forward/_reverse. Found
         # necessary the hard way: under real concurrent HTTP load (multiple
         # Logstash pipeline workers hitting src/service.py at once), one
@@ -112,21 +230,18 @@ class TokenStore:
         # raising "RuntimeError: dictionary changed size during iteration".
         # Sequential, single-threaded testing (evaluate.py, the validation
         # suite) never exercises this path, since nothing there calls this
-        # store from more than one thread. This is still a flat JSON file
-        # with no access control, encryption at rest, or key rotation --
-        # the lock only fixes in-process thread-safety, not the production
-        # secrets-store gap already noted in this file's class docstring.
+        # store from more than one thread. The lock only fixes in-process
+        # thread-safety -- it says nothing about a multi-instance production
+        # deployment sharing one Redis backend, which needs the backend's
+        # own atomicity guarantees (see RedisStorageProvider's use of a
+        # pipeline for save()), not this in-process lock, to stay correct
+        # across separate redact-service processes.
         self._lock = threading.Lock()
-        if os.path.exists(path):
-            with open(path) as f:
-                data = json.load(f)
-                self._forward = data.get("forward", {})
-                self._reverse = data.get("reverse", {})
+        self._forward, self._reverse = self._provider.load()
 
     def save(self):
         with self._lock:
-            with open(self.path, "w") as f:
-                json.dump({"forward": self._forward, "reverse": self._reverse}, f)
+            self._provider.save(self._forward, self._reverse)
 
     def get_or_create_token(self, original: str, pii_type: str) -> str:
         with self._lock:

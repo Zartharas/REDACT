@@ -1,0 +1,13 @@
+# Separate from requirements.txt on purpose, same reasoning as
+# requirements-airflow.txt: RedisStorageProvider (src/anonymize.py) is a
+# production TokenStore backend, not something every dev/test environment
+# needs. FileStorageProvider (the default, backing everything in
+# validate.py/evaluate.py) has no external dependency at all. Install this
+# only where you're actually configuring redact-service to use Redis.
+#
+# STATUS: RedisStorageProvider has been written against the documented
+# redis-py client API but has not yet been run against a live Redis
+# instance in this project's own testing -- see its docstring in
+# src/anonymize.py for exactly what still needs verifying before it's
+# trusted in production.
+redis
