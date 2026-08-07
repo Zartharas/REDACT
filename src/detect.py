@@ -107,12 +107,25 @@ def scan_entropy(text: str, min_len: int = 12, threshold: float = 3.3) -> list[d
 
 
 # --------------------------------------------------------------------------
+# Layer 4: flattened-username name detection via dictionary segmentation.
+# See src/flattened_names.py for the full rationale and stated limitations
+# (name-dictionary coverage, synthetic-corpus circularity).
+# --------------------------------------------------------------------------
+
+def scan_flattened(text: str) -> list[dict]:
+    from flattened_names import scan_flattened_names
+    return scan_flattened_names(text)
+
+
+# --------------------------------------------------------------------------
 # Ensemble
 # --------------------------------------------------------------------------
 
-def detect_all(text: str, use_ner: bool = True) -> list[dict]:
+def detect_all(text: str, use_ner: bool = True, use_flattened: bool = True) -> list[dict]:
     hits = scan_regex(text)
     if use_ner:
         hits += scan_ner(text)
     hits += scan_entropy(text)
+    if use_flattened:
+        hits += scan_flattened(text)
     return hits

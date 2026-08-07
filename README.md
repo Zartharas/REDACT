@@ -81,6 +81,26 @@ Per-entity-type detail (naive condition, full ensemble):
 
    Important caveat, stated plainly rather than buried: this synthetic dataset doesn't include the category entropy detection is actually built for: API keys, session tokens, opaque hashes. The weak result here is partly a property of what this dataset tests, not necessarily a verdict on entropy detection generally. The chapter should say this explicitly rather than present a flattering number that the data doesn't support, or damn the technique based on a dataset that wasn't built to exercise its actual use case.
 
+## Layer 4: closing part of the flattened-username gap (`src/flattened_names.py`)
+
+Finding 2 above (5.9% recall on flattened names like `donaldgarcia`) is the single most consequential result in this project, so it got a dedicated fourth detection layer rather than being left as a documented limitation: dictionary-based compound segmentation, trying every split point in a token to see if it cleanly divides into `<first name><last name>`. This treats the problem as compound-word segmentation, not sentence-level NER, which is the actual shape of the problem NER structurally cannot solve here.
+
+**Measured standalone (this layer alone, not yet combined with NER in an end-to-end run — see caveat below), against the same 10,000-entry corpus:**
+
+| Metric | Before (NER alone) | After (this layer alone) |
+|---|---|---|
+| Flattened-format PERSON recall | 5.9% (98/1,668) | **50.3% (839/1,668)** |
+| False-trigger rate on space-separated names | n/a | 0.3% (3/987) |
+| Precision | n/a | 100%, once a corpus artifact is accounted for (below) |
+
+Getting to that precision number required finding and fixing a real false-positive source first: tokens matching a name pattern immediately followed by `@` (email local-parts, since `fake.email()` is itself name-derived) were being double-flagged as PERSON on top of the correct EMAIL span. Fixed with a one-line exclusion once found empirically, not guessed in advance.
+
+**A second, more interesting thing turned up while characterizing the remaining false positives, and it's a bug in the corpus generator, not the detector:** every one of the 171 apparent false positives left after that fix was the *same* PII value appearing a second time in one line (the syslog `sudo` template uses `{PERSON_name_flat}` twice), which `generate_logs.py`'s ground-truth labeler only records once (`text.find()` returns the first occurrence only). The detector was correctly finding real PII that the corpus's own ground truth never labeled. See Bug 9 in `BUGS_AND_FIXES.md` for the full writeup and why it wasn't silently fixed as part of this change — it affects previously reported numbers and that's a decision to make explicitly, not a side effect.
+
+**What this hasn't been tested against yet, stated plainly:** this measurement isolates the new layer against ground truth directly; it has not yet been run combined with the full regex+NER ensemble in `evaluate.py`'s "naive" condition end-to-end (the environment this layer was built and measured in didn't have network access to fetch the spaCy model Presidio depends on). The `evaluate.py` harness has already been extended with a fourth condition (`--flattened`) to do exactly that combined run; it just hasn't been executed yet. Run it yourself and update this table once it has.
+
+**Known limitation, stated in the code and repeated here:** the name dictionary is Faker's own `first_names`/`last_names` list — the same generator that built this corpus. That makes the 50.3% number optimistic in a way that won't transfer 1:1 to a real production user population with names outside that list. Validating this layer against the real Loghub datasets already used elsewhere in this project is the concrete next step to check whether this is a real generalizable gain or partly a dictionary-matches-itself artifact.
+
 ## Anonymization and audit trail (added after the initial detection-only pass)
 
 ```bash

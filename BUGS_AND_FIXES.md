@@ -307,6 +307,47 @@ concluding a document count reveals a real bug.
 
 ---
 
+## 9. Ground-truth generator silently under-labels a value that appears twice in one template
+
+**Impact:** Low on its own (undercounts recall/inflates apparent false
+positives slightly, on one template only), but worth recording because it
+was discovered by a detector working correctly, not by a detector failing.
+**Status:** Found, not yet fixed (source: `src/generate_logs.py`).
+
+While building and measuring the new flattened-username layer (see below),
+its false-positive rate looked alarming at first: 171 out of 1,013
+predictions (83.1% precision) didn't match any gold `PERSON` span. Every
+single one of those 171, on inspection, was the same root cause: the syslog
+`sudo` template uses `{PERSON_name_flat}` twice --
+`sudo[{pid}]: {PERSON_name_flat} : TTY=pts/0 ; PWD=/home/{PERSON_name_flat} ; ...`
+-- and `generate_logs.py`'s `render()` locates each gold span with
+`text.find(value)`, which only returns the *first* occurrence. The second,
+identical occurrence (inside the `PWD=/home/...` path) is real PII, present
+in the text, but never gets a gold-truth span. A detector accurate enough to
+find both occurrences is then charged a false positive for correctly finding
+the second one.
+
+**Practical effect:** every recall/precision number computed against this
+corpus for any detector that can find repeated values (this new layer, and
+in principle Presidio's NER too, though NER's independent misses elsewhere
+mask it) is very slightly pessimistic on precision and very slightly
+pessimistic on recall for templates with a repeated slot. Only the `sudo`
+template is affected; no other template in `generate_logs.py` reuses a PII
+slot value twice.
+
+**Fix, not yet applied:** `render()` should locate *all* occurrences of each
+slot value (e.g. iterate `re.finditer(re.escape(value), text)`) rather than
+only the first, and emit one gold span per occurrence. This changes the
+corpus's ground truth, which means every previously reported number in this
+project (README, chapter, paper) that depends on this exact corpus would
+need to be re-run and re-verified after the fix, not just this new layer's
+numbers -- deliberately not done automatically as part of this change, since
+regenerating the canonical dataset and re-validating every downstream claim
+is a decision that affects already-published numbers and should be made
+explicitly, not as a side effect of adding a detection layer.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7) shared the same shape:

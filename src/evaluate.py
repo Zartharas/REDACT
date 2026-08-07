@@ -48,10 +48,14 @@ def load_dataset(path: str) -> list[dict]:
         return [json.loads(line) for line in f]
 
 
-def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = False):
+def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = False,
+                    use_flattened: bool = False):
     """use_entropy_gate: if True, only run NER on lines with no regex hit at all
     (the 'tiered' strategy described in the chapter). If False, run NER on
-    every line regardless of regex results (the naive strategy)."""
+    every line regardless of regex results (the naive strategy).
+    use_flattened: if True, also run the flattened-username name-dictionary
+    layer (src/flattened_names.py), added specifically to address the
+    documented 5.9% recall gap on concatenated name tokens."""
     per_type = defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0})
     t0 = time.time()
     for entry in entries:
@@ -66,6 +70,9 @@ def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = 
                 pass  # tiered strategy: skip NER if regex already found something
             else:
                 pred += detect.scan_ner(text)
+
+        if use_flattened:
+            pred += detect.scan_flattened(text)
 
         # de-duplicate overlapping same-type hits from different layers
         # (keep first occurrence; layers agreeing is not a defect)
@@ -134,3 +141,8 @@ if __name__ == "__main__":
 
     per_type, elapsed = run_evaluation(entries, use_ner=True, use_entropy_gate=False)
     summarize(per_type, len(entries), elapsed, "Regex + NER (naive: NER on every line)")
+
+    per_type, elapsed = run_evaluation(entries, use_ner=True, use_entropy_gate=False,
+                                        use_flattened=True)
+    summarize(per_type, len(entries), elapsed,
+              "Regex + NER (naive) + flattened-username name dictionary")
