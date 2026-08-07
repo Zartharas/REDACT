@@ -478,6 +478,63 @@ documents, but it needs to happen wherever those numbers were cited.
 
 ---
 
+## 11. Drift detection was structurally blind to flattened-username PII, in every log type
+
+**Impact:** High (a real gap in production-relevant detection coverage,
+though found before it reached any live deployment). **Status:** Verified
+fixed, 2026-08-07, via a live injection test (source: `src/drift.py`).
+
+Found while measuring the new syslog field extractor (Bug 8/ROADMAP item
+8 above) — the coverage numbers alone weren't the interesting part; testing
+whether `drift.py` actually caught injected drift in a newly-covered field
+was. `field_stats()` combined `detect.scan_regex()` and `detect.scan_ner()`
+only. It never called `detect.scan_flattened()` — the fourth detection
+layer added earlier this session specifically to close the flattened-name
+recall gap (5.9%/4.9% under regex+NER alone, up to 50.3% with this layer;
+see the main measurement section of `README.md`). `detect.detect_all()`
+has included this layer by default since it was added; `drift.py` had
+simply never been updated to match, so every field-level drift check this
+project could run was checking against the weaker of the two detection
+configurations without anyone deciding that on purpose.
+
+**Confirmed live**, mirroring `validate.py`'s own drift-detection check
+(Section 5) exactly: injected a Faker-generated flattened username into
+the syslog `sudo.USER` field (constant `"root"` in the unmodified corpus,
+so a real 0% baseline critical-hit-rate) across a held-out half of the
+syslog entries. Before this fix: **not flagged at all** — the exact
+"silent failure, no crash, no error" shape this document's closing section
+already names as the pattern across the worst bugs here. After the fix:
+correctly flagged, `sudo.USER` baseline 0% → current 36%.
+
+**Fix:** `field_stats()` now includes `scan_flattened()` unconditionally
+(cheap, no external model dependency, unlike NER) alongside `scan_regex()`,
+with `scan_ner()` gated behind a new `use_ner: bool = True` parameter so
+this function — like `evaluate.py`'s `run_evaluation()` already does — can
+be exercised in an environment without a spaCy model available.
+
+**Honest side-effect, found by the same test, not itself a bug:** comparing
+two stable halves of the same corpus with the fix in place produced one
+false-positive flag, `syslog.sshd.user` (50.8% → 45.6%, just past the
+default 5% threshold). This is expected, not a defect: a detector with
+~50% recall (the flattened layer, on this field) produces more
+sample-to-sample variance in its measured hit rate than a near-100%-recall
+detector would, so the same fixed 5% drift threshold that works well for
+near-perfectly-recalled fields (spaced names, IPs) is more prone to noise
+on fields only a partial-recall layer covers. Not fixed here — flagged as
+worth knowing before treating every flag on a flattened-name-carrying
+field as necessarily real drift, and as a candidate for a
+per-field-confidence-aware threshold if this becomes a practical nuisance
+in a real deployment, rather than a blanket 5% cutoff everywhere.
+
+**Not yet done:** `validate.py`'s own Section 5 drift check is NER-dependent
+and predates this fix — worth a rerun (this sandbox can't reach the spaCy
+model download, same limitation as elsewhere in this document) to confirm
+the fix doesn't introduce new false positives there, the same way Bug 6's
+fix needed its own full-stack rerun rather than being assumed correct from
+source alone.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7) shared the same shape:
