@@ -9,9 +9,9 @@ Prioritized next steps for the product, split by commercial (production-readines
 
 ## Needs a Docker + spaCy-capable environment (not available in this sandbox)
 
-3. **Run the combined NER+flattened-layer evaluation** (`evaluate.py`'s new fourth condition) and the full `validate.py` 18-check suite with the new layer present, to confirm nothing regressed and to get the real combined-ensemble numbers rather than the standalone ones measured this session.
-4. **Close Bug 6** (`TokenStore` concurrency lock — fix committed, not yet confirmed under real concurrent load): rerun the full Docker Compose stack per the exact steps already in `BUGS_AND_FIXES.md`.
-5. **Validate the flattened-name layer against real data**, not just the Faker-derived synthetic corpus (`validation/real_data/`, the same Loghub datasets already used elsewhere in this project). The 50.3% recall number is honestly caveated as potentially optimistic since the name dictionary and the corpus's own name generator share a source — this is the check that answers whether the gain is real.
+3. **DONE (2026-08-07), run by the user locally.** Combined NER+flattened-layer evaluation (`evaluate.py`'s fourth condition: PERSON recall 0.359 → 0.681 with the layer added, precision unchanged elsewhere) and the full `validate.py` 18-check suite (18/18 passed) both re-run against the regenerated, Bug-9-fixed corpus. Numbers folded into `README.md` and `BUGS_AND_FIXES.md`.
+4. **Close Bug 6** (`TokenStore` concurrency lock — fix committed, not yet confirmed under real concurrent load): rerun the full Docker Compose stack per the exact steps already in `BUGS_AND_FIXES.md`. Still open.
+5. **Validate the flattened-name layer against real data**, not just the Faker-derived synthetic corpus (`validation/real_data/`, the same Loghub datasets already used elsewhere in this project). The 50.3% recall number is honestly caveated as potentially optimistic since the name dictionary and the corpus's own name generator share a source — this is the check that answers whether the gain is real. Still open.
 
 ## Commercial / production-readiness
 

@@ -360,15 +360,19 @@ one-for-one (independently verified by counting them directly).
   (33.9% clean-line false-alarm rate vs. 34.8% previously), consistent with
   this bug not touching which lines are clean.
 
-**Still open:** every number in this project that depends on NER (the full
-regex+NER ensemble table in `evaluate.py`/`README.md`, `validate.py`'s
-18-check suite, the `98/1,668` pre-Layer-4 baseline) was computed against
-the **pre-fix** corpus and needs a rerun against the regenerated one. This
-sandbox still cannot reach the spaCy model download (`raw.githubusercontent.com`
-and GitHub release assets both return `403` through its proxy) — confirmed
-again this session, unchanged from when this bug was first found. These
-reruns need to happen in an environment with a working spaCy/Presidio model
-(e.g. locally, or the Docker image), not silently left stale.
+**Closed out same day:** the NER-dependent reruns above were completed by
+the user directly on their own machine (this sandbox still cannot reach
+the spaCy model download — `raw.githubusercontent.com` and GitHub release
+assets both return `403` through its proxy, confirmed again this session).
+Results: the full `evaluate.py` ensemble table (all four conditions,
+including the new flattened-layer combined run) and `validate.py`'s full
+18-check suite (18/18 passed) were both re-run against the regenerated,
+Bug-9-fixed corpus. The `98/1,668` pre-Layer-4 flattened-format baseline
+was independently re-verified with a dedicated breakdown script
+(`validation/breakdown_person_format.py`) and now reads `99/2,006` (4.9%)
+on the corrected denominator — same finding, corrected number. See
+`README.md`'s "What was actually measured" and Layer 4 sections for the
+full updated tables.
 
 ---
 
