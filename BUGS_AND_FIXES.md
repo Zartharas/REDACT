@@ -58,9 +58,9 @@ index (10,000 source lines → ~19,972 stored documents).
 ## 3. Flask dev server timing out under concurrent load
 
 **Impact:** Medium (real events misrouted to quarantine, not lost, but
-mishandled). **Status:** Fix applied and confirmed to substantially reduce
-the problem; a residual startup-only cluster of timeouts still occurs and is
-not yet fully explained.
+mishandled). **Status:** Fix applied; the residual startup-only cluster of
+timeouts flagged below as unexplained has since been root-caused and fixed
+— see the update at the end of this entry.
 
 `src/service.py`'s Flask development server handles one request at a time
 by default. Logstash's `http` filter is configured with `pipeline.workers
@@ -77,6 +77,25 @@ and still serializes on Python's GIL, so `threaded=True` only buys
 overlapping I/O. A production deployment should run this behind a
 multi-process WSGI server (e.g. gunicorn, worker count matched to CPU
 cores).
+
+**Residual timeout cluster, root-caused and fixed 2026-08-07:** the
+startup-only timeout burst mentioned above (previously "not yet fully
+explained") was found while re-verifying Bug 6 below. Root cause:
+`detect._get_analyzer()` is `@lru_cache(maxsize=1)`'d, so the expensive
+spaCy/Presidio model load only happens on the *first* real `/anonymize`
+call, not at process startup. `docker-compose.yml`'s healthcheck for
+`redact-service` only hits `/health`, which never touches the analyzer —
+so the container reports healthy and Logstash starts sending its
+configured 8 concurrent requests (`pipeline.workers => 8`) before the
+model is loaded. During that multi-second, GIL-holding load, every request
+queues; enough exceed the http filter's timeout to get quarantined.
+Confirmed live: a fresh `docker compose up --build` produced a burst of
+"Read timed out" errors in Logstash's log in roughly the first 30-60
+seconds, then zero for the rest of the run. **Fix:** `src/service.py` now
+calls `detect._get_analyzer()` once before `app.run()`, so the model
+loads during container startup (while the healthcheck is still failing
+and Logstash's `depends_on: condition: service_healthy` is correctly
+holding it back) instead of during the first wave of real traffic.
 
 ---
 
@@ -204,9 +223,8 @@ silently.
 
 ## 6. TokenStore race condition under concurrent access
 
-**Impact:** Medium. **Status:** Fix committed (`src/anonymize.py`, part of
-commit `db1fdae`); verified in isolated testing; **not yet confirmed
-against a full Docker Compose end-to-end run.**
+**Impact:** Medium. **Status:** Verified fixed, 2026-08-07 — full
+end-to-end Docker Compose confirmation completed (see below).
 
 `src/anonymize.py`'s `TokenStore` performed dict read-modify-write
 operations without synchronization. Under concurrent access (multiple
@@ -215,25 +233,26 @@ produced `RuntimeError: dictionary changed size during iteration`.
 
 **Fix:** wrapped the read-modify-write sequence in `threading.Lock()`.
 
-**Verification gap, stated plainly:** this is the one fix on this list
-that hasn't gone through the same end-to-end proof the other seven got.
-The existing `validation/performance/docker_run.log` predates this fix
-(it still shows the old default-pipeline/`elasticsearch` references from
-before Bug 1's fix) and can't be used as evidence either way. To close
-this out with the same rigor as the rest of this document, rerun the full
-stack (`docker compose down -v && python src/export_raw_logs.py &&
-docker compose up --build`) with this fix in place, then check the
-`redact-service` container's own log output specifically, not just the
-final OpenSearch counts:
+**Verification, completed 2026-08-07:** ran the exact steps this entry
+previously called for (`docker compose down -v && python
+src/export_raw_logs.py && docker compose up --build`) against the current
+codebase (including the Bug 9/Bug 10 corpus and measurement fixes from
+earlier the same day). `docker compose logs redact-service | grep -i
+"RuntimeError\|dictionary changed size"` returned zero hits. Final
+reconciliation via `_search` (not `_cat/indices`, see Bug 8):
+`security-logs-anonymized-*` = 9,968, `security-logs-quarantine-*` = 32,
+sum = 10,000 exact; `redact-audit-trail-*` = 5,964 signed records. The
+`threading.Lock()` fix holds under real concurrent load — this closes the
+item with the same rigor as the rest of this document, not just the
+presence of the fix in source.
 
-```
-docker compose logs redact-service | grep -i "RuntimeError\|dictionary changed size"
-```
-
-A clean run should return nothing. Zero hits, combined with the exact
-9,984 + 16 = 10,000 reconciliation already established for the other
-bugs, is what actually closes this item — not just the presence of the
-`threading.Lock()` in the source.
+**Unrelated but found during this same verification run:** an early
+timeout burst in Logstash's log turned out to be the previously-unexplained
+residual startup timeout cluster from Bug 3 above — root-caused and fixed
+in that entry, not this one. It didn't affect this bug's own reconciliation
+(quarantine correctly absorbed the 32 affected events; nothing was lost or
+duplicated), but is worth knowing about if you see the same log pattern
+when reproducing this test.
 
 ---
 
