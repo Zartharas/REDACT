@@ -97,6 +97,17 @@ loads during container startup (while the healthcheck is still failing
 and Logstash's `depends_on: condition: service_healthy` is correctly
 holding it back) instead of during the first wave of real traffic.
 
+**Fix re-verified, same day:** ran a fresh `docker compose down -v &&
+python src/export_raw_logs.py && docker compose up --build` with the fix
+in place. `redact-service`'s own log shows `* Running on
+http://127.0.0.1:8080` (meaning the warm-up call had already completed)
+followed immediately by a passing `/health` check, well before Logstash
+finished its own ~38-second startup and began sending `/anonymize`
+traffic. `docker compose logs logstash | grep -c "Read timed out"`
+returned **0** (previously dozens in the first 30-60 seconds of the same
+test). Startup timeout cluster confirmed closed, not just theoretically
+fixed.
+
 ---
 
 ## 4. Content-based document IDs silently collapsing real events
