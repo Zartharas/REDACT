@@ -92,4 +92,24 @@ def anonymize_endpoint():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    # threaded=True added after live testing showed Logstash's http filter
+    # (pipeline.workers => 8, see logstash/redact-pipeline.conf) timing out
+    # against this server ("Read timed out" in Logstash's log) under
+    # concurrent load. Flask's dev server defaults to handling one request
+    # at a time; with 8 concurrent POST /anonymize calls queued behind it,
+    # some exceeded the http filter's request timeout and got tagged
+    # _httprequestfailure -- which routes them to sensitive_quarantine
+    # instead of being anonymized normally. Not a duplicate-write bug like
+    # the OpenSearch document_id issue elsewhere in this project; this one
+    # produces real documents in the wrong index.
+    #
+    # CAVEAT, stated plainly for the chapter's own sake: threaded=True only
+    # buys overlapping I/O, not true parallelism -- the NER call inside
+    # detect.detect_all() is CPU-bound and still serializes on the GIL. This
+    # is sufficient to unblock this demo's throughput (10k lines, dev
+    # laptop) but is NOT a production fix. The chapter's Performance
+    # Optimization section should recommend a multi-process WSGI server
+    # (e.g. gunicorn with worker count matched to CPU cores) instead, and
+    # this comment should be treated as a known limitation, not a solved
+    # problem, if cited as such.
+    app.run(host="0.0.0.0", port=8080, threaded=True)

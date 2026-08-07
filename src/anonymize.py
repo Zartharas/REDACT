@@ -36,6 +36,7 @@ import hashlib
 import hmac
 import json
 import os
+import threading
 
 
 def _overlaps(a: dict, b: dict) -> bool:
@@ -103,6 +104,19 @@ class TokenStore:
         self.token_key = token_key
         self._forward: dict[str, str] = {}   # original -> token
         self._reverse: dict[str, str] = {}    # token -> original
+        # Guards every read-modify-write against _forward/_reverse. Found
+        # necessary the hard way: under real concurrent HTTP load (multiple
+        # Logstash pipeline workers hitting src/service.py at once), one
+        # thread's save() could be mid-iteration inside json.dump() while
+        # another thread's get_or_create_token() mutated the same dict,
+        # raising "RuntimeError: dictionary changed size during iteration".
+        # Sequential, single-threaded testing (evaluate.py, the validation
+        # suite) never exercises this path, since nothing there calls this
+        # store from more than one thread. This is still a flat JSON file
+        # with no access control, encryption at rest, or key rotation --
+        # the lock only fixes in-process thread-safety, not the production
+        # secrets-store gap already noted in this file's class docstring.
+        self._lock = threading.Lock()
         if os.path.exists(path):
             with open(path) as f:
                 data = json.load(f)
@@ -110,20 +124,23 @@ class TokenStore:
                 self._reverse = data.get("reverse", {})
 
     def save(self):
-        with open(self.path, "w") as f:
-            json.dump({"forward": self._forward, "reverse": self._reverse}, f)
+        with self._lock:
+            with open(self.path, "w") as f:
+                json.dump({"forward": self._forward, "reverse": self._reverse}, f)
 
     def get_or_create_token(self, original: str, pii_type: str) -> str:
-        if original in self._forward:
-            return self._forward[original]
-        digest = hmac.new(self.token_key.encode(), original.encode(), hashlib.sha256).hexdigest()[:32]
-        token = f"tok_{pii_type.lower()}_{digest}"
-        self._forward[original] = token
-        self._reverse[token] = original
-        return token
+        with self._lock:
+            if original in self._forward:
+                return self._forward[original]
+            digest = hmac.new(self.token_key.encode(), original.encode(), hashlib.sha256).hexdigest()[:32]
+            token = f"tok_{pii_type.lower()}_{digest}"
+            self._forward[original] = token
+            self._reverse[token] = original
+            return token
 
     def resolve(self, token: str) -> str | None:
-        return self._reverse.get(token)
+        with self._lock:
+            return self._reverse.get(token)
 
 
 
@@ -136,8 +153,10 @@ def tokenize(text: str, spans: list[dict], store: TokenStore) -> str:
 def detokenize(text: str, store: TokenStore) -> str:
     """Reverses tokenize() by replacing every token pattern found in the
     text with its original value, for an authorized investigator only."""
+    with store._lock:
+        reverse_snapshot = dict(store._reverse)
     out = text
-    for token, original in store._reverse.items():
+    for token, original in reverse_snapshot.items():
         out = out.replace(token, original)
     return out
 

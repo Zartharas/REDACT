@@ -8,19 +8,26 @@
 # requirements-airflow.txt and dags/redact_weekly_validation.py for that
 # piece, run separately.
 #
-# VERIFICATION STATUS, stated plainly: no Docker runtime was available in
-# the environment this chapter's code was developed and tested in, so
-# nothing in this file has actually been run. It reflects OpenSearch's and
-# Logstash's currently documented configuration as of this writing
-# (verified via web search against docs.opensearch.org rather than
-# asserted from memory), not a verified build. redact-service is the
-# lowest-risk piece here -- it's a standard Python/Flask container with no
-# version-sensitive plugin behavior, and its underlying code has been
-# tested extensively outside Docker (see README). OpenSearch's
-# security-disabled single-node config and Logstash's OpenSearch output
-# plugin installation are both documented approaches but unverified in
-# this specific compose file. opensearch-dashboards is intentionally
-# omitted: OpenSearch's own documentation states that a security-disabled
+# VERIFICATION STATUS, stated plainly: this file was originally written
+# without a Docker runtime available, reflecting only OpenSearch's and
+# Logstash's documented configuration (verified via web search against
+# docs.opensearch.org rather than asserted from memory), not a verified
+# build. That has since changed -- this stack has been built and run
+# end-to-end (`docker compose up --build`) repeatedly, against all 10,000
+# synthetic lines at once, with a single-node OpenSearch instance. That
+# testing found and fixed real bugs that documentation review alone would
+# not have caught, including an OpenSearch-not-ready-at-startup race that
+# caused duplicate writes (see the healthcheck/depends_on block below) and
+# several document-ID and audit-routing bugs in redact-pipeline.conf. Full
+# writeups are in BUGS_AND_FIXES.md at the repo root. redact-service was
+# always the lowest-risk piece here -- it's a standard Python/Flask
+# container with no version-sensitive plugin behavior, and its underlying
+# code had already been tested extensively outside Docker (see README)
+# before Docker was involved at all. What's still unverified: this was
+# tested on one machine, at demo scale, single-node/single-shard -- not
+# load-tested at production volume or against a multi-node OpenSearch
+# cluster. opensearch-dashboards remains intentionally omitted:
+# OpenSearch's own documentation states that a security-disabled
 # Dashboards image is not a published image but something you build
 # locally after modifying its config, which is a separate setup step
 # outside the scope of this file, not something to gloss over as if it
@@ -48,6 +55,18 @@ services:
       - opensearch-data:/usr/share/opensearch/data
     networks:
       - redact-net
+    healthcheck:  # added after live testing showed Logstash's OpenSearch
+                   # output plugin retrying (and duplicating, see
+                   # logstash/redact-pipeline.conf's document_id comment)
+                   # bulk writes issued before OpenSearch was actually ready
+                   # to accept them. Gating logstash's startup below on this
+                   # fixes the retry storm at its source rather than only
+                   # making the writes idempotent after the fact.
+      test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health | grep -vq '\"status\":\"red\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
   redact-service:
     build:
@@ -64,6 +83,12 @@ services:
       - "8080:8080"
     networks:
       - redact-net
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)\" || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   logstash:
     build:
@@ -71,8 +96,10 @@ services:
       dockerfile: Dockerfile
     container_name: redact-logstash
     depends_on:
-      - opensearch
-      - redact-service
+      opensearch:
+        condition: service_healthy
+      redact-service:
+        condition: service_healthy
     environment:
       - REDACT_SERVICE_URL=http://redact-service:8080/anonymize
       - OPENSEARCH_HOST=http://opensearch:9200  # http, not https, matching
