@@ -312,7 +312,7 @@ concluding a document count reveals a real bug.
 **Impact:** Low on its own (undercounts recall/inflates apparent false
 positives slightly, on one template only), but worth recording because it
 was discovered by a detector working correctly, not by a detector failing.
-**Status:** Found, not yet fixed (source: `src/generate_logs.py`).
+**Status:** Verified fixed (2026-08-07, source: `src/generate_logs.py`).
 
 While building and measuring the new flattened-username layer (see below),
 its false-positive rate looked alarming at first: 171 out of 1,013
@@ -335,16 +335,40 @@ pessimistic on recall for templates with a repeated slot. Only the `sudo`
 template is affected; no other template in `generate_logs.py` reuses a PII
 slot value twice.
 
-**Fix, not yet applied:** `render()` should locate *all* occurrences of each
-slot value (e.g. iterate `re.finditer(re.escape(value), text)`) rather than
-only the first, and emit one gold span per occurrence. This changes the
-corpus's ground truth, which means every previously reported number in this
-project (README, chapter, paper) that depends on this exact corpus would
-need to be re-run and re-verified after the fix, not just this new layer's
-numbers -- deliberately not done automatically as part of this change, since
-regenerating the canonical dataset and re-validating every downstream claim
-is a decision that affects already-published numbers and should be made
-explicitly, not as a side effect of adding a detection layer.
+**Fix, applied 2026-08-07:** `render()` now locates *all* occurrences of each
+slot value via `re.finditer(re.escape(value), text)` instead of
+`text.find(value)`, emitting one gold span per occurrence. The canonical
+10,000-entry corpus (`data/synthetic_logs.jsonl`) was regenerated with the
+same generation parameters (`--n 10000 --dirty-ratio 0.3`, fixed seed 42) —
+entry count and entry text are bit-identical to before (confirmed: 10,000
+entries both before and after), and gold PII span count went from 6,199 to
+6,537, exactly +338, matching the count of `sudo`-template dirty entries
+one-for-one (independently verified by counting them directly).
+
+**Re-verification against the fixed corpus, this session:**
+- The flattened-username layer's false positives, previously 171/1,013
+  (83.1% precision) and suspected to be entirely this bug, are now
+  confirmed to be **exactly 0** — precision is 100% with no caveat needed.
+  Recall holds at the same 50.3%, now on the corrected denominator
+  (1,010/2,006 vs. the earlier 839/1,668).
+- `evaluate.py`'s regex-only condition (no NER, unaffected by the spaCy
+  model-download limitation of this sandbox) was rerun: precision unchanged
+  at 0.574, recall dropped from 0.572 to 0.542 — expected and mechanical,
+  not a regression, since regex never detects PERSON at all and the fix
+  only added PERSON gold spans, which purely increases the FN denominator.
+- `src/analyze_entropy.py` was rerun and lands close to its prior number
+  (33.9% clean-line false-alarm rate vs. 34.8% previously), consistent with
+  this bug not touching which lines are clean.
+
+**Still open:** every number in this project that depends on NER (the full
+regex+NER ensemble table in `evaluate.py`/`README.md`, `validate.py`'s
+18-check suite, the `98/1,668` pre-Layer-4 baseline) was computed against
+the **pre-fix** corpus and needs a rerun against the regenerated one. This
+sandbox still cannot reach the spaCy model download (`raw.githubusercontent.com`
+and GitHub release assets both return `403` through its proxy) — confirmed
+again this session, unchanged from when this bug was first found. These
+reruns need to happen in an environment with a working spaCy/Presidio model
+(e.g. locally, or the Docker image), not silently left stale.
 
 ---
 

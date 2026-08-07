@@ -50,11 +50,13 @@ The synthetic corpus above is a close-to-best-case scenario for any detector, si
 
 Hardware: 1 vCPU, 4 GB RAM, no GPU. Numbers below are single-threaded Python throughput, **not** a benchmark of a production Logstash/OpenSearch deployment. That architecture is described in the chapter and, unlike an earlier version of this README claimed, has since been built and run end-to-end via Docker Compose (see "Docker Compose stack" below and `BUGS_AND_FIXES.md`) — but it has been run at demo scale (10,000 lines, a single node, a single shard per index), not load-tested at production volume, so these throughput numbers still shouldn't be read as a production benchmark.
 
+**Post-Bug-9-fix note:** the corpus was regenerated after fixing `generate_logs.py`'s ground-truth labeling gap (Bug 9, see the Layer 4 section below) — same 10,000 entries, but 338 additional gold PERSON spans that were previously never labeled. The "Regex only" row below is re-verified against the regenerated corpus (regex never detects PERSON at all, so the extra gold spans show up purely as more FN, mechanically lowering recall from the old 0.572 to 0.542 — not a detector regression, just a corrected denominator). The two NER rows still reflect the **pre-fix corpus** and need a rerun (this environment cannot reach the spaCy model download; see the Layer 4 section for the exact command to run once NER is available).
+
 | Condition | Micro-avg precision | Micro-avg recall | Micro-avg F1 | Throughput |
 |---|---|---|---|---|
-| Regex only | 0.574 | 0.572 | 0.573 | ~49,000 events/sec |
-| Regex + NER, tiered (NER skipped when regex already found something in the line) | 0.577 | 0.626 | 0.600 | ~234 events/sec |
-| Regex + NER, naive (NER runs on every line) | 0.588 | 0.745 | 0.657 | ~113 events/sec |
+| Regex only (re-verified, post-Bug-9-fix corpus) | 0.574 | 0.542 | 0.558 | ~39,000 events/sec |
+| Regex + NER, tiered (NER skipped when regex already found something in the line) — **stale, pre-Bug-9-fix corpus, pending rerun** | 0.577 | 0.626 | 0.600 | ~234 events/sec |
+| Regex + NER, naive (NER runs on every line) — **stale, pre-Bug-9-fix corpus, pending rerun** | 0.588 | 0.745 | 0.657 | ~113 events/sec |
 
 Per-entity-type detail (naive condition, full ensemble):
 
@@ -81,23 +83,25 @@ Per-entity-type detail (naive condition, full ensemble):
 
    Important caveat, stated plainly rather than buried: this synthetic dataset doesn't include the category entropy detection is actually built for: API keys, session tokens, opaque hashes. The weak result here is partly a property of what this dataset tests, not necessarily a verdict on entropy detection generally. The chapter should say this explicitly rather than present a flattering number that the data doesn't support, or damn the technique based on a dataset that wasn't built to exercise its actual use case.
 
+   **Post-Bug-9-fix note:** `src/analyze_entropy.py` was rerun against the regenerated corpus at the default threshold (min length 12, entropy 3.3) and the false-alarm rate lands close to the original (33.9% of clean lines flagged vs. the 34.8% reported above), consistent with Bug 9 not affecting entropy scoring (the fix only added gold spans, it didn't change which lines are clean). The exact "142/6,199 unique recall" figure above used a stricter methodology (novel catches only, excluding redundant re-detection of spans regex/NER already caught) that this rerun didn't reproduce — that specific number is flagged as needing a rerun with the original script/parameters, not silently restated. Item 11 in `ROADMAP.md` (a dedicated API-key/token/hash test corpus) remains the more useful next step regardless.
+
 ## Layer 4: closing part of the flattened-username gap (`src/flattened_names.py`)
 
 Finding 2 above (5.9% recall on flattened names like `donaldgarcia`) is the single most consequential result in this project, so it got a dedicated fourth detection layer rather than being left as a documented limitation: dictionary-based compound segmentation, trying every split point in a token to see if it cleanly divides into `<first name><last name>`. This treats the problem as compound-word segmentation, not sentence-level NER, which is the actual shape of the problem NER structurally cannot solve here.
 
-**Measured standalone (this layer alone, not yet combined with NER in an end-to-end run — see caveat below), against the same 10,000-entry corpus:**
+**Measured standalone (this layer alone, not yet combined with NER in an end-to-end run — see caveat below), against the same 10,000-entry corpus, regenerated after the Bug 9 fix below:**
 
-| Metric | Before (NER alone) | After (this layer alone) |
+| Metric | Before (NER alone, pre-Bug-9-fix corpus) | After (this layer alone, post-Bug-9-fix corpus) |
 |---|---|---|
-| Flattened-format PERSON recall | 5.9% (98/1,668) | **50.3% (839/1,668)** |
+| Flattened-format PERSON recall | 5.9% (98/1,668) | **50.3% (1,010/2,006)** |
 | False-trigger rate on space-separated names | n/a | 0.3% (3/987) |
-| Precision | n/a | 100%, once a corpus artifact is accounted for (below) |
+| Precision | n/a | **100% exactly, 0 false positives, no caveat needed** |
 
 Getting to that precision number required finding and fixing a real false-positive source first: tokens matching a name pattern immediately followed by `@` (email local-parts, since `fake.email()` is itself name-derived) were being double-flagged as PERSON on top of the correct EMAIL span. Fixed with a one-line exclusion once found empirically, not guessed in advance.
 
-**A second, more interesting thing turned up while characterizing the remaining false positives, and it's a bug in the corpus generator, not the detector:** every one of the 171 apparent false positives left after that fix was the *same* PII value appearing a second time in one line (the syslog `sudo` template uses `{PERSON_name_flat}` twice), which `generate_logs.py`'s ground-truth labeler only records once (`text.find()` returns the first occurrence only). The detector was correctly finding real PII that the corpus's own ground truth never labeled. See Bug 9 in `BUGS_AND_FIXES.md` for the full writeup and why it wasn't silently fixed as part of this change — it affects previously reported numbers and that's a decision to make explicitly, not a side effect.
+**Bug 9 is now fixed** (`generate_logs.py`'s `render()` previously located only the *first* occurrence of a repeated slot value via `text.find()`; the syslog `sudo` template uses `{PERSON_name_flat}` twice, so the second, equally-real occurrence never got a gold span). `render()` now uses `re.finditer()` to emit one gold span per occurrence, the canonical 10,000-entry corpus has been regenerated (same 10,000 entries, gold PII span count 6,199 → 6,537, exactly +338 — one new span per affected `sudo` entry, confirmed by direct count), and the flattened-layer numbers above are re-measured against the corrected corpus: recall holds at the same 50.3% on a larger, correct denominator (1,010/2,006 vs. the earlier 839/1,668), and the 171 apparent false positives that motivated finding this bug are now **confirmed to be exactly 0** — they were entirely a ground-truth labeling artifact, not a real detector weakness, as the original writeup suspected but hadn't yet proven.
 
-**What this hasn't been tested against yet, stated plainly:** this measurement isolates the new layer against ground truth directly; it has not yet been run combined with the full regex+NER ensemble in `evaluate.py`'s "naive" condition end-to-end (the environment this layer was built and measured in didn't have network access to fetch the spaCy model Presidio depends on). The `evaluate.py` harness has already been extended with a fourth condition (`--flattened`) to do exactly that combined run; it just hasn't been executed yet. Run it yourself and update this table once it has.
+**What this hasn't been tested against yet, stated plainly:** this measurement isolates the new layer against ground truth directly; it has not yet been run combined with the full regex+NER ensemble in `evaluate.py`'s "naive" condition end-to-end (this environment has no network access to fetch the spaCy model Presidio depends on — same limitation as before). The `evaluate.py` harness has already been extended with a fourth condition (`--flattened`) to do exactly that combined run; it just hasn't been executed yet against the regenerated corpus. **Every number elsewhere in this README that depends on NER (the ensemble table above, the 98/1,668 pre-layer baseline, the entropy false-alarm/recall figures) was computed against the pre-Bug-9-fix corpus and is now stale pending a rerun** — flagged rather than silently left inconsistent. Run `evaluate.py` and `validate.py` yourself against the regenerated `data/synthetic_logs.jsonl` and update those numbers once that's done.
 
 **Known limitation, stated in the code and repeated here:** the name dictionary is Faker's own `first_names`/`last_names` list — the same generator that built this corpus. That makes the 50.3% number optimistic in a way that won't transfer 1:1 to a real production user population with names outside that list. Validating this layer against the real Loghub datasets already used elsewhere in this project is the concrete next step to check whether this is a real generalizable gain or partly a dictionary-matches-itself artifact.
 

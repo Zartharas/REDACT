@@ -4,8 +4,8 @@ Prioritized next steps for the product, split by commercial (production-readines
 
 ## Immediate (no new environment needed)
 
-1. **Close the Bug 9 corpus-labeling gap** (`BUGS_AND_FIXES.md`). `generate_logs.py`'s `render()` only labels the first occurrence of a repeated slot value. Fix is small (`re.finditer` instead of `text.find`), but regenerating the corpus changes every previously reported number in the README/chapter/papers — requires a deliberate decision and a full re-verification pass, not a quiet patch.
-2. **Commit and push the work sitting in the working tree** once `.git/index.lock` is cleared: the new `flattened_names.py` layer, the `detect.py`/`evaluate.py` wiring, the README section, and the previously-uncommitted `validation/baseline_presidio_default.py` results.
+1. **DONE (2026-08-07).** Closed the Bug 9 corpus-labeling gap (`BUGS_AND_FIXES.md`): `render()` now uses `re.finditer` instead of `text.find`, the canonical corpus was regenerated (6,199 → 6,537 gold spans, +338 exactly matching the affected `sudo` entries), and every number re-derivable without NER was re-verified (flattened-layer FPs 171→0, recall holds at 50.3% on the corrected denominator, regex-only precision/recall re-run). Numbers that depend on NER are flagged stale in README/BUGS_AND_FIXES.md pending a rerun in a spaCy-capable environment — see item 3 below, now the more specific blocker.
+2. Commit and push is no longer blocked — the working tree matches `origin/main` as of this session (confirmed via `git fetch` + `git rev-list --left-right --count HEAD...origin/main` = `0 0`); the prior `.git/index.lock` issue from the previous session already resolved itself.
 
 ## Needs a Docker + spaCy-capable environment (not available in this sandbox)
 

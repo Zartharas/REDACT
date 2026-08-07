@@ -12,6 +12,7 @@ random seed), which sidesteps template-parsing edge cases entirely.
 """
 import json
 import random
+import re
 import argparse
 from faker import Faker
 
@@ -53,10 +54,15 @@ def render(template: str, slots: dict, used_keys: list[str]) -> tuple[str, list[
             continue
         pii_type = PII_TYPE_MAP.get(pii_type, pii_type)
         value = str(slots[key])
-        start = text.find(value)
-        if start == -1:
+        if not value:
             continue
-        spans.append({"start": start, "end": start + len(value), "type": pii_type})
+        # Bug 9 fix: a slot value can appear more than once in a single
+        # rendered template (e.g. the syslog `sudo` template uses
+        # {PERSON_name_flat} twice). text.find() only located the first
+        # occurrence, silently leaving the second, equally-real PII span
+        # unlabeled in the gold truth. Emit one gold span per occurrence.
+        for match in re.finditer(re.escape(value), text):
+            spans.append({"start": match.start(), "end": match.end(), "type": pii_type})
     spans.sort(key=lambda s: s["start"])
     return text, spans
 
