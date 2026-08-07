@@ -96,7 +96,7 @@ def build_ip_only_corpus(name):
     ]
 
 
-def evaluate(entries, label):
+def evaluate(entries, label, use_flattened=False):
     tp = fp = fn = 0
     person_tp = person_fn = 0
     person_flat_tp = person_flat_total = 0
@@ -107,6 +107,18 @@ def evaluate(entries, label):
     for e in entries:
         gold = e['pii']
         preds = detect.scan_regex(e['log']) + detect.scan_ner(e['log'])
+        if use_flattened:
+            preds = preds + detect.scan_flattened(e['log'])
+        # De-duplicate overlapping same-type hits from different layers
+        # (mirrors evaluate.py's run_evaluation): without this, two layers
+        # correctly agreeing on the same real span gets the second one
+        # counted as a false positive instead of a harmless duplicate.
+        dedup = []
+        for p in preds:
+            if not any(p['type'] == d['type'] and p['start'] < d['end'] and d['start'] < p['end']
+                       for d in dedup):
+                dedup.append(p)
+        preds = dedup
         matched = set()
         for p in preds:
             hit = False
@@ -171,6 +183,17 @@ if __name__ == '__main__':
         print(f"{name}: {len(entries)} lines, {injected} PERSON injected "
               f"(flat={flat_n}, spaced={spaced_n})")
         evaluate(entries, name)
+        # Layer 4 validation: does the flattened-username dictionary layer's
+        # 50.3%-recall gain (measured on the Faker-derived synthetic corpus,
+        # where the name dictionary and the corpus's own name generator share
+        # a source) hold up on real log data with the same Faker-generated
+        # injected names? This does NOT test the dictionary against names
+        # outside Faker's list (that's a separate, harder generalization
+        # question this script can't answer, since injection itself uses
+        # Faker) -- it tests whether the layer still works correctly when
+        # the surrounding log text is real, unmodified Loghub data rather
+        # than this project's own synthetic templates.
+        evaluate(entries, f"{name} + flattened-username layer", use_flattened=True)
 
     for name in IP_ONLY_DATASETS:
         entries = build_ip_only_corpus(name)
