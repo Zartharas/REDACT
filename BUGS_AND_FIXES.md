@@ -204,8 +204,9 @@ silently.
 
 ## 6. TokenStore race condition under concurrent access
 
-**Impact:** Medium. **Status:** Fix verified in isolated testing, not yet
-committed.
+**Impact:** Medium. **Status:** Fix committed (`src/anonymize.py`, part of
+commit `db1fdae`); verified in isolated testing; **not yet confirmed
+against a full Docker Compose end-to-end run.**
 
 `src/anonymize.py`'s `TokenStore` performed dict read-modify-write
 operations without synchronization. Under concurrent access (multiple
@@ -213,6 +214,26 @@ Logstash pipeline workers calling `/anonymize` simultaneously), this
 produced `RuntimeError: dictionary changed size during iteration`.
 
 **Fix:** wrapped the read-modify-write sequence in `threading.Lock()`.
+
+**Verification gap, stated plainly:** this is the one fix on this list
+that hasn't gone through the same end-to-end proof the other seven got.
+The existing `validation/performance/docker_run.log` predates this fix
+(it still shows the old default-pipeline/`elasticsearch` references from
+before Bug 1's fix) and can't be used as evidence either way. To close
+this out with the same rigor as the rest of this document, rerun the full
+stack (`docker compose down -v && python src/export_raw_logs.py &&
+docker compose up --build`) with this fix in place, then check the
+`redact-service` container's own log output specifically, not just the
+final OpenSearch counts:
+
+```
+docker compose logs redact-service | grep -i "RuntimeError\|dictionary changed size"
+```
+
+A clean run should return nothing. Zero hits, combined with the exact
+9,984 + 16 = 10,000 reconciliation already established for the other
+bugs, is what actually closes this item — not just the presence of the
+`threading.Lock()` in the source.
 
 ---
 
