@@ -23,6 +23,24 @@ Differences from detect.py's scan_ner(), deliberately:
     resulting table is directly comparable to Table 1 / Table 2.
 
 Run with: python validation/baseline_presidio_default.py --data data/synthetic_logs.jsonl
+
+STALE RESULTS, found during a 2026-08-08 documentation audit:
+`validation/baseline_presidio_default_results.json` (committed 2026-08-07,
+same commit that added this script) was run against the corpus *before*
+Bug 9's fix (`BUGS_AND_FIXES.md`) regenerated ground truth with 338
+additional gold PERSON spans that `render()`'s old `text.find()`-based
+labeling had silently missed. Confirmed by the numbers themselves: the
+committed file's PERSON total (1073 TP + 1582 FN = 2655) is exactly 338
+less than the current corpus's true PERSON total (2993, per README.md's
+own naive-condition table) — every other entity type's counts match the
+current corpus exactly, since Bug 9 only ever affected PERSON labeling.
+This script itself was never touched by Bug 9's fix and needs no code
+change; only a rerun against the regenerated `data/synthetic_logs.jsonl`
+(spaCy/Presidio required, so this needs to happen outside this project's
+dev sandbox, the same constraint as every other NER-dependent number in
+this repo). Until that rerun happens, treat the committed
+`baseline_presidio_default_results.json` as measuring the pre-Bug-9-fix
+corpus, not the corpus this repository ships today.
 """
 import sys
 import os

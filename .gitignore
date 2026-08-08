@@ -9,3 +9,16 @@ venv/
 Academic Documentation/
 PROJECT_STATUS.md
 validation/entropy_fair_test/secrets_corpus.jsonl
+skill-observations/
+.claude/
+
+# Generated data, not hand-authored -- see data/README.md for what's
+# committed (data/synthetic_logs.jsonl, the canonical corpus) vs. what
+# regenerates from the fixed seed and doesn't need to be tracked.
+data/raw/
+data/load_test_corpus_*.jsonl
+data/validate_corpus.jsonl
+
+# Load-test run artifacts (validation/load_test/README.md) -- timestamped
+# logs/summaries from each local run, not meant to accumulate in git.
+validation/load_test/results/

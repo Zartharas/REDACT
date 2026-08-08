@@ -58,9 +58,10 @@ index (10,000 source lines → ~19,972 stored documents).
 ## 3. Flask dev server timing out under concurrent load
 
 **Impact:** Medium (real events misrouted to quarantine, not lost, but
-mishandled). **Status:** Fix applied; the residual startup-only cluster of
-timeouts flagged below as unexplained has since been root-caused and fixed
-— see the update at the end of this entry.
+mishandled). **Status:** Verified fixed — gunicorn confirmed under a full
+Docker Compose rerun; the residual startup-only cluster of timeouts
+flagged below as unexplained has since been root-caused and fixed too —
+see the updates through the end of this entry.
 
 `src/service.py`'s Flask development server handles one request at a time
 by default. Logstash's `http` filter is configured with `pipeline.workers
@@ -79,11 +80,11 @@ multi-process WSGI server (e.g. gunicorn, worker count matched to CPU
 cores).
 
 **Done, 2026-08-07:** `Dockerfile`'s `CMD` now runs `redact-service` under
-gunicorn (`--workers $(nproc)`) instead of `app.run(...)`. Smoke-tested
-(stub Flask app, identical `--chdir src ... service:app` invocation,
-correct worker count, `/health` responding) but not yet re-run through the
-full Docker Compose stack the way the rest of this file's numbers are —
-see ROADMAP.md item 7 for the follow-up verification this still needs.
+gunicorn (`--workers $(nproc)`) instead of `app.run(...)`. First
+smoke-tested standalone (stub Flask app, identical `--chdir src ...
+service:app` invocation, correct worker count, `/health` responding), then
+confirmed under the full Docker Compose stack — see the full-stack rerun
+immediately below.
 
 **Full-stack rerun, completed 2026-08-07 (run by the user locally):** fresh
 `docker compose down -v && python src/export_raw_logs.py && docker compose
@@ -414,8 +415,11 @@ the spaCy model download — `raw.githubusercontent.com` and GitHub release
 assets both return `403` through its proxy, confirmed again this session).
 Results: the full `evaluate.py` ensemble table (all four conditions,
 including the new flattened-layer combined run) and `validate.py`'s full
-18-check suite (18/18 passed) were both re-run against the regenerated,
-Bug-9-fixed corpus. The `98/1,668` pre-Layer-4 flattened-format baseline
+18-check suite (18/18 passed at this point in time) were both re-run
+against the regenerated, Bug-9-fixed corpus. **(This 18/18 result predates
+Bug 11 below, which made drift detection flattened-layer-aware and
+introduced 2 now-expected Section-5 failures — see Bug 11's own entry for
+the current 16/18 state and why the 2 failures aren't a regression.)** The `98/1,668` pre-Layer-4 flattened-format baseline
 was independently re-verified with a dedicated breakdown script
 (`validation/breakdown_person_format.py`) and now reads `99/2,006` (4.9%)
 on the corrected denominator — same finding, corrected number. See

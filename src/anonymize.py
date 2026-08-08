@@ -306,17 +306,19 @@ class RedisStorageProvider(StorageProvider):
     shared across redact-service replicas or survive a container restart
     without a mounted volume.
 
-    STATUS, stated plainly rather than implied: this has been written
-    against the documented `redis-py` client API and is straightforward
-    (two hashes, HSET/HGET/HGETALL), but it has NOT been run against a live
-    Redis instance in this project's own testing -- unlike everything else
-    in BUGS_AND_FIXES.md, which is only ever marked verified after an actual
-    execution, not just a plausible-looking implementation. Treat this class
-    as unverified until it has been exercised the same way: point it at a
-    real `redis` container, run the tokenize/detokenize round-trip and the
+    STATUS: verified against a live Redis instance, both for single-process
+    thread safety (validation/redis_storage_provider_test.py: basic token
+    round trip, persistence across a fresh TokenStore/provider instance,
+    tokenize/detokenize round trip, and the 8-threads-x-200-calls
     concurrent-access test that originally found the TokenStore race
-    condition (see Bug 6), and update this docstring with the result before
-    relying on it in production.
+    condition, Bug 6) and for real multi-process concurrency
+    (validation/multiprocess_redis_test.py: 8 separate OS processes x 50
+    tokens each, save() after every token, 0 of 400 tokens lost -- see Bug
+    14 in BUGS_AND_FIXES.md, which found and fixed a real cross-process
+    data-loss bug in TokenStore.save() itself, not in this class, but this
+    class's lock_for_save() is what the fix relies on for Redis). Both
+    results are dated 2026-08-07/2026-08-08 -- see ROADMAP.md item 6 for
+    the full verification history.
 
     Stores the forward map as a Redis hash at `{key_prefix}:forward` and the
     reverse map at `{key_prefix}:reverse`, mirroring the two-dict structure

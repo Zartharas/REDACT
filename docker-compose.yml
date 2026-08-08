@@ -23,10 +23,19 @@
 # always the lowest-risk piece here -- it's a standard Python/Flask
 # container with no version-sensitive plugin behavior, and its underlying
 # code had already been tested extensively outside Docker (see README)
-# before Docker was involved at all. What's still unverified: this was
-# tested on one machine, at demo scale, single-node/single-shard -- not
-# load-tested at production volume or against a multi-node OpenSearch
-# cluster. opensearch-dashboards remains intentionally omitted:
+# before Docker was involved at all. This has since been load-tested
+# beyond the original demo scale too: validation/load_test/ ran this same
+# stack, unmodified, against 100,000 lines (10x the original 10,000-line
+# corpus) -- security-logs-anonymized-* = 100,000 exact,
+# security-logs-quarantine-* = 0 exact, redact-audit-trail-* = 89,159
+# exact, ~250 lines/sec true end-to-end throughput, which itself found and
+# fixed two more real bugs (see Bugs 12 and 13 in BUGS_AND_FIXES.md and
+# ROADMAP.md item 9). What's still unverified: everything above ran on one
+# Docker Desktop machine, single-node/single-shard OpenSearch -- real
+# vertical-scale testing (10,000 to 100,000 lines), but nothing here
+# establishes behavior on a multi-node OpenSearch cluster, multiple
+# redact-service replicas, or actual production ingestion volume.
+# opensearch-dashboards remains intentionally omitted:
 # OpenSearch's own documentation states that a security-disabled
 # Dashboards image is not a published image but something you build
 # locally after modifying its config, which is a separate setup step

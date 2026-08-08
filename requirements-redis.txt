@@ -5,9 +5,9 @@
 # validate.py/evaluate.py) has no external dependency at all. Install this
 # only where you're actually configuring redact-service to use Redis.
 #
-# STATUS: RedisStorageProvider has been written against the documented
-# redis-py client API but has not yet been run against a live Redis
-# instance in this project's own testing -- see its docstring in
-# src/anonymize.py for exactly what still needs verifying before it's
-# trusted in production.
+# STATUS: RedisStorageProvider is verified against a live Redis instance
+# for both single-process thread safety (validation/redis_storage_provider_test.py)
+# and real multi-process concurrency (validation/multiprocess_redis_test.py,
+# 8 processes x 50 tokens each, 0 of 400 tokens lost -- see Bug 14 in
+# BUGS_AND_FIXES.md and ROADMAP.md item 6 for the full verification history).
 redis
