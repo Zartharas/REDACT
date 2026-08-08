@@ -758,19 +758,174 @@ answer unless told not to.
 
 ---
 
+## 14. TokenStore's persistence was unsafe across processes -- crash risk plus real data loss under gunicorn's actual, already-shipped multi-worker deployment
+
+**Impact:** Critical (silently breaks tokenize()'s core, stated guarantee
+that a tokenized value can always be recovered later -- and, before the
+fix, could crash a worker outright under real concurrent access). **Status:**
+Verified fixed, 2026-08-08, via a before/after multi-process test
+(`validation/multiprocess_tokenstore_test.py`) run entirely in a plain
+Python environment (no Docker or Redis needed to find or fix this).
+
+Found while building the multi-process Redis concurrency test ROADMAP
+item 6 explicitly flagged as still needed (`redis_storage_provider_test.py`
+had only ever tested multiple *threads* in one process, never the actual
+production topology of multiple separate *processes* sharing one backend).
+Investigating what that test should actually exercise led to a close read
+of `TokenStore.save()` and `service.py`'s real usage of it — and a
+realization, confirmed empirically before assuming it was real: `_store =
+anonymize.TokenStore(...)` in `service.py` is module-level code, so under
+gunicorn's default `--workers $(nproc)` deployment (`Dockerfile`, already
+shipped, not a hypothetical future scale-out scenario), **each worker is a
+separate OS process with its own `TokenStore`, all sharing one
+`token_store.json` file via the `redact-output` volume, and `_store.save()`
+fires after every single `/anonymize` request.** This is the exact
+concurrent-access pattern this bug needed to manifest, already running in
+every Docker Compose test this project has ever done that tokenized an
+EMAIL/SSN/MRN/CREDIT_CARD value — not a scenario that needed Redis or
+multiple replicas to exist.
+
+**Two separate, compounding defects, found in this order:**
+
+**(a) `FileStorageProvider.save()` was not atomic — a crash risk, not just
+a race.** It opened the destination path directly in `"w"` mode, which
+truncates the file immediately, before `json.dump()` has written anything
+back. A concurrent `load()` in another process landing in that window
+reads a truncated, invalid file and crashes with `json.JSONDecodeError`.
+Confirmed live: the first version of the multi-process test crashed 5 of 8
+worker processes this way within a handful of concurrent saves — worse
+than silent data loss, since in a real deployment this would propagate up
+through `service.py` as a request failure (`_httprequestfailure`,
+quarantined by `redact-pipeline.conf`'s existing fail-closed logic — so no
+PII would have leaked un-anonymized, but requests would fail for a reason
+distinct from, and in addition to, Bug 3's already-documented startup
+timeout cluster). **Fix:** write to a temp file in the same directory,
+then `os.replace()` to the final path — atomic on POSIX, so a concurrent
+reader always sees either the complete old file or the complete new one,
+never a partial one.
+
+**(b) `TokenStore.save()` was a blind overwrite, not a merge — the
+deeper, provider-agnostic defect.** `__init__` loads persisted state
+*once*, at construction. Every `save()` before this fix then persisted
+only *this process's own local view*, completely replacing the backend
+regardless of what any concurrent process had written since. Under
+`service.py`'s real per-request `save()` pattern, this is not a rare
+race — it is close to guaranteed, repeated loss: whichever worker's
+`save()` lands last in any given window silently erases every
+reverse-map entry a sibling worker wrote that this worker never itself
+loaded. This directly breaks `tokenize()`'s own stated guarantee
+(`anonymize.py`'s module docstring: "Exact original value can be
+recovered by anyone with access to `store`") — an authorized
+investigator's `detokenize()` call would silently fail to recover a
+value that was, in fact, tokenized and should be recoverable, with no
+error anywhere in the chain. The forward map (original → token) is a
+redundant cache, not a correctness risk on its own — `get_or_create_token`
+derives the token deterministically via HMAC, so any process recomputing
+it for the same original value gets the identical token regardless of
+whether it saw a sibling's entry. The **reverse map (token → original)
+is the actual irreplaceable data**, and losing entries from it is what
+this bug does.
+
+**First fix attempt (read-merge-write) — measured as a real but
+incomplete improvement, not assumed sufficient:** `save()` now reloads
+current persisted state immediately before writing, merges this
+process's own additions on top of it (not instead of it), and adopts the
+merged result as its own in-memory state too. Measured directly: on the
+same 8-process × 50-tokens-per-worker stress test that crashed workers
+before, this fix alone brought zero-crash reliability (all 8 workers
+completed) but still lost **57 of 400 tokens' reverse-map entries
+(14.2%)** — a large improvement over the pre-fix 58.7% loss rate (and the
+pre-fix run's 5 crashed workers), but nowhere near acceptable for a
+guarantee this framework states as a plain fact in its own docstring.
+The residual gap: two processes' `save()` calls can still interleave
+within the window between one process's own `load()` and its subsequent
+`save()` — read-merge-write narrows the race, it does not close it.
+
+**Actual, complete fix: real cross-process locking around the entire
+load-merge-save critical section**, not just a narrower race. Added
+`StorageProvider.lock_for_save()` (default a no-op `contextlib.nullcontext`)
+with real implementations in both providers:
+- `FileStorageProvider.lock_for_save()`: a blocking exclusive
+  `fcntl.flock()` on a sibling `.lock` file for the duration of the
+  critical section — advisory (only code that also calls
+  `lock_for_save()` is protected, fine here since `TokenStore` is the
+  only caller), POSIX-only (guarded with a try/except `ImportError` so
+  the module still imports on a non-POSIX dev machine, just without
+  cross-process file locking there).
+- `RedisStorageProvider.lock_for_save()`: a standard single-node Redis
+  distributed lock (`SET key owner-token NX PX ttl` to acquire, a Lua
+  script that only deletes-if-still-owner to release, capped exponential
+  backoff while contended, a bounded 15s acquire timeout that raises
+  `TimeoutError` rather than hanging forever or silently proceeding
+  unlocked). Deliberately scoped to single-node correctness, not the
+  full Redlock algorithm — `docker-compose.yml`'s Redis is explicitly
+  single-node, matching this project's stated single-node scope
+  everywhere else (`validation/load_test/README.md`).
+
+**Confirmed live, same before/after test:** with locking in place, **0 of
+400 tokens lost**, across all three stages measured on the identical
+stress pattern — crash-prone and 58.7% loss (pre-fix), 0% crashes but
+14.2% loss (read-merge-write alone), 0% loss (read-merge-write + real
+locking). Single-process overhead confirmed negligible (50 sequential
+saves: 0.018s before this work started, 0.022s after — the lock is
+uncontended in the common case and costs almost nothing). The full
+8-process/400-save concurrent test itself completes in ~0.5 seconds wall
+clock.
+
+**Not yet done:** `validation/multiprocess_redis_test.py` (the true
+multi-*process* Redis counterpart to this test — `redis_storage_provider_test.py`
+only ever tested multiple *threads* in one process, a materially
+different and less demanding test that would not have caught this bug)
+was written the same session but has not yet been run against a live
+Redis instance — this sandbox has no Docker, same recurring limitation as
+elsewhere in this document. The file-backend fix is logically identical
+for Redis (same `TokenStore.save()` code path, same lock-around-critical-
+section pattern, just a Redis lock instead of an fcntl lock) and the
+underlying Redis client library operations (`SET NX PX`, Lua `EVAL`) are
+standard and well-documented, but per this document's own standing rule
+("verified" means an actual completed execution, not a plausible-looking
+implementation), this specific provider's cross-process safety should be
+treated as fixed-by-the-same-reasoning-as-the-file-backend but not yet
+independently confirmed until that run happens.
+
+**Compliance note, stated as plainly as Bug 5/7/12's:** this is the same
+"silently wrong, no crash, no error visible to the caller" shape (for the
+read-merge-write-alone stage, and for the underlying blind-overwrite bug
+before any fix) that this document's closing section already names as
+the pattern across the worst bugs here — just found in the one component
+whose entire purpose is a compliance-relevant reversibility guarantee. If
+this framework's tokenization/reversibility claims are ever cited against
+GDPR Article 32 or a similar audit-trail-integrity requirement, this
+failure mode — found by a dedicated multi-process test that nothing in
+this project's existing suite (`validate.py`, `evaluate.py`, the original
+single-threaded Redis test) would ever have exercised — should be
+disclosed alongside the fix, the same way Bug 12's audit-trail collision
+was.
+
+---
+
 ## Pattern across these bugs
 
-Every critical-impact bug on this list (1, 4, 5, 7, 12) shared the same
+Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same
 shape: the pipeline appeared to be working — no crash, no error thrown,
 requests returning 200 — while silently destroying or never producing the
-data it was supposed to produce. None of these were caught by the absence
-of errors; all were caught by manually cross-checking document counts
-against known-good baselines (raw line counts, expected quarantine rates,
-and — for Bug 12 specifically, the first bug this document needed a
-second signal for — Logstash's own pipeline stats API showing what was
-actually *sent* versus what OpenSearch actually *stored*) and, in Bug 5,
-7, and 12's case, by directly inspecting sample documents or plugin-level
-counters rather than trusting the aggregate index count alone. This is the
+data it was supposed to produce. Bug 14 is the same shape in a different
+layer: not a document-ID collision or a missed detection, but
+`TokenStore.save()`'s blind-overwrite silently dropping a sibling
+process's reverse-map entries on every concurrent save — `resolve()`
+would return the wrong (or a stale) value with no exception anywhere in
+the call path, and `detokenize()` would silently fail its own documented
+guarantee. None of these were caught by the absence of errors; all were
+caught by manually cross-checking document counts against known-good
+baselines (raw line counts, expected quarantine rates, and — for Bug 12
+specifically, the first bug this document needed a second signal for —
+Logstash's own pipeline stats API showing what was actually *sent* versus
+what OpenSearch actually *stored*) and, in Bug 5, 7, and 12's case, by
+directly inspecting sample documents or plugin-level counters rather than
+trusting the aggregate index count alone; Bug 14 required going one step
+further and building a dedicated multi-process stress test, since no
+existing test in the project ever exercised more than one OS process
+against the same persistence backend. This is the
 practical argument for building an explicit reconciliation check (source
 line count == anonymized count + quarantined count, and audit-index count
 matching the fan-out count whenever PII was detected) into the pipeline

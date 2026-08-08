@@ -5,10 +5,22 @@ done yet. Requires a reachable Redis (see the docker run command in this
 script's own comment below) and the `redis` package (pip install -r
 requirements-redis.txt).
 
+SCOPE NOTE, added 2026-08-08: this script's own "concurrent access" check
+below only ever exercises multiple THREADS in one process. That's a real
+and useful thing to test, but it never exercised the actual production
+topology RedisStorageProvider exists for -- multiple separate
+redact-service PROCESSES (gunicorn workers, or separate replicas) sharing
+one Redis backend. That gap turned out to matter: a genuine cross-process
+data-loss bug was found and fixed the same day (TokenStore.save()'s
+blind-overwrite pattern, see BUGS_AND_FIXES.md), and this thread-only test
+would not have caught it. See validation/multiprocess_redis_test.py for
+the real multi-OS-process version of this test, which does.
+
 Run:
     docker run -d --rm -p 6379:6379 --name redact-test-redis redis:7
     pip install -r requirements-redis.txt
     python validation/redis_storage_provider_test.py
+    python validation/multiprocess_redis_test.py
     docker stop redact-test-redis
 """
 import sys
