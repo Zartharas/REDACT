@@ -29,6 +29,20 @@ specific preposition-shaped patterns before the generic KV fallback, not
 after -- this also protects any future daemon pattern added the same way.
 
 Run: python validation/syslog_coverage_extension_test.py
+
+SUPERSEDED CLEAN-LINE CASE, found 2026-08-08: this script's CLEAN_TEMPLATES
+originally included a `cron[{pid}]: (root) CMD (/usr/bin/backup.sh)` line
+as a deliberately-still-uncovered example. `validation/syslog_coverage_extension_round2_test.py`
+(same day) added cron job-execution coverage, so that line is no longer
+uncovered -- re-running this script unmodified would now report it as a
+"false extraction," which would be wrong: extracting `cron.user`/`cron.command`
+from that line is the *correct*, intended behavior as of round 2, not a
+regression in this script's own patterns. Swapped for a still-genuinely-
+uncovered NetworkManager Wi-Fi message instead, so this script keeps
+correctly measuring "zero extraction on clean lines" rather than
+silently going stale the way `validation/baseline_presidio_default_results.json`
+did after Bug 9 (see BUGS_AND_FIXES.md and the 2026-08-08 documentation
+audit that found it).
 """
 import sys
 import os
@@ -68,7 +82,12 @@ EXISTING_DIRTY_TEMPLATES = [
 CLEAN_TEMPLATES = [
     "systemd[1]: Started Session {num} of user root.",
     "kernel: [{ts}] CPU0: Package temperature above threshold, cpu clock throttled",
-    "cron[{pid}]: (root) CMD (/usr/bin/backup.sh)",
+    # NOT "cron[{pid}]: (root) CMD (/usr/bin/backup.sh)" -- see the
+    # "SUPERSEDED CLEAN-LINE CASE" note in this file's own docstring.
+    # cron job-execution lines are correctly extracted as of round 2
+    # (validation/syslog_coverage_extension_round2_test.py), so that
+    # would no longer be a valid "still uncovered" example.
+    "NetworkManager[{pid}]: <info>  policy: set 'eth0' as default for IPv4 routing and DNS",
 ]
 
 
