@@ -104,6 +104,14 @@ _SYSLOG_SSHD_PATTERNS = [
     re.compile(r"^Accepted publickey for (?P<user>\S+) from (?P<src_ip>\S+) port (?P<port>\d+)"),
     re.compile(r"^Invalid user (?P<user>\S+) from (?P<src_ip>\S+)"),
     re.compile(r"^User (?P<user>\S+) from (?P<src_ip>\S+) not allowed"),
+    # Added 2026-08-08 (round 3, ROADMAP item 8's "any auth wording not in
+    # the sshd list" gap): session-teardown messages are at least as common
+    # in real sshd logs as the login-attempt messages above, and OpenSSH
+    # logs a username in both the normal-disconnect and preauth-disconnect
+    # cases. "authenticating " is optional (present when the disconnect
+    # happens before auth completes, e.g. a scanner or brute-force attempt
+    # that never got past the username prompt).
+    re.compile(r"^Disconnected from (?:authenticating )?user (?P<user>\S+) (?P<src_ip>\S+) port (?P<port>\d+)"),
 ]
 
 # A second batch of message shapes added 2026-08-07 (ROADMAP item 8
@@ -156,6 +164,17 @@ _SYSLOG_CRON_PATTERN = re.compile(
     r"^\((?P<user>\S+)\)\s+CMD\s+\((?P<command>.+)\)$"
 )
 
+# cron's own reload/startup message ("(root) RELOAD (crontabs/donaldgarcia)",
+# logged once whenever crond notices a crontab file changed), added
+# 2026-08-08 (round 3) -- closes the "cron's own non-job-execution
+# messages" gap the docstring named as still open. Same parenthesized-
+# username shape as the CMD pattern above, just a different keyword and a
+# crontab path (which itself frequently embeds a username, e.g.
+# "crontabs/donaldgarcia") instead of a command.
+_SYSLOG_CRON_RELOAD_PATTERN = re.compile(
+    r"^\((?P<user>\S+)\)\s+RELOAD\s+\((?P<crontab>.+)\)$"
+)
+
 # NetworkManager: "<info>  [1620000000.1234] dhcp4 (eth0): address
 # 192.168.1.105" -- NetworkManager's own DHCP client logs the leased
 # address the same way dhclient does above, just wrapped in
@@ -168,6 +187,35 @@ _SYSLOG_CRON_PATTERN = re.compile(
 # pattern, same disclosure as everything else in this function).
 _SYSLOG_NETWORKMANAGER_PATTERN = re.compile(
     r"^<info>\s+\[[\d.]+\]\s+dhcp4\s+\((?P<iface>[\w.]+)\):\s+address\s+(?P<src_ip>\S+)"
+)
+
+# NetworkManager Wi-Fi connection messages ("<info> [1620000000.1234]
+# device (wlan0): Activation: (wifi) connected to 'HomeNetwork-JSmith'"),
+# added 2026-08-08 (round 3) -- closes the "Wi-Fi SSID changes" gap the
+# original NetworkManager pattern's own comment explicitly named as still
+# open, and the docstring called out as an example of PII-adjacent data
+# this extractor didn't yet reach (a network named after a person, e.g. a
+# home router's default or user-chosen SSID). Extracts the SSID as `ssid`,
+# same field-level exposure the dhcp4-address pattern above already gives
+# the leased IP.
+_SYSLOG_NETWORKMANAGER_WIFI_PATTERN = re.compile(
+    r"^<info>\s+\[[\d.]+\]\s+device\s+\((?P<iface>[\w.]+)\):\s+Activation:\s+\(wifi\)\s+connected to '(?P<ssid>[^']+)'"
+)
+
+# systemd unit-failure messages ("myapp.service: Failed with result
+# 'exit-code'."), added 2026-08-08 (round 3) -- closes the "other systemd
+# unit-failure messages" gap the docstring named as still open, alongside
+# the systemd-logind session pattern above (a different systemd
+# subsystem's message shape entirely -- logind logs sessions, this is the
+# service manager itself logging a unit's failure). Extracts the unit
+# name and failure result. Stated honestly: a unit name rarely carries
+# PII on its own (unlike systemd-logind's username or NetworkManager's
+# SSID above), so this pattern closes the documented coverage gap more
+# than it adds new PII-detection value -- included for completeness and
+# because a custom unit name COULD embed a person's name in an unusual
+# deployment (e.g. a per-user systemd timer unit).
+_SYSLOG_SYSTEMD_UNIT_FAILURE_PATTERN = re.compile(
+    r"^(?P<unit>\S+\.service): Failed with result '(?P<result>[\w-]+)'\.$"
 )
 
 
@@ -184,7 +232,7 @@ def extract_fields_syslog(text: str) -> dict[str, str]:
     have a recognizable, stable shape, and it's worth extracting fields
     from exactly those shapes rather than treating all syslog as opaque.
 
-    Seven shapes are recognized, checked in this order after stripping the
+    Ten shapes are recognized, checked in this order after stripping the
     leading "tag[pid]: " or "tag: " prefix:
 
     1. KV-style bodies (this project's `sudo` and `kernel` templates, e.g.
@@ -194,15 +242,19 @@ def extract_fields_syslog(text: str) -> dict[str, str]:
        added 2026-08-07): reuses the same tolerant key=value extractor
        windows_event already uses, since the underlying shape is
        identical once the syslog tag prefix is stripped off.
-    2. sshd authentication messages ("Failed password for X from Y port
-       Z", "Accepted password for...", "Accepted publickey for..." (added
-       2026-08-07 -- key-based auth is at least as common as password
-       auth in real sshd logs and was an oversight, not a scope
-       decision), "Invalid user X from Y", etc.): these have no `=`
-       characters at all, so they'd never match the KV extractor, but
-       they DO have a stable preposition-based structure ("for X from Y")
-       that a small set of hand-written patterns can reliably parse into
-       named fields (user, src_ip, port).
+    2. sshd authentication and session messages ("Failed password for X
+       from Y port Z", "Accepted password for...", "Accepted
+       publickey for..." (added 2026-08-07 -- key-based auth is at least
+       as common as password auth in real sshd logs and was an oversight,
+       not a scope decision), "Invalid user X from Y", "Disconnected from
+       user X Y port Z" / "Disconnected from authenticating user X Y port
+       Z" (added 2026-08-08, round 3 -- session-teardown messages are at
+       least as common as login-attempt messages in real sshd logs, and
+       still carry a username), etc.): these have no `=` characters at
+       all, so they'd never match the KV extractor, but they DO have a
+       stable preposition-based structure ("for X from Y") that a small
+       set of hand-written patterns can reliably parse into named fields
+       (user, src_ip, port).
     3. su privilege-escalation messages (added 2026-08-07): "pam_unix
        (su:session): session opened for user root by donaldgarcia(uid=0)"
        -- who ran su, extracted as `user`.
@@ -228,23 +280,39 @@ def extract_fields_syslog(text: str) -> dict[str, str]:
        [1620000000.1234] dhcp4 (eth0): address 192.168.1.105" --
        NetworkManager's own DHCP client logging the same kind of leased
        address dhclient does above, just wrapped in NetworkManager's own
-       severity-tag/timestamp prefix. Narrow on purpose: only the
-       dhcp4-address shape is covered, not NetworkManager's many other
-       message types (interface state changes, Wi-Fi SSID changes, which
-       can themselves carry PII-adjacent data but aren't handled here).
+       severity-tag/timestamp prefix.
+    8. cron reload/startup messages (added 2026-08-08, round 3): "(root)
+       RELOAD (crontabs/donaldgarcia)" -- logged whenever crond notices a
+       crontab file changed, the parenthesized username's counterpart to
+       shape 6's job-execution message; the crontab path itself frequently
+       embeds a username too, extracted as `crontab`.
+    9. NetworkManager Wi-Fi connection messages (added 2026-08-08, round
+       3): "<info> [1620000000.1234] device (wlan0): Activation: (wifi)
+       connected to 'HomeNetwork-JSmith'" -- closes the "Wi-Fi SSID
+       changes" gap shape 7's own pattern explicitly named as still open;
+       an SSID is PII-adjacent when a network is named after a person.
+    10. systemd unit-failure messages (added 2026-08-08, round 3):
+       "myapp.service: Failed with result 'exit-code'." -- stated
+       honestly, a unit name rarely carries PII on its own (unlike shape
+       5's username or shape 9's SSID), included mainly to close the
+       documented coverage gap rather than for strong new PII-detection
+       value.
 
     Message shapes that match none of the above -- most notably the
     free-text content of a sudo COMMAND value or cron CMD argument, other
-    systemd unit-failure messages, other NetworkManager message types, or
-    any auth-message wording not in the sshd pattern list -- fall through
-    to zero extracted fields for that line, same as before this function
-    existed. This is a deliberate, honest partial fix: it closes the gap
-    for the message shapes actually present in this project's own corpus,
-    common real sshd logs, and a handful of other common daemons (su,
-    dhclient, useradd, systemd-logind, cron, NetworkManager), not a claim
-    that syslog is now fully covered the way windows_event/cloudtrail are.
-    A production deployment logging different syslog message shapes would
-    need its own additional patterns here, following the same approach.
+    NetworkManager message types beyond DHCP leases and Wi-Fi connection
+    (interface state changes, policy decisions), other systemd message
+    types beyond unit-failure and login sessions (unit start/stop,
+    timers), or any auth-message wording not in the sshd pattern list --
+    fall through to zero extracted fields for that line, same as before
+    this function existed. This is a deliberate, honest partial fix: it
+    closes the gap for the message shapes actually present in this
+    project's own corpus, common real sshd logs, and a handful of other
+    common daemons (su, dhclient, useradd, systemd-logind, systemd unit
+    failures, cron, NetworkManager), not a claim that syslog is now fully
+    covered the way windows_event/cloudtrail are. A production deployment
+    logging different syslog message shapes would need its own additional
+    patterns here, following the same approach.
     """
     m = _SYSLOG_TAG_RE.match(text)
     if not m:
@@ -295,9 +363,21 @@ def extract_fields_syslog(text: str) -> dict[str, str]:
         return {f"{tag}.{k}": (v.strip() if k == "command" else v)
                 for k, v in cron_match.groupdict().items() if v is not None}
 
+    cron_reload_match = _SYSLOG_CRON_RELOAD_PATTERN.match(rest)
+    if cron_reload_match:
+        return {f"{tag}.{k}": v for k, v in cron_reload_match.groupdict().items() if v is not None}
+
     nm_match = _SYSLOG_NETWORKMANAGER_PATTERN.match(rest)
     if nm_match:
         return {f"{tag}.{k}": v for k, v in nm_match.groupdict().items() if v is not None}
+
+    nm_wifi_match = _SYSLOG_NETWORKMANAGER_WIFI_PATTERN.match(rest)
+    if nm_wifi_match:
+        return {f"{tag}.{k}": v for k, v in nm_wifi_match.groupdict().items() if v is not None}
+
+    unit_failure_match = _SYSLOG_SYSTEMD_UNIT_FAILURE_PATTERN.match(rest)
+    if unit_failure_match:
+        return {f"{tag}.{k}": v for k, v in unit_failure_match.groupdict().items() if v is not None}
 
     if "=" in rest:
         kv = _extract_kv_pairs(rest)
