@@ -22,3 +22,9 @@ data/validate_corpus.jsonl
 # Load-test run artifacts (validation/load_test/README.md) -- timestamped
 # logs/summaries from each local run, not meant to accumulate in git.
 validation/load_test/results/
+
+# Real US name-frequency source data (ROADMAP item 10) -- downloaded fresh
+# via validation/real_name_frequency/download_name_data.sh, same pattern
+# as validation/real_data/'s Loghub logs (*.log, already ignored above),
+# not checked into the repo.
+validation/real_name_frequency/raw/*.zip
