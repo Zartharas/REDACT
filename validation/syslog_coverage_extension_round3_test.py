@@ -6,10 +6,10 @@ explicitly named in extract_fields_syslog's own docstring: "other systemd
 unit-failure messages, other NetworkManager message types like Wi-Fi SSID
 changes, cron's own startup/reload messages as opposed to job execution,
 and any auth wording not in the sshd list." This test measures closing
-all four, against a fresh, dedicated, Faker-seeded corpus (same reasoning
-as both previous extension tests: deliberately NOT
-data/synthetic_logs.jsonl, so this doesn't perturb any number already
-tied to that corpus's exact content).
+all four, against a fresh, dedicated, Faker-seeded corpus that stays
+separate from data/synthetic_logs.jsonl, for the same reason as both
+previous extension tests: so it doesn't perturb any number already tied
+to that corpus's exact content.
 
 New shapes covered, added the same day as this test:
   - sshd "Disconnected from (authenticating) user X Y port Z" -- a

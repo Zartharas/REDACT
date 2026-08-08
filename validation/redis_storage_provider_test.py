@@ -6,11 +6,11 @@ script's own comment below) and the `redis` package (pip install -r
 requirements-redis.txt).
 
 SCOPE NOTE, added 2026-08-08: this script's own "concurrent access" check
-below only ever exercises multiple THREADS in one process. That's a real
+below only ever exercises multiple threads in one process. That's a real
 and useful thing to test, but it never exercised the actual production
-topology RedisStorageProvider exists for -- multiple separate
-redact-service PROCESSES (gunicorn workers, or separate replicas) sharing
-one Redis backend. That gap turned out to matter: a genuine cross-process
+topology RedisStorageProvider exists for: multiple separate redact-service
+processes (gunicorn workers, or separate replicas) sharing one Redis
+backend. That gap turned out to matter: a genuine cross-process
 data-loss bug was found and fixed the same day (TokenStore.save()'s
 blind-overwrite pattern, see BUGS_AND_FIXES.md), and this thread-only test
 would not have caught it. See validation/multiprocess_redis_test.py for

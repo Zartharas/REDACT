@@ -170,8 +170,8 @@ if __name__ == "__main__":
     # the OpenSearch document_id issue elsewhere in this project; this one
     # produces real documents in the wrong index.
     #
-    # CAVEAT, stated plainly for the chapter's own sake: threaded=True only
-    # buys overlapping I/O, not true parallelism -- the NER call inside
+    # Caveat for the chapter: threaded=True only buys overlapping I/O, not
+    # true parallelism -- the NER call inside
     # detect.detect_all() is CPU-bound and still serializes on the GIL. This
     # is sufficient to unblock this demo's throughput (10k lines, dev
     # laptop) but is NOT a production fix. The chapter's Performance

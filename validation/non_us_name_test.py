@@ -5,39 +5,40 @@ against a name population it was NOT built from, to check whether its
 an artifact of the dictionary and the corpus sharing a source (Faker's
 en_US first_names/last_names list, in both cases).
 
-WHAT THIS TEST IS, AND ISN'T, STATED PLAINLY BEFORE THE RESULTS BELOW:
+Before the results below, here is what this test actually establishes and
+where it falls short:
 
 The original plan (see flattened_names.py's own docstring and ROADMAP.md
 item 10) was to swap in real-world name-frequency data (e.g. US Census
-surname/given-name frequency lists) for this test. That was not possible
-in this environment: this sandbox's network access is allowlisted to a
-small set of hosts (PyPI, GitHub repo cloning) and does not reach
-census.gov, nltk's data mirrors, or raw.githubusercontent.com (the same
-restriction documented elsewhere in this project, e.g. BUGS_AND_FIXES.md's
-notes on the spaCy model download). One real-world name dataset was
-available on PyPI (`names-dataset`) but was rejected on inspection: its
-own documentation states it is "extracted from the Facebook massive dump
-(533M users)" -- i.e. built from a documented 2021 data breach. Using
-breach-derived personal data to validate a PII-protection tool would
-directly contradict this project's own stated principles (no real
-organizational or personal data anywhere in this repository) and was not
-used for that reason, not an oversight.
+surname/given-name frequency lists) for this test. That wasn't possible in
+this environment: this sandbox's network access is allowlisted to a small
+set of hosts (PyPI, GitHub repo cloning) and does not reach census.gov,
+nltk's data mirrors, or raw.githubusercontent.com (the same restriction
+documented elsewhere in this project, e.g. BUGS_AND_FIXES.md's notes on the
+spaCy model download). One real-world name dataset was available on PyPI
+(`names-dataset`), but it was rejected on inspection: its own documentation
+states it is "extracted from the Facebook massive dump (533M users)," i.e.
+built from a documented 2021 data breach. Using breach-derived personal
+data to validate a PII-protection tool would directly contradict this
+project's own stated principles (no real organizational or personal data
+anywhere in this repository), so it was left out deliberately rather than
+overlooked.
 
-What this test does instead: uses Faker's own non-US locale name
+What this test does instead: it uses Faker's own non-US locale name
 providers (already an installed dependency, no network access needed) --
 German, French, Spanish, and Italian -- as a name population that is
 largely, though not entirely, disjoint from the en_US Faker list
 flattened_names.py's dictionary is built from. Measured overlap before
 running this test: DE/FR/ES/IT surnames overlap with the en_US surname
-list at 4.5%, 13.3%, 12.0%, and 0.5% respectively (some overlap is
-expected and correct -- a number of given names, especially, are shared
-across Western naming traditions). This is a genuine test of whether the
+list at 4.5%, 13.3%, 12.0%, and 0.5% respectively (some overlap is expected
+and correct, since a number of given names, especially, are shared across
+Western naming traditions). This is a genuine test of whether the
 dictionary generalizes past its own source list, and it directly exercises
 the exact failure mode the docstring already names as a known risk
 ("someone named Zhiwei Tan or Aoife O'Sullivan is not in Faker's default
-en_US list") -- but it is Faker-sourced data in both the dictionary and
-(for this test) the injected names, just not the SAME Faker locale, so it
-does not fully settle the broader "real production username population"
+en_US list"). Still, it is Faker-sourced data in both the dictionary and
+(for this test) the injected names -- just not the SAME Faker locale -- so
+it does not fully settle the broader "real production username population"
 question the original US Census plan targeted. That remains open.
 """
 import sys
@@ -62,11 +63,11 @@ def build_flattened_tokens(provider, seed: int, n: int) -> list[str]:
     for _ in range(n):
         first = rng.choice(first_names)
         last = rng.choice(last_names)
-        # Same flattened shape generate_logs.py's PERSON_name_flat slot
-        # produces: lowercase, no separator, first+last concatenated --
-        # this is what fake.user_name() approximates for the synthetic
-        # corpus, reproduced directly here from the locale's raw name
-        # lists so the test isn't dependent on user_name()'s own
+        # Matches the flattened shape generate_logs.py's PERSON_name_flat
+        # slot produces: lowercase, no separator, first+last concatenated.
+        # This approximates what fake.user_name() does for the synthetic
+        # corpus, but it's reproduced directly here from the locale's raw
+        # name lists so the test doesn't depend on user_name()'s own
         # locale-specific formatting quirks.
         tokens.append((first + last).lower())
     return tokens

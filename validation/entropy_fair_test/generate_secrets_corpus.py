@@ -3,7 +3,7 @@ ROADMAP item 11. A dedicated small corpus of the exact category the entropy
 detection layer (src/detect.py's scan_entropy()) is actually built for --
 API keys, session/bearer tokens, and opaque hashes -- so it can be measured
 against its real intended use case instead of the main synthetic corpus,
-which (as README.md already says plainly) doesn't contain this category at
+which (as README.md already states) doesn't contain this category at
 all. The main corpus's entropy numbers (2.3% unique recall, 34.8%
 false-alarm rate at the most permissive threshold tested) are a real
 measurement, but of the wrong target: structured fields like EventID=,
@@ -25,8 +25,8 @@ Two kinds of lines, same JSONL shape as generate_logs.py ({"log": str,
     UUIDs are long and look random but are far lower entropy than a true
     secret, given their fixed hyphen positions and version/variant nibbles),
     a long English phrase, a URL, a file path, a hostname, a timestamp.
-    These exist specifically to measure the false-alarm rate honestly, the
-    same way the main corpus's CLEAN_TEMPLATES do.
+    These exist specifically to give an accurate read on the false-alarm
+    rate, the same way the main corpus's CLEAN_TEMPLATES do.
 
 All tokens are generated with a fixed seed (Random(42), matching this
 project's existing convention) from `random`/`string`, not from any real

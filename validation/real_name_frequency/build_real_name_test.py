@@ -1,11 +1,11 @@
 """
 ROADMAP item 10, the originally-planned test finally unblocked (2026-08-08):
 does the flattened-username dictionary (src/flattened_names.py, built from
-Faker's en_US first_names/last_names lists) generalize to a REAL US name
-population, not just to Faker's non-US locales
+Faker's en_US first_names/last_names lists) generalize to an actual US name
+population, and not only to Faker's non-US locales
 (validation/non_us_name_test.py, which answered a related but different
 question -- see that script's own docstring for why real data wasn't used
-there).
+there)?
 
 Data sources, both official US government aggregate statistics, public
 domain, and each publisher's own page states the data does not identify
@@ -16,18 +16,17 @@ individuals (see raw/README.md for full citations):
     aggregate bucket, not a real name, and is excluded here).
 
 Methodology: unlike non_us_name_test.py's uniform sampling over each
-locale's full name list, this test samples names WEIGHTED BY REAL
-FREQUENCY -- given names from the last 10 SSA years (2016-2025, both
-sexes combined), surnames by their actual 2010 Census count. This is a
-deliberate methodological choice, not an oversight: the question this
-test asks is "how does the dictionary perform against a REALISTIC
-production username population," and a realistic population is Zipfian
-(a small number of names account for a large share of real people), not
-uniform over every name that ever cleared SSA's 5-occurrence privacy
-floor in 145 years of data. Sampling uniformly over 162,253 surnames
-(the vast majority of which are individually rare) would understate how
-the dictionary performs on the names a real system would actually see
-most often.
+locale's full name list, this test samples names weighted by their actual
+real-world frequency -- given names from the last 10 SSA years (2016-2025,
+both sexes combined), surnames by their actual 2010 Census count. This is
+a deliberate methodological choice, not an oversight. The question this
+test asks is how the dictionary performs against a realistic production
+username population, and a realistic population is Zipfian (a small number
+of names account for a large share of real people) rather than uniform
+over every name that ever cleared SSA's 5-occurrence privacy floor in 145
+years of data. Sampling uniformly over 162,253 surnames (the vast majority
+of which are individually rare) would understate how the dictionary
+performs on the names a real system would actually see most often.
 
 Run: python validation/real_name_frequency/build_real_name_test.py
 (no network access needed once raw/*.zip exist locally -- see
@@ -164,22 +163,22 @@ def main(n: int = 2000, seed: int = 20260808):
           f"locales, validation/non_us_name_test.py)")
 
     # Subset analysis: recall split by whether the sampled given name and
-    # surname are in the dictionary IN THE ROLE segment_match() actually
-    # checks at the true split point (left=given must be in FIRST_NAMES
-    # OR LAST_NAMES with a matching right=surname role -- see below).
-    # A first pass at this used a looser "name is in the dictionary at
-    # all" check and got a confusing 82.2%-not-100% result for the
-    # "both in dictionary" bucket; the actual cause, found by inspecting
-    # the mismatches directly, is real and worth reporting on its own:
-    # a name like "foster" or "kennedy" is in LAST_NAMES (a real,
-    # well-known surname) but NOT in FIRST_NAMES, even though modern SSA
-    # data shows plenty of real people are actually GIVEN that name
-    # first name today (the "surname as first name" naming trend --
-    # Mason, Hunter, Cooper, Foster, Kennedy, etc.). When that happens on
-    # both halves of a token, segment_match() correctly finds no valid
+    # surname are in the dictionary in the specific role segment_match()
+    # checks at the true split point (left=given must be in FIRST_NAMES or
+    # LAST_NAMES with a matching right=surname role -- see below). A first
+    # pass at this used a looser "name is in the dictionary at all" check
+    # and got a confusing 82.2%-not-100% result for the "both in
+    # dictionary" bucket. The actual cause, found by inspecting the
+    # mismatches directly, turned out to be worth reporting on its own:
+    # a name like "foster" or "kennedy" sits in LAST_NAMES (a real,
+    # well-known surname) but not in FIRST_NAMES, even though modern SSA
+    # data shows plenty of real people are given that name as a first
+    # name today (the "surname as first name" naming trend -- Mason,
+    # Hunter, Cooper, Foster, Kennedy, etc.). When that happens on both
+    # halves of a token, segment_match() correctly finds no valid
     # <first><last> or <last><first> split, because from the dictionary's
-    # perspective both halves are the same role (last-name-shaped), not
-    # because the algorithm is broken.
+    # perspective both halves fill the same role (last-name-shaped) --
+    # not because the algorithm is broken.
     print(f"\n=== Recall split by whether each sampled name is in the "
           f"dictionary in the specific role segment_match() needs ===")
     role_ok = role_hit = role_total = 0       # (given in FIRST, surname in LAST) --

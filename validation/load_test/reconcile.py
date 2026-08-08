@@ -18,17 +18,17 @@ import urllib.request
 
 
 def count(host: str, index_pattern: str) -> int:
-    # track_total_hits=true is required here, not optional. Elasticsearch/
-    # OpenSearch's _search API only tracks hits.total.value ACCURATELY up
-    # to 10,000 by default; past that, it silently caps the reported value
-    # at exactly 10,000 (with relation: "gte" instead of "eq") unless asked
-    # not to. Every reconciliation check earlier in this project
-    # (BUGS_AND_FIXES.md) stayed under that threshold, so this was never
-    # exposed as a problem until this script was pointed at a 100,000-line
-    # load test -- see BUGS_AND_FIXES.md for the full writeup of how this
-    # was found (it initially looked like a pipeline bug: reconciliation
-    # FAILed at exactly 10,000 documents no matter how large the input was,
-    # which is the signature of this exact cap, not a real ceiling).
+    # track_total_hits=true is required here, not optional. By default,
+    # Elasticsearch/OpenSearch's _search API only tracks hits.total.value
+    # accurately up to 10,000; past that, it silently caps the reported
+    # value at exactly 10,000 (with relation: "gte" instead of "eq") unless
+    # told otherwise. Every reconciliation check earlier in this project
+    # (BUGS_AND_FIXES.md) stayed under that threshold, so this never surfaced
+    # as a problem until this script was pointed at a 100,000-line load test.
+    # See BUGS_AND_FIXES.md for the full writeup of how it was found: it
+    # initially looked like a pipeline bug, since reconciliation failed at
+    # exactly 10,000 documents no matter how large the input was -- the
+    # signature of this cap, not an actual ceiling.
     url = f"{host}/{index_pattern}/_search?size=0&track_total_hits=true"
     with urllib.request.urlopen(url, timeout=10) as resp:
         data = json.loads(resp.read())

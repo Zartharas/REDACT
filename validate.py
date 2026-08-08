@@ -1,11 +1,13 @@
 """
 Consolidated validation run. Answers one question: does REDACT actually work,
-end to end, right now, on this codebase? Not "was this tested at some point
-in the conversation" but "does it still pass if you run it fresh."
+end to end, right now, on this codebase? The question is whether it still
+passes if you run it fresh, not whether it passed at some point in the
+conversation.
 
-Every check here is a real assertion against real output, not a print
-statement that looks like a test. A check that fails makes the script exit
-non-zero and print exactly what failed, rather than silently continuing.
+Every check here is a real assertion against real output. There are no print
+statements dressed up to look like a test. A check that fails makes the
+script exit non-zero and print exactly what failed instead of continuing
+silently.
 
 Run with: python validate.py
 """

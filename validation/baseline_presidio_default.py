@@ -12,8 +12,9 @@ no REDACT regex layer, no entropy layer?
 Differences from detect.py's scan_ner(), deliberately:
   - No custom MEDICAL_RECORD_NUMBER pattern recognizer is registered.
     Vanilla Presidio has no built-in MRN recognizer, so this baseline is
-    expected to score 0 recall on that entity type. That is not a bug in
-    this script; it is the honest baseline result and is reported as such.
+    expected to score 0 recall on that entity type. That's not a bug in
+    this script -- it's the actual baseline result, and it's reported as
+    measured.
   - No REDACT regex layer (src/detect.py's scan_regex) and no entropy layer
     are run. This measures Presidio alone, as a practitioner would get it
     out of the box, not REDACT's ensemble.

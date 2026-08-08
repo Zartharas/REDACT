@@ -265,8 +265,8 @@ class FileStorageProvider(StorageProvider):
 
     def __init__(self, path: str, wal_compact_threshold_lines: int = 200):
         self.path = path
-        # Append-only write-ahead log, the real Bug 15 fix (BUGS_AND_FIXES.md)
-        # for this provider, added 2026-08-08. save() above is O(total store
+        # Append-only write-ahead log: this is what actually fixes Bug 15
+        # (BUGS_AND_FIXES.md) for this provider, added 2026-08-08. save() above is O(total store
         # size) because it rewrites the whole JSON snapshot on every call;
         # save_incremental() below instead appends ONLY the new entries as
         # one JSON line, an O(batch size) operation regardless of how large
@@ -328,8 +328,8 @@ class FileStorageProvider(StorageProvider):
         return forward, reverse
 
     def save(self, forward: dict[str, str], reverse: dict[str, str]) -> None:
-        # Write-to-temp-then-rename, not a direct open(path, "w"). Found
-        # necessary the hard way (ROADMAP item 6 follow-on,
+        # Write-to-temp-then-rename, not a direct open(path, "w"). This came
+        # out of debugging a real failure (ROADMAP item 6 follow-on,
         # validation/multiprocess_tokenstore_test.py): opening the real
         # path directly in "w" mode truncates it immediately, before
         # json.dump() has written anything back -- a concurrent process's
@@ -362,7 +362,7 @@ class FileStorageProvider(StorageProvider):
             raise
 
     def save_incremental(self, new_forward: dict[str, str], new_reverse: dict[str, str]) -> bool:
-        # The real Bug 15 fix (BUGS_AND_FIXES.md) for this provider: append
+        # Bug 15's actual fix (BUGS_AND_FIXES.md) for this provider: append
         # only the new batch to the WAL (O(batch size)) instead of
         # rewriting the entire snapshot (O(total store size), what save()
         # above does on every call). Still guarded by lock_for_save() --
@@ -497,7 +497,7 @@ class RedisStorageProvider(StorageProvider):
         pipe.execute()
 
     def save_incremental(self, new_forward: dict[str, str], new_reverse: dict[str, str]) -> bool:
-        # The real Bug 15 fix (BUGS_AND_FIXES.md) for the Redis path:
+        # What actually fixes Bug 15 (BUGS_AND_FIXES.md) on the Redis path:
         # HSET only the entries minted since the last save, instead of
         # save()'s delete-then-full-rewrite of the entire hash. Cost here
         # is O(len(new_forward) + len(new_reverse)) -- the size of ONE
@@ -615,8 +615,9 @@ class TokenStore:
         # the number of distinct EMAIL/SSN/CREDIT_CARD/MRN values ever
         # tokenized, not O(n).
         #
-        # This debounce is a MITIGATION, stated honestly, not a full fix:
-        # it amortizes the same O(n) cost over save_every_n_calls calls
+        # This debounce is a mitigation, not a full fix, and it's worth
+        # being upfront about that: it amortizes the same O(n) cost over
+        # save_every_n_calls calls
         # instead of paying it on every one, cutting total cost by roughly
         # that factor -- still O(n^2 / k) overall, just with k times less
         # constant, which pushes the point where this becomes a practical
@@ -649,8 +650,8 @@ class TokenStore:
             pending_forward = dict(self._pending_forward)
             pending_reverse = dict(self._pending_reverse)
 
-        # The real Bug 15 fix, added 2026-08-08 (BUGS_AND_FIXES.md):
-        # try the provider's incremental path first, which persists ONLY
+        # Bug 15's fix, added 2026-08-08 (BUGS_AND_FIXES.md): try the
+        # provider's incremental path first, which persists ONLY
         # pending_forward/pending_reverse -- the entries minted since the
         # last successful save, not the full accumulated store -- so cost
         # is O(batch size), not O(total store size). Both providers in
@@ -691,17 +692,17 @@ class TokenStore:
         # is close to guaranteed, repeated data loss: whichever worker's
         # save() lands last in any given window silently erases every
         # reverse-map entry a sibling worker wrote that this worker never
-        # itself loaded. Confirmed live: a multi-process test mirroring
-        # this exact usage pattern lost a large fraction of minted
-        # tokens' reverse-map entries before this fix (see
+        # itself loaded. A multi-process test mirroring this exact usage
+        # pattern confirmed it live: a large fraction of minted tokens'
+        # reverse-map entries were lost before this fix (see
         # BUGS_AND_FIXES.md).
         #
         # Fix: reload the CURRENT persisted state immediately before
         # writing, merge this process's own additions on top of it (not
         # instead of it), and adopt the merged result as this process's
-        # own in-memory state too -- which has the added benefit of
-        # letting this process start seeing tokens minted by siblings it
-        # never directly loaded from, not just avoiding erasing them.
+        # own in-memory state too. That has the added benefit of letting
+        # this process start seeing tokens minted by siblings it never
+        # directly loaded from, beyond simply no longer erasing them.
         # Conflicting values for the same key are resolved by keeping
         # this process's own local value, which is safe specifically
         # *because* token generation is a deterministic HMAC of the

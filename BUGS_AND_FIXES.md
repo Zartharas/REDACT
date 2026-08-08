@@ -1,11 +1,12 @@
 # Known Issues and Fixes
 
-A running record of bugs found during development and testing of the REDACT
-pipeline (Logstash → `src/service.py` → OpenSearch), why each one mattered,
-and how it was fixed. Kept here rather than only in commit messages because
-several of these are the kind of failure mode ("looks like it's working,
-actually silently destroying data") that's worth a permanent, findable
-record — for this project and for anyone building something similar.
+A running record of bugs found while building and testing the REDACT
+pipeline (Logstash → `src/service.py` → OpenSearch): why each one mattered
+and how it got fixed. This lives here instead of only in commit messages
+because several of these follow the same dangerous shape — "looks like
+it's working, is actually silently destroying data" — and that's exactly
+the kind of failure worth a permanent, findable record, for this project
+and for anyone building something similar.
 
 Status key: **Verified fixed** = confirmed by a completed clean-room
 rebuild-and-rerun test after the fix. **Fix applied, verification pending** =

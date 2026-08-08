@@ -170,7 +170,31 @@ how much a single-machine test *can* find than it does about having
 exhausted what a real multi-node production deployment might
 additionally surface.
 
-**Not yet done:** runs at additional sizes (e.g. 1,000,000) to see
-whether the ~250 lines/sec throughput holds roughly flat or degrades
-further — the natural next step now that a clean baseline exists at
-100,000.
+### 1,000,000 lines, 2026-08-08: the natural next step, and it found the biggest bug yet
+
+Running at 10x this scale again — `./validation/load_test/run_load_test.sh 1000000` —
+answered the "does ~250 lines/sec hold flat or degrade further" question
+above directly: it degraded, badly. The first attempt failed
+reconciliation outright, throughput collapsing from ~250 lines/sec to
+~3/sec well before the run finished. Root cause: `TokenStore.save()`
+(the read-merge-write fix Bug 14 introduced) rewrote the entire persisted
+token store on every single request — cheap at 100,000-line scale,
+a 2.927-second-per-request wall once the store reached 93,279 entries at
+1,000,000-line scale. That's Bug 15 in `BUGS_AND_FIXES.md`, the most
+consequential bug this project has found — invisible at every scale
+tested before this one, exactly the kind of thing only a full order-of-
+magnitude jump surfaces.
+
+A same-day debounce mitigation, then a same-day real fix (incremental
+per-entry writes instead of rewriting the whole store), resolved it. The
+rerun after both: **`security-logs-anonymized-*` = 1,000,000 exact,
+`security-logs-quarantine-*` = 0 exact, `redact-audit-trail-*` = 893,150
+exact, reconciliation PASS**, ~224 lines/sec average across the full run
+— close to the 100,000-line baseline despite the store growing to
+hundreds of thousands of entries along the way. Full root-cause writeup,
+the mitigation-vs-fix distinction, and what's still open: Bug 15 in
+`BUGS_AND_FIXES.md`.
+
+**Still open:** runs beyond 1,000,000 lines, to see how far the current
+fix's remaining O(n) compaction cost (now paid far less often, not
+eliminated) can be pushed before it becomes visible again.

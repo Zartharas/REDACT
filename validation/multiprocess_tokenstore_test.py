@@ -2,23 +2,25 @@
 ROADMAP item 6 follow-on. RedisStorageProvider was verified for
 single-process thread safety (validation/redis_storage_provider_test.py)
 but never for the actual production topology it exists for: multiple
-SEPARATE OS processes (redact-service replicas, or -- as this test found --
-gunicorn's own default multi-worker model within ONE container) sharing one
-persistence backend concurrently. TokenStore's own docstring already names
-this gap explicitly: "The lock only fixes in-process thread-safety -- it
-says nothing about a multi-instance production deployment."
+distinct OS processes (redact-service replicas, or -- as this test found --
+gunicorn's own default multi-worker model within a single container)
+sharing one persistence backend concurrently. TokenStore's own docstring
+already names this gap explicitly: "The lock only fixes in-process
+thread-safety -- it says nothing about a multi-instance production
+deployment."
 
 This test proves, empirically and without needing Docker or Redis, that the
 gap was real: TokenStore.save() (src/anonymize.py) loaded persisted state
-ONCE at construction and, on every save(), blindly overwrote the backend
-with whatever it had accumulated in its own local memory -- a "last writer
-wins, full clobber" pattern. Under service.py's real usage (_store.save()
-called after EVERY /anonymize request, one TokenStore instance per gunicorn
-worker process, all workers sharing one token_store.json file via
-docker-compose.yml's redact-output volume) this isn't a rare race -- it's
-close to guaranteed data loss under any real concurrent load, since a
-worker's save() after processing request N would silently erase any
-reverse-map entries a sibling worker had written in between.
+a single time at construction and, on every save(), blindly overwrote the
+backend with whatever it had accumulated in its own local memory -- a "last
+writer wins, full clobber" pattern. Under service.py's real usage
+(_store.save() called after every single /anonymize request, one
+TokenStore instance per gunicorn worker process, all workers sharing one
+token_store.json file via docker-compose.yml's redact-output volume), this
+isn't a rare race. It's close to guaranteed data loss under any real
+concurrent load, since a worker's save() after processing request N would
+silently erase any reverse-map entries a sibling worker had written in
+between.
 
 The practical harm: tokenize()'s core promise ("Exact original value can be
 recovered by anyone with access to `store`" -- anonymize.py's own module
@@ -65,10 +67,10 @@ def worker(store_path: str, worker_id: int, n_tokens: int, result_queue):
     worker function), .save() called after every single minted token, no
     coordination with sibling workers beyond the shared file itself.
 
-    Wrapped in a broad try/except and always puts SOMETHING on the queue
-    (a result tuple or an error marker), never lets an exception silently
-    kill the worker without the parent knowing -- found necessary while
-    building this test: the pre-fix version of FileStorageProvider.save()
+    Wrapped in a broad try/except and always puts a result on the queue
+    (either a result tuple or an error marker), so an exception never
+    silently kills the worker without the parent knowing -- found necessary
+    while building this test: the pre-fix version of FileStorageProvider.save()
     (see BUGS_AND_FIXES.md) could crash a worker with json.JSONDecodeError
     on a torn concurrent read, and the parent's queue.get() would then
     hang forever waiting for a result that was never coming, with no

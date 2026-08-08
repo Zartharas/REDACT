@@ -6,9 +6,9 @@ outside the pattern list still get zero fields... a production deployment
 with different syslog traffic needs its own additional patterns." This
 script measures a second round of exactly that -- new patterns for a few
 more common real-world syslog message shapes -- against a small, dedicated,
-Faker-seeded corpus (deliberately NOT the canonical data/synthetic_logs.jsonl,
-so this doesn't perturb any of the many numbers already tied to that
-corpus's exact content and gold-span count).
+Faker-seeded corpus, deliberately kept separate from the canonical
+data/synthetic_logs.jsonl so this doesn't perturb any of the many numbers
+already tied to that corpus's exact content and gold-span count.
 
 New shapes covered, added the same day as this test:
   - sshd "Accepted publickey for X from Y port Z" (key-based auth -- the
@@ -22,11 +22,12 @@ Found and fixed live while building this test: a real ordering bug, not
 just missing coverage. The su and dhclient message shapes both legitimately
 contain a bare "=" in a non-KV context ("by jsmith(uid=0)",
 "(xid=0x12345678)"), which used to trigger extract_fields_syslog's generic
-KV-fallback branch FIRST (since that branch only checked `if "=" in rest`)
-and produce a wrong, nonsensical field (e.g. su.uid = "0)") instead of ever
-reaching the more specific su/dhclient patterns. Fixed by trying the
-specific preposition-shaped patterns before the generic KV fallback, not
-after -- this also protects any future daemon pattern added the same way.
+KV-fallback branch before anything else got a chance (since that branch
+only checked `if "=" in rest`), producing a wrong, nonsensical field (e.g.
+su.uid = "0)") instead of ever reaching the more specific su/dhclient
+patterns. Fixed by trying the specific preposition-shaped patterns before
+the generic KV fallback rather than after -- this also protects any future
+daemon pattern added the same way.
 
 Run: python validation/syslog_coverage_extension_test.py
 

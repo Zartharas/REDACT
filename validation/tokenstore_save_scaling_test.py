@@ -1,33 +1,34 @@
 """
 Bug 15 (BUGS_AND_FIXES.md): TokenStore.save() originally did a full
-read-merge-write of the ENTIRE persisted store on every call, found via
+read-merge-write of the entire persisted store on every call, found via
 the 1,000,000-line load test (ROADMAP item 9) -- a live request took
 2.927s once the store reached 93,279 entries (12.4MB), and end-to-end
 throughput collapsed from ~250 lines/sec to ~3/sec well before the run
 finished.
 
-HISTORY, so the two runs of this script don't read as contradictory:
-- 2026-08-08, first version of this script: measured the ORIGINAL O(n)-
+This script has been run twice, at two different points, so its history
+is worth laying out to avoid the two runs reading as contradictory:
+- 2026-08-08, first version of this script: measured the original O(n)-
   per-call growth directly (confirmed clearly: last sampled save() at
   10-22x the first sampled save()'s cost as the store grew ~23x), and
   confirmed the save_every_n_calls debounce mitigation (added same day)
-  cut TOTAL wall-clock cost roughly proportionally to the debounce
-  factor -- but explicitly, honestly scoped as a MITIGATION (same O(n)
-  shape, paid less often), not a fix.
-- 2026-08-08, later same day, after the real fix (StorageProvider.
+  cut total wall-clock cost roughly proportionally to the debounce
+  factor. That mitigation was scoped honestly from the start as a
+  mitigation only (same O(n) shape, paid less often), not a fix.
+- 2026-08-08, later the same day, after the real fix (StorageProvider.
   save_incremental(), see anonymize.py): FileStorageProvider now appends
   only new entries to a write-ahead log (WAL) instead of rewriting the
   whole JSON snapshot on every save() call, periodically folding the WAL
   back into the snapshot (compact()) only once every
   wal_compact_threshold_lines batches (default 200), not every call. This
-  script was re-run against that fix and the O(n) growth this script was
-  built to demonstrate IS NO LONGER PRESENT, even at save_every_n_calls=1
+  script was re-run against that fix, and the O(n) growth it was built to
+  demonstrate is simply no longer there, even at save_every_n_calls=1
   (see the "growth factor" line the second run prints -- close to 1.0x
   now, not 10-22x). That's the expected, correct outcome of the real fix
   landing, not a bug in this test. The debounce parameter still exists
   and still reduces lock/IO frequency further, but it is no longer the
   only thing standing between this codebase and Bug 15's original
-  failure mode -- the incremental-write path is.
+  failure mode; the incremental-write path is.
 
 This script proves the fixed cost shape directly, in-sandbox, with no
 Docker or Redis needed (FileStorageProvider only -- RedisStorageProvider
@@ -48,8 +49,8 @@ layer, no network round-trip, no gunicorn request handling, and no
 lock_for_save() contention from 8 concurrent workers all fighting over
 the same lock file. This test is expected to show smaller absolute
 per-call times than the live run at an equivalent store size -- the point
-is to directly confirm the cost SHAPE, not reproduce the live run's exact
-absolute numbers.
+is to directly confirm the shape of the cost curve, not reproduce the live
+run's exact absolute numbers.
 
 Run: python validation/tokenstore_save_scaling_test.py
 """
@@ -71,18 +72,18 @@ SAMPLE_EVERY = 250   # record timing this often, not every single call
 
 def run(save_every_n_calls: int, tmpdir: str) -> tuple[list[tuple[int, float]], list[float]]:
     """Returns (sampled_timings, real_write_timings). real_write_timings
-    records EVERY call that actually performed a real persist (detected
-    via store._calls_since_save resetting to 0, not a timing-based
-    guess), regardless of the SAMPLE_EVERY sampling used for the printed
-    trend -- needed because with a debounce factor that shares a common
-    divisor with SAMPLE_EVERY, sampled indices can systematically never
-    land on a real write, undercounting them entirely rather than just
-    missing a few. Note that a "real write" now usually means a cheap WAL
-    append (O(batch size)), not the old full snapshot rewrite -- except
-    on the periodic calls where wal_compact_threshold_lines is crossed
-    and compact() runs, which IS still O(total store size) by design (see
-    FileStorageProvider.compact()'s own docstring) but happens far less
-    often than every save()."""
+    records every single call that actually performed a real persist
+    (detected via store._calls_since_save resetting to 0, not a
+    timing-based guess), regardless of the SAMPLE_EVERY sampling used for
+    the printed trend. This distinction matters because with a debounce
+    factor that shares a common divisor with SAMPLE_EVERY, sampled indices
+    can systematically never land on a real write, undercounting them
+    entirely rather than just missing a few. Note that a "real write" now
+    usually means a cheap WAL append (O(batch size)), not the old full
+    snapshot rewrite -- except on the periodic calls where
+    wal_compact_threshold_lines is crossed and compact() runs, which is
+    still O(total store size) by design (see FileStorageProvider.compact()'s
+    own docstring) but happens far less often than every save()."""
     store_path = os.path.join(tmpdir, f"token_store_{save_every_n_calls}.json")
     store = anonymize.TokenStore(store_path, token_key="scaling-test-key",
                                   save_every_n_calls=save_every_n_calls)

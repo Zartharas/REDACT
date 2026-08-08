@@ -8,15 +8,15 @@ TokenStore.save() plus a real cross-process lock,
 FileStorageProvider.lock_for_save() using fcntl.flock) brought that down to
 zero. RedisStorageProvider.lock_for_save() applies the same fix using a
 single-node Redis distributed lock (SET NX PX to acquire, a Lua
-delete-if-still-owner script to release) instead of fcntl -- this script
-confirms that holds against a REAL Redis instance and REAL separate OS
-processes, not just the file-backend logic.
+delete-if-still-owner script to release) instead of fcntl. This script
+confirms that fix holds against an actual Redis instance and actual
+separate OS processes, going beyond the file-backend logic alone.
 
 validation/redis_storage_provider_test.py (written earlier, ROADMAP item 6)
-only ever tested concurrency with multiple THREADS in one process. That
-never exercised the actual production topology this provider exists for --
+only ever tested concurrency with multiple threads in one process, which
+never exercised the actual production topology this provider exists for:
 multiple separate redact-service processes (gunicorn workers, or separate
-replicas) sharing one Redis backend -- which is exactly the gap this script
+replicas) sharing one Redis backend. That's exactly the gap this script
 closes, mirroring multiprocess_tokenstore_test.py's real multi-OS-process
 structure instead.
 

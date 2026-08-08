@@ -1,12 +1,23 @@
-# Real US name-frequency data (ROADMAP item 10)
+# Real US name-frequency data (ROADMAP item 10 — DONE, 2026-08-08)
 
-This directory holds the raw source files for the still-open half of item 10:
-`validation/non_us_name_test.py` already confirmed the flattened-username
-dictionary collapses to 1.4% recall outside its own (Faker en_US) name
-population, but that test used Faker's *non-US* locales, not a real US name
-population — so it never tested the actual originally-planned question:
-how does the dictionary do against the real US given/surname distribution it
-claims to represent?
+This directory holds the raw source files for what was originally the
+still-open half of item 10: `validation/non_us_name_test.py` had already
+confirmed the flattened-username dictionary collapses to 1.4% recall
+outside its own (Faker en_US) name population, but that test used Faker's
+*non-US* locales, not a real US name population — so it never answered
+the actual originally-planned question, how does the dictionary do
+against the real US given/surname distribution it claims to represent?
+
+**That question is now answered.** `validation/real_name_frequency/build_real_name_test.py`
+samples 2,000 flattened tokens from the real SSA/Census data below,
+weighted by real frequency, and measures **15.2% recall (305/2,000)**
+against `scan_flattened()` — landing between the 50.3% Faker-matched
+figure and the 1.4% non-US-locale figure, right where a real population
+should. See `README.md`'s Layer 4 section for the full result and what
+drives that number (dictionary coverage and a real surname-as-first-name
+naming trend, not an algorithm defect). This README's rest is kept as
+written for the data-provenance record; only this intro reflects the
+final status.
 
 ## What goes here (not committed — run the download script instead)
 
@@ -45,17 +56,18 @@ either.
    The source page states plainly: "the data do not in any way identify
    any specific individuals."
 
-## Once the files are here
+## What the script does (`validation/real_name_frequency/build_real_name_test.py`)
 
-The next step is a script (`validation/real_name_frequency/build_real_name_test.py`,
-not yet written) that mirrors `validation/non_us_name_test.py`'s exact
-methodology: build flattened-username tokens from real SSA given names +
-real Census surnames (e.g. `donaldgarcia`-style, no separator), inject
-them into the same syslog `sudo` template shape used elsewhere in this
-project, and measure `scan_flattened()`'s recall against this real
-population instead of a Faker-generated one. This is fully regex/dictionary
--based (`src/flattened_names.py`), no spaCy or Docker required, so it's
-runnable in this project's dev sandbox once the source data exists locally.
+Mirrors `validation/non_us_name_test.py`'s methodology: builds flattened-
+username tokens from real SSA given names and real Census surnames (e.g.
+`donaldgarcia`-style, no separator), injects them into the same syslog
+`sudo` template shape used elsewhere in this project, and measures
+`scan_flattened()`'s recall against this real population instead of a
+Faker-generated one — weighted by real name frequency, not sampled
+uniformly, since a realistic username population is Zipfian. Fully
+regex/dictionary-based (`src/flattened_names.py`), no spaCy or Docker
+required, so it ran cleanly in this project's dev sandbox once the source
+data existed locally.
 
 **Scope note, stated up front:** even this test won't be a perfect
 substitute for "real production username data," since it's still

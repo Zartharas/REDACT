@@ -85,36 +85,36 @@ def scan_ner(text: str, min_score: float = 0.5) -> list[dict]:
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9+/=_.-]{8,}")
 
-# A UUID's hyphens sit at fixed positions and its version/variant nibbles
-# are constrained (version is one hex digit 1-5, variant is one of
-# 8/9/a/b) -- structurally lower entropy per character than a truly random
-# token of the same length, despite "looking" random at a glance. This is
-# the deliberately hard negative case validation/entropy_fair_test/ was
-# built to include, and direct inspection of that test's remaining false
-# positives (README.md in that directory) confirmed they're concentrated
-# almost entirely in UUIDs embedded in URLs/params. Matching the fixed
-# UUID shape and excluding it -- rather than relying on entropy/length
-# alone to tell them apart -- is a structural fix for a structural
-# false-positive source.
+# UUID hyphens sit at fixed positions, and the version/variant nibbles are
+# constrained (version is one hex digit 1-5, variant is one of 8/9/a/b), so
+# a UUID is structurally lower entropy per character than a truly random
+# token of the same length even though it "looks" random at a glance.
+# validation/entropy_fair_test/ was built specifically to include this hard
+# negative case, and inspecting that test's remaining false positives (see
+# README.md in that directory) showed they were concentrated almost
+# entirely in UUIDs embedded in URLs and params. Matching the fixed UUID
+# shape and excluding it, rather than relying on entropy or length alone
+# to tell them apart, fixes the false-positive source at its structural
+# root.
 #
-# Known, stated limitation: a small number of real-world services issue
-# UUID-shaped API keys/tokens (this exact collision is called out in
-# validation/entropy_fair_test/README.md's "What this test doesn't
-# establish" section). Excluding the UUID shape trades a little recall on
-# that specific format for a large precision gain on the much more common
-# case of UUIDs used as request/resource identifiers, not secrets -- a
-# deliberate, documented tradeoff, not an oversight.
+# Limitation worth flagging: a small number of real-world services issue
+# UUID-shaped API keys or tokens (validation/entropy_fair_test/README.md's
+# "What this test doesn't establish" section calls out this exact
+# collision). Excluding the UUID shape trades a little recall on that
+# specific format for a large precision gain on the much more common case
+# of UUIDs used as request or resource identifiers rather than secrets --
+# a deliberate, documented tradeoff rather than an oversight.
 #
-# Deliberately NOT anchored to the whole token (no ^...$): _TOKEN_RE's own
-# character class includes "/", "=", and "_" -- exactly the separators
-# that show up around a UUID in real log text (a URL path segment
-# "/api/v1/orders/<uuid>", a query param "request_id=<uuid>"), so a UUID
-# almost never appears as an isolated token on its own; it appears as a
-# substring of a longer token that also swallowed its prefix. Checked with
-# re.search() instead: is there a UUID-shaped run of characters anywhere
-# in this token. A genuine secret coincidentally containing a substring
-# matching this fixed hyphen-position, constrained-nibble shape is not
-# realistically possible at random.
+# The regex is not anchored to the whole token (no ^...$) because
+# _TOKEN_RE's own character class includes "/", "=", and "_", the same
+# separators that show up around a UUID in real log text (a URL path
+# segment like "/api/v1/orders/<uuid>", a query param like
+# "request_id=<uuid>"). A UUID almost never appears as an isolated token
+# on its own; it shows up as a substring of a longer token that swallowed
+# its prefix. re.search() checks for a UUID-shaped run of characters
+# anywhere in the token instead. A genuine secret coincidentally
+# containing a substring matching this fixed hyphen-position,
+# constrained-nibble shape isn't realistically possible at random.
 _UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"
 )

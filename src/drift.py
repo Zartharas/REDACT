@@ -58,8 +58,8 @@ def field_stats(entries: list[dict], use_ner: bool = True) -> dict[tuple[str, st
     A production deployment relying on drift.py to catch a field that
     starts leaking PII would have missed exactly the format of PII this
     project's own headline finding says general-purpose NER already
-    misses most of the time -- silently compounding, not just repeating,
-    that gap."""
+    misses most of the time -- quietly making that gap worse rather than
+    just repeating it."""
     stats: dict[tuple[str, str], dict] = defaultdict(lambda: {"total": 0, "critical_hits": 0})
     for e in entries:
         log_type = e["log_type"]
@@ -80,7 +80,7 @@ def compare(baseline: dict, current: dict, threshold: float = 0.05) -> list[dict
     samples, sorted by the size of the rate change, largest first. Fields
     below MIN_SAMPLE_SIZE in either window are reported separately as
     'insufficient data' rather than silently dropped, so a reviewer can see
-    what wasn't checked, not just what was."""
+    what got skipped and not only what got flagged."""
     flagged = []
     insufficient = []
     all_keys = set(baseline) | set(current)

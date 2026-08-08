@@ -5,10 +5,10 @@ predecessor) closed sshd-publickey/su/useradd/dhclient and left three
 gaps explicitly named in extract_fields_syslog's own docstring: "other
 daemons, other wording -- NetworkManager, systemd unit failures, cron
 with PII-bearing arguments." This test measures closing three of those,
-against a fresh, dedicated, Faker-seeded corpus (deliberately NOT
-data/synthetic_logs.jsonl, same reasoning as the previous extension test:
-this doesn't perturb any of the many numbers already tied to that
-corpus's exact content).
+against a fresh, dedicated, Faker-seeded corpus kept deliberately separate
+from data/synthetic_logs.jsonl, for the same reason as the previous
+extension test: this doesn't perturb any of the many numbers already tied
+to that corpus's exact content.
 
 New shapes covered, added the same day as this test:
   - systemd-logind "New session N of user X." -- logged once per login
@@ -76,7 +76,7 @@ CLEAN_TEMPLATES = [
     # same as any message shape outside the pattern list.
     "systemd[1]: Started Session {num} of user root.",  # different
         # message shape than systemd-logind's "New session N of user X."
-        # above -- this one is NOT covered, on purpose, to prove the new
+        # above -- this one is left uncovered on purpose, to prove the new
         # pattern isn't accidentally over-broad.
     "kernel: [{ts}] CPU0: Package temperature above threshold, cpu clock throttled",
     "NetworkManager[{pid}]: <info>  [{epoch_ts}] Wi-Fi P2P device controlled by wpa_supplicant",  # different

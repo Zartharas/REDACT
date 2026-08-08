@@ -32,8 +32,8 @@ Three follow-up validations have since been done (2026-08-07/2026-08-08):
    German/French/Spanish/Italian name providers, a population largely
    disjoint from en_US. Result: 1.4% recall (28/2,000), collapsing almost
    entirely -- direct, measured confirmation of the "Zhiwei Tan" concern
-   above, not just a theoretical risk. Still Faker-sourced data, though,
-   not the originally planned real-population test.
+   above, and not merely a theoretical one. Still Faker-sourced data,
+   though, not the originally planned real-population test.
 3. The real US population, directly tested (validation/real_name_frequency/,
    2026-08-08): SSA given-name and Census surname frequency data (both
    official, public-domain, aggregate government statistics), sampled

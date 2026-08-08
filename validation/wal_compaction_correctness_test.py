@@ -2,7 +2,7 @@
 Correctness check for FileStorageProvider's WAL-based incremental-write
 path (the real Bug 15 fix, BUGS_AND_FIXES.md, added 2026-08-08) --
 specifically across compact() boundaries, which is the one part of the
-new design NOT exercised by validation/multiprocess_tokenstore_test.py
+new design not exercised by validation/multiprocess_tokenstore_test.py
 (that test runs 8 processes x 50 tokens each = 400 total, well under the
 default wal_compact_threshold_lines=200 batches needed to trigger even
 one compaction there) or validation/tokenstore_save_scaling_test.py
@@ -13,7 +13,7 @@ What this proves, single-process, no Docker needed:
 1. Every token minted across many compaction cycles is still resolvable
    via detokenize()/resolve() after the fact -- compact() folding the WAL
    into the snapshot and truncating it must not lose any entry.
-2. A FRESH TokenStore pointed at the same path (simulating a process
+2. A fresh TokenStore pointed at the same path (simulating a process
    restart, or a second gunicorn worker reading state a sibling wrote)
    sees the exact same complete set of tokens, whether they came from the
    compacted snapshot or an uncompacted tail still sitting in the WAL --
@@ -71,7 +71,7 @@ def main():
         print(f"=== WAL compaction correctness test: {N:,} tokens, "
               f"wal_compact_threshold_lines={COMPACT_THRESHOLD} ===\n")
 
-        # Check 1: every minted token still resolves within the SAME process.
+        # Check 1: every minted token still resolves within the same process.
         lost_same_process = 0
         for original, token in minted.items():
             if store.resolve(token) != original:
@@ -79,7 +79,7 @@ def main():
         print(f"Check 1 (same-process resolve()): {len(minted) - lost_same_process:,}/"
               f"{len(minted):,} tokens resolve correctly.")
 
-        # Check 2: a FRESH TokenStore reading the same path/provider sees
+        # Check 2: a fresh TokenStore reading the same path/provider sees
         # everything -- proves load()'s snapshot+WAL-replay is correct,
         # not just that the original in-memory dicts happened to still be
         # right.

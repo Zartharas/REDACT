@@ -3,8 +3,8 @@ Extracts (field_name, value) pairs from structured or semi-structured log
 lines, so drift detection (drift.py) can track PII hit rate per field rather
 than per whole log line.
 
-Scope, stated honestly: this only works where a log format has an
-identifiable field structure.
+Scope: this only works where a log format has an identifiable field
+structure.
   - cloudtrail: real JSON, flattened to dotted paths.
   - windows_event: key=value pairs, extracted with a regex that tolerates
     values containing spaces (real Windows Event exports frequently have
@@ -82,9 +82,10 @@ def extract_fields_cloudtrail(text: str) -> dict[str, str]:
 # (2026-08-08) -- a plain \w+ doesn't match the hyphen in real daemon tags
 # like "systemd-logind", "systemd-resolved", "systemd-networkd", so the
 # whole tag-prefix match would fail on those lines and the function would
-# return {} for every one of them, not just decline to recognize the
-# message body shape. Widening the tag character class fixes this for any
-# hyphenated daemon name, not just the one that surfaced it.
+# return {} for every one of them instead of merely declining to
+# recognize the message body shape. Widening the tag character class
+# fixes this for any hyphenated daemon name, not only the one that
+# surfaced it.
 _SYSLOG_TAG_RE = re.compile(r"^(?P<tag>[\w-]+)(?:\[(?P<pid>\d+)\])?:\s*(?P<rest>.*)$")
 
 # sshd auth-message shapes. Order matters: "Failed password for invalid
@@ -208,12 +209,12 @@ _SYSLOG_NETWORKMANAGER_WIFI_PATTERN = re.compile(
 # the systemd-logind session pattern above (a different systemd
 # subsystem's message shape entirely -- logind logs sessions, this is the
 # service manager itself logging a unit's failure). Extracts the unit
-# name and failure result. Stated honestly: a unit name rarely carries
-# PII on its own (unlike systemd-logind's username or NetworkManager's
-# SSID above), so this pattern closes the documented coverage gap more
-# than it adds new PII-detection value -- included for completeness and
-# because a custom unit name COULD embed a person's name in an unusual
-# deployment (e.g. a per-user systemd timer unit).
+# name and failure result. In practice a unit name rarely carries PII on
+# its own (unlike systemd-logind's username or NetworkManager's SSID
+# above), so this pattern closes the documented coverage gap more than it
+# adds new PII-detection value -- included for completeness and because a
+# custom unit name COULD embed a person's name in an unusual deployment
+# (e.g. a per-user systemd timer unit).
 _SYSLOG_SYSTEMD_UNIT_FAILURE_PATTERN = re.compile(
     r"^(?P<unit>\S+\.service): Failed with result '(?P<result>[\w-]+)'\.$"
 )
@@ -222,10 +223,10 @@ _SYSLOG_SYSTEMD_UNIT_FAILURE_PATTERN = re.compile(
 def extract_fields_syslog(text: str) -> dict[str, str]:
     """Partial syslog field extraction, added 2026-08-07 (ROADMAP item 8).
 
-    Scope, stated as honestly as the rest of this module: syslog message
-    bodies are free text in general, and there is no generic parser that
-    reliably locates field boundaries across arbitrary syslog content --
-    that limitation from this module's original docstring is still true.
+    Scope, consistent with the rest of this module: syslog message bodies
+    are free text in general, and there is no generic parser that reliably
+    locates field boundaries across arbitrary syslog content -- that
+    limitation from this module's original docstring still holds.
     What changed is that a meaningful fraction of real syslog traffic
     (this project's own three syslog templates in generate_logs.py, and
     common real sshd auth-log lines in datasets like Loghub's OpenSSH) DOES
@@ -292,11 +293,10 @@ def extract_fields_syslog(text: str) -> dict[str, str]:
        changes" gap shape 7's own pattern explicitly named as still open;
        an SSID is PII-adjacent when a network is named after a person.
     10. systemd unit-failure messages (added 2026-08-08, round 3):
-       "myapp.service: Failed with result 'exit-code'." -- stated
-       honestly, a unit name rarely carries PII on its own (unlike shape
-       5's username or shape 9's SSID), included mainly to close the
-       documented coverage gap rather than for strong new PII-detection
-       value.
+       "myapp.service: Failed with result 'exit-code'." -- a unit name
+       rarely carries PII on its own (unlike shape 5's username or shape
+       9's SSID), so this one is included mainly to close the documented
+       coverage gap rather than for strong new PII-detection value.
 
     Message shapes that match none of the above -- most notably the
     free-text content of a sudo COMMAND value or cron CMD argument, other
