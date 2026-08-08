@@ -87,8 +87,38 @@ _SYSLOG_SSHD_PATTERNS = [
     re.compile(r"^Failed password for invalid user (?P<user>\S+) from (?P<src_ip>\S+) port (?P<port>\d+)"),
     re.compile(r"^Failed password for (?P<user>\S+) from (?P<src_ip>\S+) port (?P<port>\d+)"),
     re.compile(r"^Accepted password for (?P<user>\S+) from (?P<src_ip>\S+) port (?P<port>\d+)"),
+    # Added alongside the su/useradd/dhclient patterns below (ROADMAP item
+    # 8 follow-on): key-based auth is at least as common as password auth
+    # in real sshd logs, and the original pattern list only covered
+    # "Accepted password for", never "Accepted publickey for" -- an
+    # oversight, not a deliberate scope decision, so it belongs in this
+    # same list rather than a new one.
+    re.compile(r"^Accepted publickey for (?P<user>\S+) from (?P<src_ip>\S+) port (?P<port>\d+)"),
     re.compile(r"^Invalid user (?P<user>\S+) from (?P<src_ip>\S+)"),
     re.compile(r"^User (?P<user>\S+) from (?P<src_ip>\S+) not allowed"),
+]
+
+# A second batch of message shapes added 2026-08-07 (ROADMAP item 8
+# follow-on, closing part of the "other daemons, other wording" gap the
+# original extract_fields_syslog docstring named as still open). Each
+# targets one specific, common real-world syslog message shape rather
+# than attempting a general-purpose parser -- the same scoped-but-honest
+# approach the original sshd patterns above already took, just extended
+# to a few more daemons: su (privilege escalation -- who ran su, and as
+# whom), and dhclient (which host was handed which IP address, relevant
+# to the same IP-address PII category regex/NER already detect
+# elsewhere). useradd/usermod deliberately are NOT handled by a new
+# pattern here -- see the KV-separator fix below instead, since their
+# real-world message shape is comma-separated key=value pairs, not a
+# preposition-based sentence, and the existing tolerant KV extractor
+# already covers that shape once it knows to treat ',' as a pair
+# separator the same way it already treats ';'.
+_SYSLOG_SU_PATTERN = re.compile(
+    r"^pam_unix\(su:session\): session opened for user \S+ by (?P<user>\S+)\(uid=\d+\)"
+)
+_SYSLOG_DHCLIENT_PATTERNS = [
+    re.compile(r"^DHCPACK from (?P<src_ip>\S+)"),
+    re.compile(r"^DHCPOFFER from (?P<src_ip>\S+)"),
 ]
 
 
@@ -105,56 +135,93 @@ def extract_fields_syslog(text: str) -> dict[str, str]:
     have a recognizable, stable shape, and it's worth extracting fields
     from exactly those shapes rather than treating all syslog as opaque.
 
-    Two shapes are recognized, checked in this order after stripping the
+    Four shapes are recognized, checked in this order after stripping the
     leading "tag[pid]: " or "tag: " prefix:
 
     1. KV-style bodies (this project's `sudo` and `kernel` templates, e.g.
        "PWD=/home/donaldgarcia ; USER=root ; COMMAND=..." or
-       "IN=eth0 SRC=1.2.3.4 DST=10.0.0.1 PROTO=TCP"): reuses the same
-       tolerant key=value extractor windows_event already uses, since the
-       underlying shape is identical once the syslog tag prefix is
-       stripped off.
+       "IN=eth0 SRC=1.2.3.4 DST=10.0.0.1 PROTO=TCP"; also useradd/usermod-
+       style messages using ',' as the pair separator instead of ';',
+       added 2026-08-07): reuses the same tolerant key=value extractor
+       windows_event already uses, since the underlying shape is
+       identical once the syslog tag prefix is stripped off.
     2. sshd authentication messages ("Failed password for X from Y port
-       Z", "Accepted password for...", "Invalid user X from Y", etc.):
-       these have no `=` characters at all, so they'd never match the
-       KV extractor, but they DO have a stable preposition-based
-       structure ("for X from Y") that a small set of hand-written
-       patterns can reliably parse into named fields (user, src_ip, port).
+       Z", "Accepted password for...", "Accepted publickey for..." (added
+       2026-08-07 -- key-based auth is at least as common as password
+       auth in real sshd logs and was an oversight, not a scope
+       decision), "Invalid user X from Y", etc.): these have no `=`
+       characters at all, so they'd never match the KV extractor, but
+       they DO have a stable preposition-based structure ("for X from Y")
+       that a small set of hand-written patterns can reliably parse into
+       named fields (user, src_ip, port).
+    3. su privilege-escalation messages (added 2026-08-07): "pam_unix
+       (su:session): session opened for user root by donaldgarcia(uid=0)"
+       -- who ran su, extracted as `user`.
+    4. dhclient DHCP lease messages (added 2026-08-07): "DHCPACK from
+       192.168.1.1", "DHCPOFFER from 192.168.1.1" -- the IP address a
+       lease was granted by, extracted as `src_ip` (the same IP-address
+       PII category regex/NER already detect elsewhere in this
+       framework's taxonomy, just reachable at the field level here too).
 
-    Message shapes that match neither -- most notably the free-text tail
-    of a sudo COMMAND value, or any auth-message wording not in the list
-    above -- fall through to zero extracted fields for that line, same as
-    before this function existed. This is a deliberate, honest partial
-    fix: it closes the gap for the message shapes actually present in
-    this project's own corpus and in common real sshd logs, not a claim
-    that syslog is now fully covered the way windows_event/cloudtrail are.
-    A production deployment logging different syslog message shapes
-    (different daemons, different auth mechanisms) would need its own
-    additional patterns here, following the same approach.
+    Message shapes that match none of the above -- most notably the
+    free-text tail of a sudo COMMAND value, cron job output, or any
+    auth-message wording not in the sshd pattern list -- fall through to
+    zero extracted fields for that line, same as before this function
+    existed. This is a deliberate, honest partial fix: it closes the gap
+    for the message shapes actually present in this project's own corpus,
+    common real sshd logs, and a few other common daemons (su, dhclient,
+    useradd), not a claim that syslog is now fully covered the way
+    windows_event/cloudtrail are. A production deployment logging
+    different syslog message shapes (different daemons, different auth
+    mechanisms, e.g. NetworkManager, systemd unit failures, cron with
+    PII-bearing arguments) would need its own additional patterns here,
+    following the same approach.
     """
     m = _SYSLOG_TAG_RE.match(text)
     if not m:
         return {}
     tag, rest = m.group("tag"), m.group("rest")
 
-    if "=" in rest:
-        kv = _extract_kv_pairs(rest)
-        if kv:
-            # Unlike windows_event's space-separated key=value pairs,
-            # syslog KV-style messages (this project's `sudo` template is
-            # the concrete example) commonly use ';' as the pair
-            # separator ("PWD=/home/donaldgarcia ; USER=root ; ..."),
-            # which _extract_kv_pairs's next-key lookahead doesn't know to
-            # stop at -- it isn't a key=value token itself, so the trailing
-            # " ;" ends up tacked onto the previous value. Strip it here
-            # rather than complicate the shared KV extractor for a
-            # syslog-specific separator convention.
-            return {f"{tag}.{k}": v.rstrip(" ;") for k, v in kv.items()}
-
+    # Preposition/sentence-shaped patterns are tried BEFORE the generic
+    # KV fallback below, not after. Found live while testing the su and
+    # dhclient patterns added 2026-08-07: both message shapes legitimately
+    # contain a bare "=" somewhere in a non-KV context ("by
+    # jsmith(uid=0)", "(xid=0x12345678)"), which used to trigger the KV
+    # branch's `if "=" in rest` check first and produce a wrong,
+    # nonsensical field (e.g. `su.uid: "0)"`) instead of ever reaching
+    # these more specific patterns. Trying the specific shapes first and
+    # falling back to the generic KV extractor only if none of them match
+    # fixes this without weakening the KV extractor itself for the shapes
+    # that actually need it (sudo, kernel, useradd).
     for pattern in _SYSLOG_SSHD_PATTERNS:
         sm = pattern.match(rest)
         if sm:
             return {f"{tag}.{k}": v for k, v in sm.groupdict().items() if v is not None}
+
+    su_match = _SYSLOG_SU_PATTERN.match(rest)
+    if su_match:
+        return {f"{tag}.{k}": v for k, v in su_match.groupdict().items() if v is not None}
+
+    for pattern in _SYSLOG_DHCLIENT_PATTERNS:
+        dm = pattern.match(rest)
+        if dm:
+            return {f"{tag}.{k}": v for k, v in dm.groupdict().items() if v is not None}
+
+    if "=" in rest:
+        kv = _extract_kv_pairs(rest)
+        if kv:
+            # Unlike windows_event's space-separated key=value pairs,
+            # syslog KV-style messages use different pair separators
+            # depending on the daemon: this project's `sudo` template
+            # uses ';' ("PWD=/home/donaldgarcia ; USER=root ; ..."), and
+            # useradd/usermod-style messages (added 2026-08-07, ROADMAP
+            # item 8 follow-on) use ',' ("name=X, UID=1005, GID=1005,
+            # ..."). _extract_kv_pairs's next-key lookahead doesn't know
+            # to stop at either -- neither is a key=value token itself, so
+            # the trailing separator ends up tacked onto the previous
+            # value. Strip both here rather than complicate the shared KV
+            # extractor for syslog-specific separator conventions.
+            return {f"{tag}.{k}": v.rstrip(" ;,") for k, v in kv.items()}
 
     return {}
 
