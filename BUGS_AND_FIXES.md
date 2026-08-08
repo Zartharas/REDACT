@@ -910,10 +910,14 @@ was.
 **Impact:** Critical (not data loss -- throughput collapse severe enough
 to make the pipeline practically unusable at sustained real-world token
 volume, on a component every EMAIL/SSN/CREDIT_CARD/MRN value passes
-through). **Status:** Root-caused and a debounce mitigation applied and
-verified in-sandbox, 2026-08-08. A full fix (append-only/WAL persistence,
-or incremental Redis writes) is NOT implemented -- see "What a real fix
-needs" below. The 1,000,000-line load test itself has not yet been
+through). **Status:** Root-caused 2026-08-08; debounce mitigation applied,
+verified in-sandbox, and **confirmed live at the actual failing scale the
+same day** -- a full 1,000,000-line rerun against the mitigation passed
+reconciliation exactly (see "Confirmed at 1,000,000-line scale" below). A
+full fix (append-only/WAL persistence, or incremental Redis writes) is
+still NOT implemented -- see "What a real fix needs" below, which remains
+open even though the mitigation resolved the immediate observed failure.
+Before this confirmation, the 1,000,000-line load test had not yet been
 re-run against the mitigation to confirm it resolves the observed
 collapse at that scale.
 
@@ -1016,7 +1020,43 @@ This is a bounded, documented risk, not a silent one -- but it is a real
 regression in the crash-recovery guarantee Bug 14 established, traded
 deliberately for throughput.
 
-**What a real fix needs (not implemented here):**
+**Confirmed at 1,000,000-line scale, 2026-08-08 (run by the user
+locally):** after tearing down the original stuck stack
+(`docker compose down -v`) and rebuilding with the mitigation in place,
+`validation/load_test/run_load_test.sh 1000000` was run fresh. The
+harness's own poll loop again reported a `RECONCILIATION: FAIL` at exit
+(938,000 of 1,000,000, after 240 polls / ~3,677s) -- but this time for a
+different, more benign reason than the original failure: manually
+re-running `reconcile.py` minutes later showed the count still climbing
+steadily (971,625, then 981,750 after another 180s, ~56 events/sec, not
+stalled), and a further 600s wait produced a clean, complete result:
+**`security-logs-anonymized-*` = 1,000,000 exact,
+`security-logs-quarantine-*` = 0 exact, `redact-audit-trail-*` = 893,150,
+`RECONCILIATION: PASS`.** The 89.315% audit fan-out rate (893,150 /
+1,000,000) closely matches the 100,000-line run's 89.159% (89,159 /
+100,000), a reassuring consistency check that the pipeline's correctness
+holds at 10x that scale, not just the raw completion count. Total time to
+full completion was under ~75 minutes from the start of `docker compose
+up`, at an average of roughly 224 lines/sec across the *entire* run
+(1,000,000 lines / ~4,457s) -- close to the ~250 lines/sec baseline
+established at 100,000-line scale, meaning the mitigation's effect was
+strong enough that the run's OVERALL average throughput barely degraded
+despite the store growing to hundreds of thousands of entries along the
+way.
+
+**A second, smaller, separate finding from this rerun**: `run_load_test.sh`'s
+own poll loop gives up after a fixed number of iterations (240) rather
+than a truly adaptive stability check, so it reported `FAIL` here even
+though the pipeline was healthy and steadily converging, not stalled --
+a false negative from the harness's own patience budget, not a real
+regression. This is a minor, separate scoping gap in the test tooling
+(not the pipeline), worth a follow-up (raising the poll cap, or making it
+time-based/adaptive rather than a fixed count) but not urgent, since
+manually re-running `reconcile.py` after the harness gives up is a
+sufficient, if manual, workaround for now.
+
+**What a real fix still needs (not implemented here, and still worth
+doing even though the mitigation resolved this specific failure):**
 1. For `RedisStorageProvider` specifically: replace the delete-then-
    full-`HSET` pattern with an incremental `HSET` of only the NEW
    entries since the last save, using Redis's own atomic per-field
@@ -1032,13 +1072,12 @@ deliberately for throughput.
    periodically compact into the canonical JSON snapshot in the
    background) would avoid ever re-writing entries that haven't
    changed, a real architectural change beyond a debounce parameter.
-3. The 1,000,000-line load test itself has NOT yet been re-run against
-   this mitigation to confirm it actually resolves the observed
-   collapse at that scale (the currently-stuck stack from the original
-   failed run should be torn down with `docker compose down -v` rather
-   than left running, since it will not finish in a reasonable time
-   against the pre-mitigation code). Re-running it is the concrete next
-   verification step, tracked in ROADMAP.md item 9.
+3. The debounce mitigation's O(n^2/k) shape means a sufficiently larger
+   run (10,000,000 lines, or sustained production volume over weeks/
+   months) would still eventually hit the same wall this bug describes,
+   just further out. The mitigation is confirmed sufficient for the
+   scale this project has actually tested (1,000,000 lines, confirmed
+   above); it is not a claim that the underlying problem is gone.
 
 **Compliance note, same standing as Bug 14's:** this doesn't touch the
 tokenize()/detokenize() reversibility guarantee itself when the debounce
