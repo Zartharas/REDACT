@@ -102,77 +102,75 @@ python3 validation/load_test/reconcile.py
 
 ## Status
 
-**Two runs completed, 2026-08-07, at N=100,000** (run by the user
-locally), the second needed because the first run's own harness had a bug
-that cut it short. Results and what they found, across both runs:
+**DONE — clean, complete, verified pass at N=100,000, 2026-08-07** (run
+by the user locally). Three runs were needed to get there; the first two
+were cut short by bugs in this test's own harness, both found, fixed, and
+documented along the way. Final result, from the third (clean) run:
 
-- **Corpus generation and export:** as expected, not the bottleneck
-  (100,000 lines generated and split into the three raw source files in
-  well under a minute).
-- **Main pipeline (detection, anonymization, quarantine routing):**
-  correct at 10x demo scale. `security-logs-anonymized-*` landed at
-  exactly 100,000 documents (verified with `track_total_hits=true` — see
-  the note below), `security-logs-quarantine-*` at exactly 0, matching
-  the 100,000-line input exactly. No timeouts or errors beyond the
-  known, already-fixed Bug 3 startup cluster.
-- **Approximate throughput:** ~950-1,000 events/sec sustained,
-  end-to-end (file input → `http` filter → `redact-service` → OpenSearch
-  write), on one Docker Desktop machine with the stack's default resource
-  allocation.
-- **The harness itself had a bug, in two independent places, found across
-  both runs.** Run 1's *final reconciliation* query (`reconcile.py`) was
-  missing `track_total_hits=true`, so Elasticsearch/OpenSearch's default
-  10,000-hit accurate-counting cap made `security-logs-anonymized-*`
-  initially report exactly 10,000 no matter the real count —
-  indistinguishable at first glance from a real ceiling. Fixed by adding
-  `track_total_hits=true` to every `_search` call in `reconcile.py`. Run 2
-  then hit the *same* bug a second time, independently, in
-  `run_load_test.sh`'s own stability-poll loop — which makes its own
-  separate `curl` calls rather than reusing `reconcile.py`, and had the
-  identical missing parameter. The poll loop's capped queries plateaued
-  at exactly 10,000 for three consecutive polls once the real count
-  crossed that threshold, read as "ingestion finished," and exited the
-  run 118 seconds early — real ingestion was still only 28,375/100,000
-  done at that point (confirmed by run 2's *final* reconciliation call,
-  which correctly used the already-fixed `reconcile.py`, so it caught
-  its own poll loop's premature exit rather than silently reporting
-  success). See `BUGS_AND_FIXES.md` Bug 13 for the full writeup of both
-  occurrences; fixed the second time in `run_load_test.sh` itself.
-- **A real pipeline bug was found and fixed as a direct result of this
-  test**, not a script bug: `redact-audit-trail-*` landed at only 55,577
-  documents out of the 89,159 audit events Logstash's own pipeline stats
-  confirmed were correctly sent. Root cause: the audit branch's
-  document ID (`authentication_tag`, an HMAC over event content plus a
-  *second*-granularity timestamp) collided for genuinely distinct audit
-  events sharing identical content within the same wall-clock second —
-  Bug 4's exact failure mode, reintroduced in a branch Bug 4's actual fix
-  (a random UUID) was never applied to. See `BUGS_AND_FIXES.md` Bug 12
-  for the full writeup, root-cause evidence (Logstash pipeline stats
-  showing sent-vs-stored counts), and the fix (a random UUID generated
-  per audit clone in `logstash/redact-pipeline.conf`'s `ruby` filter,
-  replacing the content-derived ID as the document's primary key).
+| Index | Expected | Actual | Result |
+|---|---|---|---|
+| `security-logs-anonymized-*` | 100,000 | **100,000** | exact |
+| `security-logs-quarantine-*` | 0 | **0** | exact |
+| `redact-audit-trail-*` | 89,159 (the pipeline's own fan-out count) | **89,159** | exact |
+
+Wall clock: 400s, corpus generation/export included. **True end-to-end
+throughput at this scale: ~250 lines/sec** (file input → `http` filter →
+`redact-service` → OpenSearch write, one Docker Desktop machine, default
+resource allocation). No timeout/error bursts beyond the already-fixed
+Bug 3 startup cluster.
+
+### How three runs became necessary
+
+**Run 1** looked like a failure at first — `security-logs-anonymized-*`
+reported exactly 10,000 regardless of the true 100,000-line input. That
+turned out to be a false alarm in the test tooling, not the pipeline:
+Elasticsearch/OpenSearch's `_search` API caps `hits.total.value` at
+10,000 by default unless `track_total_hits=true` is set, and
+`reconcile.py` was missing it. Re-querying directly with
+`track_total_hits=true` showed the main pipeline was actually exact —
+100,000/0 — but `redact-audit-trail-*` had a real shortfall, 55,577 of a
+confirmed 89,159 sent (confirmed via Logstash's own pipeline stats API).
+Root cause: the audit branch's document ID (`authentication_tag`, an HMAC
+over content plus a *second*-granularity timestamp) collided for
+genuinely distinct audit events sharing identical content within the same
+wall-clock second — Bug 4's exact failure mode, reintroduced in a branch
+Bug 4's actual fix (a random UUID) was never applied to. Fixed in
+`logstash/redact-pipeline.conf` (a fresh random UUID generated per audit
+clone, replacing the content-derived ID as the document's primary key).
+Full writeup: `BUGS_AND_FIXES.md` Bug 12.
+
+**Run 2**, meant to confirm the Bug 12 fix, FAILed reconciliation again —
+but for a *different* reason. `reconcile.py` had been fixed, but
+`run_load_test.sh`'s own stability-poll loop makes its own separate
+`curl` calls rather than reusing `reconcile.py`, and had the identical
+missing `track_total_hits=true`. The poll loop's capped queries plateaued
+at exactly 10,000 for three consecutive polls once the real count crossed
+that threshold, read as "ingestion finished," and the run exited 118
+seconds early — real ingestion was still only 28,375/100,000 done. Fixed
+the same way, independently, in `run_load_test.sh` itself. Full writeup:
+`BUGS_AND_FIXES.md` Bug 13 (both occurrences).
+
+**An earlier ~950-1,000 lines/sec throughput estimate, written into this
+README and `ROADMAP.md` after runs 1 and 2, was itself invalid** — both
+of those runs stopped timing at their respective premature "stable"
+points, not real completion, so neither elapsed-time measurement was ever
+trustworthy. The ~250 lines/sec figure above, from run 3's genuinely
+complete pass, is the first real throughput number this test has
+produced, and supersedes the earlier one everywhere it was written down.
 
 **This is exactly the kind of finding this test was built to surface** —
 a bug invisible at 10,000 lines that only appears once the system runs
 long enough, and with enough content repetition, for a coarse timestamp
-to stop being a reliable uniqueness guarantee. It's also a good
-illustration of this project's own stated scope limits: this was a
-single-machine test, and it still found a real, previously-undocumented
-data-loss bug — which says more about how much a single-machine test
-*can* find than it does about having exhausted what a real multi-node
-production deployment might additionally surface.
+to stop being a reliable uniqueness guarantee, plus a reminder that a
+test harness's own measurement code needs the same scrutiny as the
+system it's testing. It's also a good illustration of this project's own
+stated scope limits: this was a single-machine test, and it still found
+a real, previously-undocumented data-loss bug — which says more about
+how much a single-machine test *can* find than it does about having
+exhausted what a real multi-node production deployment might
+additionally surface.
 
-**Not yet done:** a clean run with both harness bugs fixed (the
-`run_load_test.sh` poll-loop fix landed after run 2 already exited early,
-so run 2's own numbers — 28,375 anonymized, 19,716 audit records — are a
-mid-flight snapshot from a run that was cut short, not a real result to
-compare against anything). The concrete next step is simply re-running
-`./validation/load_test/run_load_test.sh 100000` now that both fixes are
-in place, to get one clean, complete pass confirming: the main pipeline
-still holds exactly at 100,000/0 (strong prior it will, since run 1
-already confirmed this via direct `track_total_hits=true` queries outside
-the buggy poll loop), and — the actual open question — whether
-`redact-audit-trail-*` now lands exactly at the real fan-out count with
-the Bug 12 fix in place. After that, runs at additional sizes (e.g.
-1,000,000) to see whether throughput holds roughly flat or degrades are
-the next steps beyond this item's original scope.
+**Not yet done:** runs at additional sizes (e.g. 1,000,000) to see
+whether the ~250 lines/sec throughput holds roughly flat or degrades
+further — the natural next step now that a clean baseline exists at
+100,000.

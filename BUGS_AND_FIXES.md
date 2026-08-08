@@ -611,10 +611,11 @@ over `field_type`, `method`, `policy_version`, `original_value_fingerprint`,
 and `timestamp` — where `timestamp` is `int(time.time())`, **second**
 granularity. At 10,000-line demo scale (roughly 10-90 seconds of wall
 time depending on which fix era), collisions were rare enough to go
-unnoticed. At 100,000 lines sustained over roughly 90-100 seconds of
-`redact-service` throughput (~950-1,000 events/sec, see the load test's own
-measurement), many genuinely distinct audit events land in the same
-wall-clock second *and* share identical field content — the exact same
+unnoticed. At 100,000 lines sustained over the ~400 seconds the fully
+fixed load test measured (see Bug 13 below and the load test's own
+results — ~250 events/sec end-to-end on this machine), many genuinely
+distinct audit events still land in the same wall-clock second *and*
+share identical field content — the exact same
 low-content-diversity, high-repetition property of this project's
 synthetic corpus that caused Bug 4 in the first place (`EventID=4634`,
 `TargetUserName=SYSTEM`, and similar fixed-field system events recur
@@ -647,15 +648,19 @@ independent UUIDs regardless of timing or content similarity.
 `audit.py`'s `verify_audit_event()`), it simply no longer doubles as the
 document's primary key.
 
-**Not yet re-verified against a live run** — the fix was made and
-documented the same session this bug was found, but a fresh
-`validation/load_test/run_load_test.sh 100000` (or larger) confirming
-`redact-audit-trail-*` now lands at exactly 189,159-minus-quarantined
-audit events, matching the ruby filter's own fan-out count, still needs
-to be run. This is the concrete next step before this entry is upgraded
-from "verified fixed in source, logic re-derived from Bug 4's precedent"
-to "verified fixed via a completed clean-room rerun," the same bar every
-other entry in this document is held to.
+**Verified fixed via a completed clean-room rerun, same day.** A third
+load-test run (the first two were cut short by the unrelated harness bug
+documented in Bug 13 below) completed cleanly end to end:
+`security-logs-anonymized-*` = 100,000 exact, `security-logs-quarantine-*`
+= 0 exact, and — the number this fix specifically targets —
+`redact-audit-trail-*` = **89,159**, an exact match to the ruby filter's
+own fan-out count from the earlier diagnostic run (not
+189,159-minus-quarantined as an earlier draft of this entry incorrectly
+stated — 189,159 was the ruby filter's *total* output, 100,000 originals
+plus 89,159 clones; only the 89,159 clones route to the audit-trail
+index, the originals go to `security-logs-anonymized`). Zero collisions,
+zero shortfall, at the same 100,000-line, sustained-throughput conditions
+that produced the 55,577-of-89,159 shortfall before this fix.
 
 **Compliance note:** this is a second consecutive finding (after the
 `_search` cap below) that only became visible once this project tested
