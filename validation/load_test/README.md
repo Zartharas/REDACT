@@ -47,10 +47,12 @@ The argument is the number of synthetic log lines to generate (default
    (`src/export_raw_logs.py`).
 3. Does a clean `docker compose down -v` / `up --build -d`, timing from
    the start of `up` to when ingestion stabilizes (the anonymized +
-   quarantine total stops changing across two consecutive 15-second
-   polls, replacing the fixed `sleep 90` used in earlier manual
-   verification runs — that fixed sleep was calibrated for 10,000 lines
-   and would either under- or over-wait at a different scale).
+   quarantine total, queried with `track_total_hits=true` — see the
+   Status section below for why that matters — stops changing across
+   three consecutive 15-second polls, replacing the fixed `sleep 90` used
+   in earlier manual verification runs — that fixed sleep was calibrated
+   for 10,000 lines and would either under- or over-wait at a different
+   scale).
 4. Captures `docker stats` for all three containers throughout the run
    (CPU%, memory usage, memory% — written to
    `validation/load_test/results/docker_stats_<N>_<timestamp>.log`).
@@ -100,8 +102,9 @@ python3 validation/load_test/reconcile.py
 
 ## Status
 
-**First run completed, 2026-08-07, at N=100,000** (run by the user
-locally). Results and what they found:
+**Two runs completed, 2026-08-07, at N=100,000** (run by the user
+locally), the second needed because the first run's own harness had a bug
+that cut it short. Results and what they found, across both runs:
 
 - **Corpus generation and export:** as expected, not the bottleneck
   (100,000 lines generated and split into the three raw source files in
@@ -116,19 +119,25 @@ locally). Results and what they found:
   end-to-end (file input → `http` filter → `redact-service` → OpenSearch
   write), on one Docker Desktop machine with the stack's default resource
   allocation.
-- **This run's script itself had a bug**, found and fixed the same
-  session: the stability-poll loop (2 consecutive unchanged 15-second
-  polls) and the reconciliation query both assumed demo-scale behavior
-  that didn't generalize. The `run_load_test.sh` poll loop's assumptions
-  turned out to be fine in practice (the real ingestion had genuinely
-  finished by the time polling stopped), but the *reconciliation query*
-  itself (`reconcile.py`) was missing `track_total_hits=true`, so
-  Elasticsearch/OpenSearch's default 10,000-hit accurate-counting cap
-  made `security-logs-anonymized-*` initially report exactly 10,000 no
-  matter the real count — indistinguishable at first glance from a real
-  ceiling. See `BUGS_AND_FIXES.md` Bug 13 for the full writeup; fixed by
-  adding `track_total_hits=true` to every `_search` call in
-  `reconcile.py`.
+- **The harness itself had a bug, in two independent places, found across
+  both runs.** Run 1's *final reconciliation* query (`reconcile.py`) was
+  missing `track_total_hits=true`, so Elasticsearch/OpenSearch's default
+  10,000-hit accurate-counting cap made `security-logs-anonymized-*`
+  initially report exactly 10,000 no matter the real count —
+  indistinguishable at first glance from a real ceiling. Fixed by adding
+  `track_total_hits=true` to every `_search` call in `reconcile.py`. Run 2
+  then hit the *same* bug a second time, independently, in
+  `run_load_test.sh`'s own stability-poll loop — which makes its own
+  separate `curl` calls rather than reusing `reconcile.py`, and had the
+  identical missing parameter. The poll loop's capped queries plateaued
+  at exactly 10,000 for three consecutive polls once the real count
+  crossed that threshold, read as "ingestion finished," and exited the
+  run 118 seconds early — real ingestion was still only 28,375/100,000
+  done at that point (confirmed by run 2's *final* reconciliation call,
+  which correctly used the already-fixed `reconcile.py`, so it caught
+  its own poll loop's premature exit rather than silently reporting
+  success). See `BUGS_AND_FIXES.md` Bug 13 for the full writeup of both
+  occurrences; fixed the second time in `run_load_test.sh` itself.
 - **A real pipeline bug was found and fixed as a direct result of this
   test**, not a script bug: `redact-audit-trail-*` landed at only 55,577
   documents out of the 89,159 audit events Logstash's own pipeline stats
@@ -153,8 +162,17 @@ data-loss bug — which says more about how much a single-machine test
 *can* find than it does about having exhausted what a real multi-node
 production deployment might additionally surface.
 
-**Not yet done:** a re-run confirming the Bug 12 fix holds (audit-trail
-document count should now match the fan-out count exactly, not just
-"higher than before"), and runs at additional sizes (e.g. 1,000,000) to
-see whether throughput holds roughly flat or degrades — the concrete next
-steps for this item.
+**Not yet done:** a clean run with both harness bugs fixed (the
+`run_load_test.sh` poll-loop fix landed after run 2 already exited early,
+so run 2's own numbers — 28,375 anonymized, 19,716 audit records — are a
+mid-flight snapshot from a run that was cut short, not a real result to
+compare against anything). The concrete next step is simply re-running
+`./validation/load_test/run_load_test.sh 100000` now that both fixes are
+in place, to get one clean, complete pass confirming: the main pipeline
+still holds exactly at 100,000/0 (strong prior it will, since run 1
+already confirmed this via direct `track_total_hits=true` queries outside
+the buggy poll loop), and — the actual open question — whether
+`redact-audit-trail-*` now lands exactly at the real fan-out count with
+the Bug 12 fix in place. After that, runs at additional sizes (e.g.
+1,000,000) to see whether throughput holds roughly flat or degrades are
+the next steps beyond this item's original scope.

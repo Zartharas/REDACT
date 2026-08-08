@@ -88,9 +88,18 @@ STABLE_COUNT=0
 MAX_POLLS=240  # 240 * 15s = 1 hour ceiling; raise if testing N well into the millions
 for i in $(seq 1 $MAX_POLLS); do
   sleep 15
-  ANON=$(curl -s "http://localhost:9200/security-logs-anonymized-*/_search?size=0" \
+  # track_total_hits=true is required here -- without it, Elasticsearch/
+  # OpenSearch's _search API silently caps hits.total.value at exactly
+  # 10,000 once the real count passes that (see BUGS_AND_FIXES.md Bug 13,
+  # found by this exact bug in this exact poll loop the first time this
+  # script ran at N=100000: the capped total held steady at 10,000 for
+  # multiple polls, looking "stable," and the loop exited while real
+  # ingestion was still only 28% done). reconcile.py already has this fix;
+  # this poll loop needed the identical fix independently since it makes
+  # its own separate curl calls.
+  ANON=$(curl -s "http://localhost:9200/security-logs-anonymized-*/_search?size=0&track_total_hits=true" \
     | python3 -c "import sys,json;print(json.load(sys.stdin).get('hits',{}).get('total',{}).get('value',0))" 2>/dev/null || echo 0)
-  QUAR=$(curl -s "http://localhost:9200/security-logs-quarantine-*/_search?size=0" \
+  QUAR=$(curl -s "http://localhost:9200/security-logs-quarantine-*/_search?size=0&track_total_hits=true" \
     | python3 -c "import sys,json;print(json.load(sys.stdin).get('hits',{}).get('total',{}).get('value',0))" 2>/dev/null || echo 0)
   TOTAL=$((ANON + QUAR))
   echo "  poll $i: anonymized=${ANON} quarantine=${QUAR} total=${TOTAL}"
@@ -100,8 +109,8 @@ for i in $(seq 1 $MAX_POLLS); do
     STABLE_COUNT=0
   fi
   PREV_TOTAL=$TOTAL
-  if [ "$STABLE_COUNT" -ge 2 ]; then
-    echo "  total stable for 2 consecutive polls, assuming ingestion finished."
+  if [ "$STABLE_COUNT" -ge 3 ]; then
+    echo "  total stable for 3 consecutive polls (45s), assuming ingestion finished."
     break
   fi
 done

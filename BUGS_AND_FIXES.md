@@ -721,6 +721,24 @@ produce `"eq"`, but asserting it explicitly costs nothing and catches a
 future regression immediately rather than reintroducing this exact
 false-alarm risk silently).
 
+**Second, independent occurrence of the exact same bug, found on the very
+next run:** `run_load_test.sh`'s own polling loop makes its own separate
+`curl` calls to check whether ingestion has stabilized (rather than reuse
+`reconcile.py`), and those calls were missing the same
+`track_total_hits=true` fix. Confirmed live: rerunning the load test after
+the fix above, the poll loop's own (still-uncapped-fix) queries plateaued
+at exactly 10,000 for three consecutive 15-second polls once the real
+count crossed that threshold — read by the loop's stability check as
+"ingestion finished," when the real count at that moment (confirmed by
+the *final* reconciliation call, which does use the fixed `reconcile.py`)
+was only 28,375 of 100,000. The run exited 118 seconds early as a direct
+result. Fixed the same way, independently, in `run_load_test.sh` itself —
+this bug needed fixing in two places because it was written in two
+places, a reminder that "the same underlying API gotcha" and "already
+fixed" are not the same claim when the same query pattern was
+hand-written more than once rather than factored into one shared
+function.
+
 **Lesson, stated the same way Bug 8's entry states its own:** any
 reconciliation or count-based verification against Elasticsearch/
 OpenSearch that might exceed 10,000 total matching documents needs
