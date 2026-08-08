@@ -26,6 +26,17 @@ character than a true secret. All tokens are generated with `Random(42)`
 from `random`/`string` — no real credentials, no real service, nothing
 that could accidentally be a working secret.
 
+**`secrets_corpus.jsonl` itself is gitignored, not committed.** Every
+token in it is synthetic, but several are shaped closely enough like real
+AWS access/secret keys and Stripe keys that GitHub's push-protection
+secret scanner flags them on pattern alone — correctly cautious behavior
+on GitHub's part, since format-matching is exactly what that scanner is
+built to catch, and no automated check can cheaply tell "shaped like a
+secret for a test corpus" from "actually a leaked secret" without the
+Random(42)-seed context. Rather than fight the scanner, the corpus is
+regenerated locally by the command above, which is fully deterministic
+and reproducible in under a second.
+
 ## Results (2,000 entries, 982 with a real secret, 1,018 clean)
 
 | min_len | threshold | Precision | Recall | F1 | False-alarm rate |
