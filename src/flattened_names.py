@@ -22,7 +22,7 @@ production usernames drawn from a different population -- someone named
 "Zhiwei Tan" or "Aoife O'Sullivan" is not in Faker's default en_US list and
 this layer will miss them exactly as regex/NER already do.
 
-Two follow-up validations have since been done (2026-08-07):
+Three follow-up validations have since been done (2026-08-07/2026-08-08):
 1. Real log text (validation/real_data/, Loghub datasets): recall gains of
    similar magnitude to the synthetic corpus replicate on real, unmodified
    log lines (OpenSSH 0.0%->45.5%, Linux 3.4%->50.0%), confirming the gain
@@ -32,17 +32,30 @@ Two follow-up validations have since been done (2026-08-07):
    German/French/Spanish/Italian name providers, a population largely
    disjoint from en_US. Result: 1.4% recall (28/2,000), collapsing almost
    entirely -- direct, measured confirmation of the "Zhiwei Tan" concern
-   above, not just a theoretical risk. See that script's own docstring for
-   why real US Census data (the originally planned test) wasn't used
-   instead -- network access constraints and, more importantly, the one
-   real-world name dataset available on PyPI being sourced from a
-   documented Facebook data breach, rejected on inspection as
-   inappropriate for a PII-protection tool to validate itself against.
+   above, not just a theoretical risk. Still Faker-sourced data, though,
+   not the originally planned real-population test.
+3. The real US population, directly tested (validation/real_name_frequency/,
+   2026-08-08): SSA given-name and Census surname frequency data (both
+   official, public-domain, aggregate government statistics), sampled
+   WEIGHTED BY REAL FREQUENCY to simulate a realistic (Zipfian) production
+   username population. Result: 15.2% recall (305/2,000) -- between the
+   two numbers above, as expected. The mechanism is two compounding gaps:
+   low raw dictionary coverage (Faker's ~700 first names cover only 1.3%
+   of distinct real given names) AND role rigidity -- a real, measured
+   modern naming trend (surname-shaped first names: Foster, Kennedy,
+   Hunter, Mason) means a name can be "in the dictionary" as LAST_NAMES
+   only and still fail to fill the FIRST_NAMES role _segment_match() needs.
+   When a sampled pair filled the expected roles, recall was 99.7%,
+   confirming the segmentation logic itself is correct -- the shortfall is
+   entirely a dictionary problem, not an algorithmic one.
 
 Net effect: this layer is a real, measured improvement on the exact
-population it was built from, and a real, measured near-total gap on
-populations outside it. Both halves of that finding matter equally --
-neither should be dropped when this layer is cited.
+population it was built from (50.3%), a real, measured near-total gap on
+populations sharing no overlap with it (1.4%), and a real, measured
+partial-but-substantial gap against an actual real-world US population
+sampled by true frequency (15.2%). All three numbers matter -- none should
+be dropped when this layer is cited, and 15.2% (the real-population number)
+is the one that should anchor any production-readiness claim.
 """
 import re
 
