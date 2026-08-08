@@ -209,6 +209,29 @@ class StorageProvider(ABC):
         chooses to call TokenStore.save()."""
         raise NotImplementedError
 
+    def save_incremental(self, new_forward: dict[str, str], new_reverse: dict[str, str]) -> bool:
+        """Persist ONLY the entries minted since the last successful save
+        (not the full accumulated store) -- the real fix for Bug 15
+        (BUGS_AND_FIXES.md), added 2026-08-08. `save()` above is O(total
+        store size) by construction (it takes the full dicts and has no way
+        to know what's new); this method exists so a provider CAN offer an
+        O(batch size) path instead, when its backend supports partial
+        writes.
+
+        Default implementation returns False, meaning "not supported by
+        this provider" -- TokenStore.save() falls back to the old
+        read-merge-write via save() above for any provider that doesn't
+        override this (e.g. a future Vault provider that hasn't
+        implemented it yet). A provider that overrides this and returns
+        True is asserting it fully persisted new_forward/new_reverse;
+        TokenStore trusts that and does not additionally call save().
+
+        `new_forward`/`new_reverse` contain ONLY newly-minted entries since
+        this TokenStore's last successful persist, not the full store --
+        callers must not assume they can reconstruct total store state from
+        this method's arguments."""
+        return False
+
     def lock_for_save(self):
         """Context manager serializing TokenStore.save()'s load-merge-save
         critical section ACROSS PROCESSES, not just across threads in one
@@ -240,8 +263,22 @@ class FileStorageProvider(StorageProvider):
     everything in validate.py and evaluate.py) since it needs no external
     service running."""
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, wal_compact_threshold_lines: int = 200):
         self.path = path
+        # Append-only write-ahead log, the real Bug 15 fix (BUGS_AND_FIXES.md)
+        # for this provider, added 2026-08-08. save() above is O(total store
+        # size) because it rewrites the whole JSON snapshot on every call;
+        # save_incremental() below instead appends ONLY the new entries as
+        # one JSON line, an O(batch size) operation regardless of how large
+        # the snapshot has grown. load() reads the snapshot, then replays
+        # any WAL lines on top of it, so nothing is lost between
+        # compactions. wal_compact_threshold_lines bounds how large the WAL
+        # is allowed to grow before save_incremental() folds it back into
+        # the snapshot and truncates it (see compact()) -- without this,
+        # load()'s own cost would grow unboundedly with the WAL instead of
+        # the snapshot, just moving Bug 15's problem rather than fixing it.
+        self.wal_path = path + ".wal"
+        self._wal_compact_threshold_lines = wal_compact_threshold_lines
 
     def lock_for_save(self):
         # A sibling ".lock" file, held with an exclusive POSIX advisory
@@ -259,11 +296,36 @@ class FileStorageProvider(StorageProvider):
         return _FlockContext(self.path + ".lock")
 
     def load(self) -> tuple[dict[str, str], dict[str, str]]:
-        if not os.path.exists(self.path):
-            return {}, {}
-        with open(self.path) as f:
-            data = json.load(f)
-            return data.get("forward", {}), data.get("reverse", {})
+        if os.path.exists(self.path):
+            with open(self.path) as f:
+                data = json.load(f)
+                forward, reverse = data.get("forward", {}), data.get("reverse", {})
+        else:
+            forward, reverse = {}, {}
+        # Replay the WAL on top of the snapshot -- entries appended by
+        # save_incremental() since the last compact() aren't in the
+        # snapshot file yet, only in the WAL. Corrupt/partial trailing
+        # lines (e.g. a process killed mid-append) are skipped rather than
+        # raising: an append is not atomic the way FileStorageProvider's
+        # snapshot rename is (see save()'s own comment on why the snapshot
+        # write uses write-temp-then-rename), so a truncated last line is a
+        # real possibility this needs to tolerate, at the cost of losing at
+        # most that one incomplete batch -- the same bounded crash-window
+        # tradeoff already documented for the save_every_n_calls debounce
+        # (Bug 15, BUGS_AND_FIXES.md), not a new one.
+        if os.path.exists(self.wal_path):
+            with open(self.wal_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    forward.update(entry.get("f", {}))
+                    reverse.update(entry.get("r", {}))
+        return forward, reverse
 
     def save(self, forward: dict[str, str], reverse: dict[str, str]) -> None:
         # Write-to-temp-then-rename, not a direct open(path, "w"). Found
@@ -298,6 +360,57 @@ class FileStorageProvider(StorageProvider):
             except OSError:
                 pass
             raise
+
+    def save_incremental(self, new_forward: dict[str, str], new_reverse: dict[str, str]) -> bool:
+        # The real Bug 15 fix (BUGS_AND_FIXES.md) for this provider: append
+        # only the new batch to the WAL (O(batch size)) instead of
+        # rewriting the entire snapshot (O(total store size), what save()
+        # above does on every call). Still guarded by lock_for_save() --
+        # unlike RedisStorageProvider's per-key HSET, a plain file append
+        # from two processes at once can interleave mid-line if the batch
+        # is larger than the OS's atomic-write guarantee (PIPE_BUF, 4KB on
+        # Linux), corrupting that line for both -- but the critical section
+        # here is bounded by batch size, not store size, so the lock is
+        # held for a short, constant-ish duration regardless of how large
+        # the store has grown, which is the actual fix: the lock itself was
+        # never the O(n) cost, the read-merge-write of the FULL store while
+        # holding it was.
+        if not new_forward and not new_reverse:
+            return True  # nothing to do; still "handled"
+        directory = os.path.dirname(self.path) or "."
+        os.makedirs(directory, exist_ok=True)
+        with self.lock_for_save():
+            with open(self.wal_path, "a") as f:
+                f.write(json.dumps({"f": new_forward, "r": new_reverse}) + "\n")
+            if self._wal_line_count() >= self._wal_compact_threshold_lines:
+                self.compact()
+        return True
+
+    def _wal_line_count(self) -> int:
+        if not os.path.exists(self.wal_path):
+            return 0
+        with open(self.wal_path) as f:
+            return sum(1 for _ in f)
+
+    def compact(self) -> None:
+        """Fold the WAL into the canonical snapshot and truncate it. This
+        is the one operation in the incremental-write path that IS still
+        O(total store size) -- unavoidable, since the snapshot format is a
+        single JSON object, not itself an append-only structure -- but
+        save_incremental() above only calls it once every
+        wal_compact_threshold_lines batches (default 200), not once per
+        batch and certainly not once per request, which is the actual
+        improvement over Bug 15's original every-single-call full rewrite.
+        Safe to call directly too (e.g. a graceful-shutdown hook, or an
+        operator running periodic maintenance) -- calling it more often
+        than the automatic threshold only costs more of this O(n) work
+        sooner, it never produces incorrect state."""
+        forward, reverse = self.load()  # snapshot + WAL replay, current full state
+        self.save(forward, reverse)     # full read-merge-write of the snapshot
+        try:
+            os.remove(self.wal_path)
+        except FileNotFoundError:
+            pass
 
 
 class RedisStorageProvider(StorageProvider):
@@ -383,6 +496,42 @@ class RedisStorageProvider(StorageProvider):
             pipe.hset(self._reverse_key, mapping=reverse)
         pipe.execute()
 
+    def save_incremental(self, new_forward: dict[str, str], new_reverse: dict[str, str]) -> bool:
+        # The real Bug 15 fix (BUGS_AND_FIXES.md) for the Redis path:
+        # HSET only the entries minted since the last save, instead of
+        # save()'s delete-then-full-rewrite of the entire hash. Cost here
+        # is O(len(new_forward) + len(new_reverse)) -- the size of ONE
+        # debounce batch -- not O(total store size), regardless of how
+        # many entries have accumulated in Redis from this or any other
+        # process over the store's lifetime.
+        #
+        # Deliberately NOT wrapped in lock_for_save(): unlike save()'s
+        # delete-then-rewrite (which would clobber a sibling process's
+        # concurrent write if not serialized), HSET on a per-key basis is
+        # additive and safe from two different processes writing
+        # different, non-overlapping keys at once. If two processes DO
+        # write the same key (i.e. both independently minted a token for
+        # the identical original value), that's not a real conflict --
+        # get_or_create_token's HMAC is deterministic, so both processes
+        # compute the identical token for the identical original, and the
+        # second HSET simply overwrites the first with an identical value.
+        # This is the same "no real conflict, only two processes agreeing"
+        # reasoning save()'s own merge logic already relies on (see
+        # TokenStore.save()'s comment). Skipping the lock here is not
+        # cutting a corner -- it's removing a cross-process lock this
+        # access pattern never actually needed, which the original
+        # delete-then-full-rewrite design forced onto it as an artifact of
+        # using a destructive write instead of an additive one.
+        if not new_forward and not new_reverse:
+            return True  # nothing to do; still "handled"
+        pipe = self._client.pipeline()
+        if new_forward:
+            pipe.hset(self._forward_key, mapping=new_forward)
+        if new_reverse:
+            pipe.hset(self._reverse_key, mapping=new_reverse)
+        pipe.execute()
+        return True
+
 
 class TokenStore:
     """Reversible token <-> original-value mapping. Owns the business logic
@@ -414,6 +563,16 @@ class TokenStore:
         # to avoid Bug 15's O(store size) cost on every single request.
         self._save_every_n_calls = max(1, save_every_n_calls)
         self._calls_since_save = 0
+        # Entries minted since the last successful persist, tracked
+        # separately from self._forward/self._reverse (which hold the FULL
+        # in-memory state, old and new alike). This is what makes the real
+        # Bug 15 fix possible (StorageProvider.save_incremental(),
+        # BUGS_AND_FIXES.md): without a "what's new" set, save() would have
+        # no way to persist only the delta and would always have to fall
+        # back to the old full read-merge-write. Cleared once
+        # save_incremental() confirms it persisted them.
+        self._pending_forward: dict[str, str] = {}
+        self._pending_reverse: dict[str, str] = {}
         # Keyed, not a plain hash: the mapping is already fully reversible via
         # this store for anyone with storage access, so the token's own
         # resistance to guessing matters for a different audience — someone
@@ -487,8 +646,38 @@ class TokenStore:
             if not should_write:
                 return
             self._calls_since_save = 0
+            pending_forward = dict(self._pending_forward)
+            pending_reverse = dict(self._pending_reverse)
 
-        # Read-merge-write, not a blind overwrite of whatever this
+        # The real Bug 15 fix, added 2026-08-08 (BUGS_AND_FIXES.md):
+        # try the provider's incremental path first, which persists ONLY
+        # pending_forward/pending_reverse -- the entries minted since the
+        # last successful save, not the full accumulated store -- so cost
+        # is O(batch size), not O(total store size). Both providers in
+        # this codebase now implement it (RedisStorageProvider: per-key
+        # HSET of just the new entries; FileStorageProvider: append the
+        # new entries to a WAL instead of rewriting the whole JSON
+        # snapshot). save_incremental() returns False for any provider
+        # that doesn't override it (the default on StorageProvider), which
+        # falls through to the exact same read-merge-write this method
+        # always did -- so a provider without an incremental
+        # implementation (e.g. a not-yet-updated custom provider) keeps
+        # working exactly as before, just without the speedup.
+        if self._provider.save_incremental(pending_forward, pending_reverse):
+            with self._lock:
+                # Only clear the pending entries this specific call
+                # actually persisted -- if get_or_create_token() added MORE
+                # entries on another thread between the snapshot above and
+                # here, those stay pending for the next save() rather than
+                # being incorrectly discarded.
+                for k in pending_forward:
+                    self._pending_forward.pop(k, None)
+                for k in pending_reverse:
+                    self._pending_reverse.pop(k, None)
+            return
+
+        # Fallback path for providers without save_incremental() support:
+        # read-merge-write, not a blind overwrite of whatever this
         # process happens to be holding in memory. Found necessary the
         # hard way (ROADMAP item 6 follow-on,
         # validation/multiprocess_tokenstore_test.py): __init__ above
@@ -546,6 +735,12 @@ class TokenStore:
             merged_reverse = {**remote_reverse, **self._reverse}
             self._provider.save(merged_forward, merged_reverse)
             self._forward, self._reverse = merged_forward, merged_reverse
+            # The full write above just persisted everything, pending or
+            # not -- clear pending so a later provider swap (or a provider
+            # that only sometimes supports incremental writes) doesn't
+            # re-send entries this fallback path already covered.
+            self._pending_forward.clear()
+            self._pending_reverse.clear()
 
     def get_or_create_token(self, original: str, pii_type: str) -> str:
         with self._lock:
@@ -555,6 +750,8 @@ class TokenStore:
             token = f"tok_{pii_type.lower()}_{digest}"
             self._forward[original] = token
             self._reverse[token] = original
+            self._pending_forward[original] = token
+            self._pending_reverse[token] = original
             return token
 
     def resolve(self, token: str) -> str | None:

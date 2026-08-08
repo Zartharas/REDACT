@@ -40,27 +40,33 @@ FINGERPRINT_KEY = os.environ.get("REDACT_FINGERPRINT_KEY", "demo-fingerprint-key
 TOKEN_KEY = os.environ.get("REDACT_TOKEN_KEY", "demo-token-key-do-not-use-in-prod")
 TOKEN_STORE_PATH = os.environ.get("REDACT_TOKEN_STORE_PATH", "output/token_store.json")
 # Bug 15 (BUGS_AND_FIXES.md), found via the 1,000,000-line load test: every
-# call to TokenStore.save() -- one per request, see below -- rewrites the
-# ENTIRE persisted store, so cost per request grows with total store size
-# (measured: 2.927s for a single request once the store reached 93,279
-# entries). Debouncing to a real write every N calls instead of every one
-# cuts total cost roughly N-fold (confirmed in-sandbox,
-# validation/tokenstore_save_scaling_test.py: ~47x less total time at
-# N=50). This is a MITIGATION, not a fix -- the underlying O(store size)
-# cost per write is unchanged, this just reduces how often it's paid --
-# and it trades a bounded risk for that speedup: if this worker process
-# crashes between real writes, up to REDACT_TOKEN_STORE_SAVE_EVERY - 1
-# requests' worth of reverse-map entries exist only in this worker's
-# memory and are lost (the forward-map side is harmless to lose, since
-# HMAC token generation is deterministic and any process recomputes the
-# identical token for the same input -- see get_or_create_token's own
-# comment in anonymize.py -- but a lost reverse-map entry means
-# detokenize() can no longer recover that one original value). Set to 1
-# to restore the original always-write-immediately behavior (safest,
-# slowest) if that tradeoff isn't acceptable for a given deployment; 25 is
-# a starting point, not a value validated against any specific production
-# SLA -- tune based on your own crash-frequency and recovery-window
-# requirements.
+# call to TokenStore.save() -- one per request, see below -- used to
+# rewrite the ENTIRE persisted store, so cost per request grew with total
+# store size (measured: 2.927s for a single request once the store
+# reached 93,279 entries). That's since been fixed at the root
+# (StorageProvider.save_incremental() in anonymize.py: only newly-minted
+# entries are persisted per call now, not the whole store -- RedisStorageProvider
+# via a per-key HSET, FileStorageProvider via an append-only WAL with
+# periodic compaction) -- confirmed in-sandbox to no longer show O(n)
+# growth even with this debounce fully disabled (save_every_n_calls=1),
+# see validation/tokenstore_save_scaling_test.py's rewritten result.
+#
+# This debounce parameter still exists and is still worth using in
+# production: it further reduces how often TokenStore.save() takes its
+# internal lock and touches the storage backend at all, on top of the
+# incremental-write fix, at the cost of the same bounded crash-recovery
+# tradeoff as before -- if this worker process crashes between real
+# writes, up to REDACT_TOKEN_STORE_SAVE_EVERY - 1 requests' worth of
+# reverse-map entries exist only in this worker's memory and are lost
+# (the forward-map side is harmless to lose, since HMAC token generation
+# is deterministic and any process recomputes the identical token for the
+# same input -- see get_or_create_token's own comment in anonymize.py --
+# but a lost reverse-map entry means detokenize() can no longer recover
+# that one original value). Set to 1 to write on every single call
+# (safest, and no longer meaningfully slower now that writes are
+# incremental) if that tradeoff isn't acceptable for a given deployment;
+# 25 is a starting point, not a value validated against any specific
+# production SLA.
 TOKEN_STORE_SAVE_EVERY = int(os.environ.get("REDACT_TOKEN_STORE_SAVE_EVERY", "25"))
 
 os.makedirs(os.path.dirname(TOKEN_STORE_PATH) or ".", exist_ok=True)

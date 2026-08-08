@@ -1063,8 +1063,9 @@ what the condition is. `bash -n` syntax-checked; not yet re-run against a
 live Docker stack (that verification needs the user's machine -- see
 ROADMAP item 9).
 
-**What a real fix still needs (not implemented here, and still worth
-doing even though the mitigation resolved this specific failure):**
+**What a real fix still needs (as originally written, 2026-08-08, before
+the fix below landed the same day -- kept here verbatim so the "still
+needs" framing that follows isn't silently rewritten after the fact):**
 1. For `RedisStorageProvider` specifically: replace the delete-then-
    full-`HSET` pattern with an incremental `HSET` of only the NEW
    entries since the last save, using Redis's own atomic per-field
@@ -1086,6 +1087,98 @@ doing even though the mitigation resolved this specific failure):**
    just further out. The mitigation is confirmed sufficient for the
    scale this project has actually tested (1,000,000 lines, confirmed
    above); it is not a claim that the underlying problem is gone.
+
+---
+
+**REAL FIX implemented, 2026-08-08, same day as the mitigation above.**
+Both items 1 and 2 from the list just above are now done, closing the
+gap the debounce mitigation always disclosed it left open. New method on
+`StorageProvider`: `save_incremental(new_forward, new_reverse) -> bool`,
+which persists ONLY the entries minted since the last successful save --
+not the full accumulated store `save()` always required. `TokenStore`
+now tracks a `_pending_forward`/`_pending_reverse` delta (populated in
+`get_or_create_token()`, cleared once a save actually persists it) and
+`save()` tries `save_incremental()` first, falling back to the original
+full read-merge-write only for a provider that doesn't override it
+(returns `False` by default, preserving exact prior behavior for any
+future provider that hasn't implemented the incremental path yet).
+
+- **`RedisStorageProvider.save_incremental()`**: `HSET` of only the new
+  batch, exactly item 1 above. Deliberately does NOT take
+  `lock_for_save()` -- per-key `HSET` from two processes writing
+  different keys is safe without it, and if two processes independently
+  mint a token for the identical original value (the only way they'd
+  write the *same* key), `get_or_create_token`'s HMAC is deterministic,
+  so both compute the identical token and the second `HSET` just
+  overwrites the first with an identical value. This isn't a corner cut
+  -- it's removing a lock the old delete-then-full-rewrite design forced
+  onto this path as a side effect of using a destructive write instead
+  of an additive one; the lock is still used, unchanged, by the
+  fallback `save()` path.
+- **`FileStorageProvider.save_incremental()`**: appends only the new
+  batch as one JSON line to a sibling write-ahead log (`<path>.wal`),
+  exactly item 2 above, still guarded by `lock_for_save()` (the file
+  backend's plain append CAN interleave between two processes writing at
+  once, unlike Redis's atomic per-key `HSET`) -- but the critical section
+  is now bounded by batch size, not total store size, which is the
+  actual fix: the lock itself was never the O(n) cost, holding it across
+  a full-store rewrite was. `load()` now reads the canonical JSON
+  snapshot and replays any WAL lines on top of it, so nothing between the
+  last compaction and now is lost. A new `compact()` method folds the WAL
+  back into the snapshot and truncates it -- still an O(n) operation, but
+  `save_incremental()` only triggers it once every
+  `wal_compact_threshold_lines` batches (default 200), not on every
+  call, so the expensive full rewrite this bug is about is now paid on
+  the order of hundreds of times less often than before, not once per
+  request.
+
+**Verified in-sandbox, 2026-08-08 (no Docker or Redis needed for the
+`FileStorageProvider` path; the `RedisStorageProvider` path still needs
+live-Redis re-verification, see below):**
+- `validation/multiprocess_tokenstore_test.py` re-run against the new
+  code: **0/400 reverse-map entries lost**, unchanged from Bug 14's own
+  result -- the incremental-write path does not reopen the cross-process
+  race that fix closed.
+- `validation/tokenstore_save_scaling_test.py`, re-run and rewritten to
+  reflect the new result (its original text documented the mitigation-
+  only O(n) growth curve; that text is preserved in the script's own
+  docstring under a "HISTORY" section rather than deleted, so the two
+  runs don't read as contradictory): **growth factor 1.1x at 23x the
+  store size**, down from the pre-fix 10-22x -- the O(n) shape this test
+  was built to detect is gone even at `save_every_n_calls=1` (no
+  debounce at all), not just reduced by a constant factor the way the
+  mitigation-only result showed.
+- New test, `validation/wal_compaction_correctness_test.py`: 5,000 tokens
+  minted with a deliberately small `wal_compact_threshold_lines=50`
+  (forcing ~100 compactions within the run, instead of relying on luck to
+  cross the production default of 200 a handful of times) -- **0/5,000
+  tokens lost** both resolving within the same process and resolving via
+  a completely fresh `TokenStore`/`FileStorageProvider` instance pointed
+  at the same path (simulating a process restart or a sibling gunicorn
+  worker), and the WAL's line count stayed at or below the configured
+  threshold throughout the run, confirming `compact()` fires on its
+  configured cadence rather than the WAL being left to grow unboundedly
+  (which would have just moved this bug's O(n) problem into a different
+  file rather than fixing it).
+
+**What this does NOT yet cover, stated plainly:** `RedisStorageProvider.
+save_incremental()` has not been re-run against a live Redis instance
+since this change -- `validation/multiprocess_redis_test.py` (the same 8-
+processes-x-50-tokens test that confirmed Bug 14's fix against real Redis)
+needs to be re-run by the user locally to confirm the new incremental
+`HSET` path holds under real cross-process concurrency the way the
+in-sandbox `FileStorageProvider` tests above already confirm for the file
+backend. Until that's done, the Redis path's real-world correctness under
+this specific change is verified by code review and the shared
+`TokenStore` logic (identical delta-tracking feeds both providers), not
+by a live measurement -- the same honesty standard this project applies
+everywhere else (see the standing "verified means an actual completed
+execution" rule). `compact()`'s own O(n) cost is also unavoidable by
+design (the snapshot format is a single JSON object, not itself
+append-only) -- this fix reduces how often that cost is paid by roughly
+`wal_compact_threshold_lines`-fold, it does not eliminate it, which is
+the same honest framing the original debounce mitigation used for the
+same reason.
 
 **Compliance note, same standing as Bug 14's:** this doesn't touch the
 tokenize()/detokenize() reversibility guarantee itself when the debounce
