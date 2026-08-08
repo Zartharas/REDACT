@@ -85,6 +85,17 @@ correct worker count, `/health` responding) but not yet re-run through the
 full Docker Compose stack the way the rest of this file's numbers are —
 see ROADMAP.md item 7 for the follow-up verification this still needs.
 
+**Full-stack rerun, completed 2026-08-07 (run by the user locally):** fresh
+`docker compose down -v && python src/export_raw_logs.py && docker compose
+up --build`. `redact-service`'s log shows 8 `Booting worker with pid: N`
+lines (matching the host's core count) followed by `Control socket
+listening`, and the container reports healthy quickly. Final
+reconciliation via `_search?size=0`: `security-logs-anonymized-*` = 10,000,
+`security-logs-quarantine-*` = 0 — every one of the 10,000 exported lines
+(3,359 Windows events + 3,382 syslog + 3,259 CloudTrail) landed correctly
+anonymized under gunicorn, with zero quarantined. gunicorn is confirmed
+working end-to-end, not just smoke-tested standalone.
+
 **Residual timeout cluster, root-caused and fixed 2026-08-07:** the
 startup-only timeout burst mentioned above (previously "not yet fully
 explained") was found while re-verifying Bug 6 below. Root cause:
@@ -526,12 +537,31 @@ field as necessarily real drift, and as a candidate for a
 per-field-confidence-aware threshold if this becomes a practical nuisance
 in a real deployment, rather than a blanket 5% cutoff everywhere.
 
-**Not yet done:** `validate.py`'s own Section 5 drift check is NER-dependent
-and predates this fix — worth a rerun (this sandbox can't reach the spaCy
-model download, same limitation as elsewhere in this document) to confirm
-the fix doesn't introduce new false positives there, the same way Bug 6's
-fix needed its own full-stack rerun rather than being assumed correct from
-source alone.
+**`validate.py` Section 5 rerun, completed 2026-08-07 (run by the user
+locally, spaCy-dependent):** confirms the side-effect above is real and
+reproducible outside the dedicated injection test, not just a property of
+that test's specific setup. `validate.py`'s own drift checks — which
+predate the flattened-layer fix — now show 2 of 18 total checks failing,
+both in Section 5, both consistent with the documented side-effect rather
+than a new defect: "no false positives when comparing a stable corpus
+against itself" failed with 3 fields incorrectly flagged, and "nothing
+else is falsely flagged alongside the real drift" failed with 4 fields
+flagged total (the injected-drift check itself still correctly caught the
+real injection — `{'cloudtrail.requestParameters.targetUser',
+'cloudtrail.requestParameters.reason', 'syslog.sshd.user',
+'syslog.sudo.PWD'}` — but with `syslog.sshd.user` again riding along as a
+same-shape false positive, the same field flagged in the dedicated
+injection test above). All 16 other checks passed, including the two most
+safety-critical categories (audit-trail signature verification and
+tamper-rejection; anonymization correlation and reversibility) — this
+side-effect is isolated to Section 5's drift-threshold sensitivity, as
+predicted, not a regression anywhere else. **Conclusion:** the fix itself
+is correct (it catches real drift that was previously invisible) and the
+documented side-effect (occasional threshold crossings on
+flattened-layer-covered fields due to that layer's partial recall) is now
+confirmed on two independent test setups rather than resting on one. The
+per-field-confidence-aware threshold noted above remains the concrete next
+step if this becomes a practical nuisance; not implemented here.
 
 ---
 
