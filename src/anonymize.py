@@ -393,7 +393,8 @@ class TokenStore:
     """
 
     def __init__(self, path_or_provider: "str | StorageProvider",
-                 token_key: str = "demo-token-key-do-not-use-in-prod"):
+                 token_key: str = "demo-token-key-do-not-use-in-prod",
+                 save_every_n_calls: int = 1):
         # Accepts a bare path (original call signature, still the default
         # everywhere in this project -- service.py, pipeline.py, validate.py)
         # for backward compatibility, wrapping it in a FileStorageProvider.
@@ -403,6 +404,16 @@ class TokenStore:
             self._provider: StorageProvider = path_or_provider
         else:
             self._provider = FileStorageProvider(path_or_provider)
+        # See save()'s own extensive comment (Bug 15, BUGS_AND_FIXES.md) for
+        # why this exists: the default of 1 preserves the exact save-after-
+        # every-call behavior every existing test in this project assumes
+        # and verifies (validation/multiprocess_tokenstore_test.py,
+        # validation/multiprocess_redis_test.py both construct TokenStore
+        # with no override and assert zero loss calling save() after every
+        # single token). service.py opts into a higher value in production
+        # to avoid Bug 15's O(store size) cost on every single request.
+        self._save_every_n_calls = max(1, save_every_n_calls)
+        self._calls_since_save = 0
         # Keyed, not a plain hash: the mapping is already fully reversible via
         # this store for anyone with storage access, so the token's own
         # resistance to guessing matters for a different audience — someone
@@ -428,7 +439,55 @@ class TokenStore:
         self._lock = threading.Lock()
         self._forward, self._reverse = self._provider.load()
 
-    def save(self):
+    def save(self, force: bool = False):
+        # Debounce, added 2026-08-08 (Bug 15, BUGS_AND_FIXES.md). Every
+        # call below this point -- the read-merge-write critical section --
+        # costs O(total accumulated store size), not O(1): FileStorageProvider
+        # rewrites the entire JSON file, RedisStorageProvider deletes and
+        # re-HSETs the entire hash. That was fine (sub-millisecond) at the
+        # store sizes every previous test in this project exercised, but a
+        # 1,000,000-line load test (ROADMAP item 9) found it directly: a
+        # single request took 2.927s once the store reached 93,279 entries
+        # (12.4MB), confirmed via `time curl ... /anonymize` against the
+        # live stack, and throughput collapsed from ~250 lines/sec to ~3/sec
+        # well before the run finished. service.py calls this method after
+        # EVERY /anonymize request, so paying that full cost every single
+        # time makes total cost across a long-running deployment O(n^2) in
+        # the number of distinct EMAIL/SSN/CREDIT_CARD/MRN values ever
+        # tokenized, not O(n).
+        #
+        # This debounce is a MITIGATION, stated honestly, not a full fix:
+        # it amortizes the same O(n) cost over save_every_n_calls calls
+        # instead of paying it on every one, cutting total cost by roughly
+        # that factor -- still O(n^2 / k) overall, just with k times less
+        # constant, which pushes the point where this becomes a practical
+        # problem out by roughly the same factor. It does NOT change the
+        # underlying shape. A real fix needs either an append-only/WAL
+        # persistence format (avoids ever re-writing old entries) or, for
+        # RedisStorageProvider specifically, switching its save() to
+        # incremental per-key HSET of only the NEW entries since Redis
+        # already supports atomic partial updates natively and never needed
+        # the delete-then-full-rewrite pattern it currently uses -- neither
+        # is implemented here; both are flagged as the real next step in
+        # ROADMAP.md item 9's follow-on.
+        #
+        # Default save_every_n_calls=1 (set in __init__) makes this a
+        # complete no-op change in behavior: every existing test in this
+        # project (validation/multiprocess_tokenstore_test.py,
+        # validation/multiprocess_redis_test.py) constructs TokenStore with
+        # no override and continues to get a real read-merge-write on every
+        # single save() call, so their own zero-loss guarantees are
+        # unaffected by this change. force=True always performs the actual
+        # write regardless of the counter, for callers (tests, a graceful
+        # shutdown hook, an explicit "flush now" need) that need the
+        # guarantee right now rather than on whatever cadence is configured.
+        with self._lock:
+            self._calls_since_save += 1
+            should_write = force or self._calls_since_save >= self._save_every_n_calls
+            if not should_write:
+                return
+            self._calls_since_save = 0
+
         # Read-merge-write, not a blind overwrite of whatever this
         # process happens to be holding in memory. Found necessary the
         # hard way (ROADMAP item 6 follow-on,

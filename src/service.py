@@ -39,9 +39,33 @@ AUDIT_KEY = os.environ.get("REDACT_AUDIT_KEY", "demo-audit-signing-key-do-not-us
 FINGERPRINT_KEY = os.environ.get("REDACT_FINGERPRINT_KEY", "demo-fingerprint-key-do-not-use-in-prod")
 TOKEN_KEY = os.environ.get("REDACT_TOKEN_KEY", "demo-token-key-do-not-use-in-prod")
 TOKEN_STORE_PATH = os.environ.get("REDACT_TOKEN_STORE_PATH", "output/token_store.json")
+# Bug 15 (BUGS_AND_FIXES.md), found via the 1,000,000-line load test: every
+# call to TokenStore.save() -- one per request, see below -- rewrites the
+# ENTIRE persisted store, so cost per request grows with total store size
+# (measured: 2.927s for a single request once the store reached 93,279
+# entries). Debouncing to a real write every N calls instead of every one
+# cuts total cost roughly N-fold (confirmed in-sandbox,
+# validation/tokenstore_save_scaling_test.py: ~47x less total time at
+# N=50). This is a MITIGATION, not a fix -- the underlying O(store size)
+# cost per write is unchanged, this just reduces how often it's paid --
+# and it trades a bounded risk for that speedup: if this worker process
+# crashes between real writes, up to REDACT_TOKEN_STORE_SAVE_EVERY - 1
+# requests' worth of reverse-map entries exist only in this worker's
+# memory and are lost (the forward-map side is harmless to lose, since
+# HMAC token generation is deterministic and any process recomputes the
+# identical token for the same input -- see get_or_create_token's own
+# comment in anonymize.py -- but a lost reverse-map entry means
+# detokenize() can no longer recover that one original value). Set to 1
+# to restore the original always-write-immediately behavior (safest,
+# slowest) if that tradeoff isn't acceptable for a given deployment; 25 is
+# a starting point, not a value validated against any specific production
+# SLA -- tune based on your own crash-frequency and recovery-window
+# requirements.
+TOKEN_STORE_SAVE_EVERY = int(os.environ.get("REDACT_TOKEN_STORE_SAVE_EVERY", "25"))
 
 os.makedirs(os.path.dirname(TOKEN_STORE_PATH) or ".", exist_ok=True)
-_store = anonymize.TokenStore(TOKEN_STORE_PATH, token_key=TOKEN_KEY)
+_store = anonymize.TokenStore(TOKEN_STORE_PATH, token_key=TOKEN_KEY,
+                               save_every_n_calls=TOKEN_STORE_SAVE_EVERY)
 
 
 @app.route("/health", methods=["GET"])

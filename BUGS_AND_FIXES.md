@@ -905,12 +905,170 @@ was.
 
 ---
 
+## 15. TokenStore.save() rewrites the entire store on every call -- O(n) per request, O(n^2) total, found at 1,000,000-line scale
+
+**Impact:** Critical (not data loss -- throughput collapse severe enough
+to make the pipeline practically unusable at sustained real-world token
+volume, on a component every EMAIL/SSN/CREDIT_CARD/MRN value passes
+through). **Status:** Root-caused and a debounce mitigation applied and
+verified in-sandbox, 2026-08-08. A full fix (append-only/WAL persistence,
+or incremental Redis writes) is NOT implemented -- see "What a real fix
+needs" below. The 1,000,000-line load test itself has not yet been
+re-run against the mitigation to confirm it resolves the observed
+collapse at that scale.
+
+**Found via ROADMAP item 9's follow-on**, the first run of this project's
+load test beyond 100,000 lines (`validation/load_test/run_load_test.sh
+1000000`, run by the user locally). The run's own reconciliation FAILED:
+728,125 of 1,000,000 expected events landed in
+`security-logs-anonymized-*`/`security-logs-quarantine-*` combined when
+the test harness's stability-poll loop declared ingestion complete and
+exited. Live diagnosis (not a guess -- see the exact sequence below)
+found ingestion was still genuinely progressing, just extremely slowly:
+polling `_search` directly minutes later showed the true count still
+climbing (916,500 by the last check), `docker stats` showed
+`redact-service` pegged at 109.80% CPU and 6.67GiB memory while producing
+only ~3 events/sec, and `redact-logstash` sitting nearly idle at 0.69%
+CPU -- meaning Logstash had already sent its requests and was simply
+waiting on a severely bottlenecked `redact-service`. No errors anywhere
+in any container's logs (`opensearch`, `redact-service`, `logstash` all
+grepped for circuit breakers, OOM, timeouts, backpressure -- nothing);
+disk was at 8% usage, not a watermark issue. This is the same "looks
+fine, no crash, no error, just gets progressively wrong" shape this
+document's closing section already names as the pattern across the worst
+bugs here, just manifesting as catastrophic slowness instead of silent
+data loss.
+
+**Root cause, confirmed directly:** `docker exec redact-service ls -la
+/app/output/` showed `token_store.json` at 12.4MB, 93,279 entries. A
+single live request timed with `time curl -X POST .../anonymize`
+against the running stack took **2.927 seconds**. `TokenStore.save()`
+(added by Bug 14's fix, `src/anonymize.py`) does a full read-merge-write
+on every call: load the ENTIRE persisted store from the backend, merge
+in this process's own additions, write the ENTIRE merged store back --
+`FileStorageProvider.save()` rewrites the whole JSON file,
+`RedisStorageProvider.save()` (checked directly -- same defect, not
+backend-specific) does `DELETE` then a full `HSET` of the whole hash on
+every call, not an incremental update, even though Redis natively
+supports atomic per-field writes and never needed a delete-and-rewrite
+pattern. `service.py` calls `_store.save()` after EVERY single
+`/anonymize` request (`_store.save()` at the end of the request handler,
+unconditional). Cost per request is therefore O(current store size), and
+since the store only grows, total cost across a run is O(n^2) in the
+number of distinct EMAIL/SSN/CREDIT_CARD/MRN values ever tokenized --
+invisible at every scale this project tested before now (10,000 lines:
+trivially small store; 100,000 lines, ROADMAP item 9's first load test:
+still small enough to stay sub-second), and only became a practical wall
+once the store crossed roughly 90,000+ entries.
+
+**This is the direct, unintended cost of Bug 14's own fix.** Bug 14
+correctly closed a cross-process data-loss race by making `save()` do a
+locked read-merge-write instead of a blind overwrite -- but the read-
+merge-write pattern itself was applied uniformly to both storage
+backends without separately asking whether each backend actually needed
+a full rewrite to stay correct. It's the right fix for
+`FileStorageProvider` (a flat JSON file has no other way to do a partial
+update atomically). It was never necessary for `RedisStorageProvider` --
+Redis's own `HSET` already performs an atomic, race-free partial update
+of a single field, which is exactly what Bug 14's problem needed and
+what this defect never used.
+
+**Mitigation applied and verified in-sandbox, 2026-08-08 (NOT a full
+fix, stated as plainly as Bug 14's own first, incomplete attempt was):**
+`TokenStore` gained a `save_every_n_calls` constructor parameter
+(default 1, preserving the exact existing behavior every current test
+assumes and verifies -- `validation/multiprocess_tokenstore_test.py` and
+`validation/multiprocess_redis_test.py` both construct `TokenStore` with
+no override and still get a real write on every single `save()` call, so
+their own zero-loss guarantees are completely unaffected by this
+change). `service.py` now defaults to `REDACT_TOKEN_STORE_SAVE_EVERY=25`
+(configurable), performing the actual expensive write once every 25
+requests instead of every one. **Confirmed directly, not just reasoned
+about**, via a new dedicated in-sandbox test
+(`validation/tokenstore_save_scaling_test.py`, no Docker or Redis
+needed, pure `FileStorageProvider` since it shares the same read-merge-
+write code path): minting 6,000 tokens with `save_every_n_calls=1`
+showed per-call cost growing from 0.22ms to ~19-24ms (10-22x slower at
+23x the store size, directly confirming O(n) growth, not just inferring
+it from the live run's single 2.927s data point); the identical run with
+`save_every_n_calls=50` performed exactly the expected 120 real writes
+(confirmed by instrumenting `TokenStore`'s own debounce counter, not
+guessed from timing), each individually costing about the same as a
+baseline write at an equivalent store size (as expected -- the
+mitigation doesn't change what a write costs, only how often it's paid),
+for a **~47x reduction in total wall-clock time spent in `save()`**
+across the full run.
+
+**What this mitigation does NOT do, stated as plainly as the improvement
+itself:** it does not change the underlying O(n) per-write cost or the
+O(n^2) total-cost shape -- it divides the constant factor by roughly the
+debounce value, which pushes the point where this becomes a practical
+problem out by roughly that same factor, not eliminates it. At
+sufficiently large scale (a real production deployment sustaining
+EMAIL/SSN/CREDIT_CARD/MRN tokenization over weeks or months, not just a
+one-off 1,000,000-line batch test) this will eventually become a problem
+again. It also introduces a new, explicit tradeoff that didn't exist
+before: if a worker process crashes (or is killed without a clean
+shutdown -- there is no signal handler forcing a final flush) between
+real writes, up to `save_every_n_calls - 1` requests' worth of
+reverse-map entries exist only in that worker's memory and are lost.
+This is a bounded, documented risk, not a silent one -- but it is a real
+regression in the crash-recovery guarantee Bug 14 established, traded
+deliberately for throughput.
+
+**What a real fix needs (not implemented here):**
+1. For `RedisStorageProvider` specifically: replace the delete-then-
+   full-`HSET` pattern with an incremental `HSET` of only the NEW
+   entries since the last save, using Redis's own atomic per-field
+   write instead of re-deriving TokenStore's file-backend-oriented
+   read-merge-write pattern. This would very likely make Redis's
+   `save()` genuinely O(1) per new entry (aside from the still-O(n)
+   initial `load()` at process startup, which is a one-time cost, not a
+   per-request one), eliminating the need for Bug 14's cross-process
+   lock on the Redis path entirely (an incremental per-key `HSET` from
+   a private, non-overlapping key set is already safe without it).
+2. For `FileStorageProvider`: an append-only/write-ahead-log persistence
+   format (append only the new entries to a log file on every save,
+   periodically compact into the canonical JSON snapshot in the
+   background) would avoid ever re-writing entries that haven't
+   changed, a real architectural change beyond a debounce parameter.
+3. The 1,000,000-line load test itself has NOT yet been re-run against
+   this mitigation to confirm it actually resolves the observed
+   collapse at that scale (the currently-stuck stack from the original
+   failed run should be torn down with `docker compose down -v` rather
+   than left running, since it will not finish in a reasonable time
+   against the pre-mitigation code). Re-running it is the concrete next
+   verification step, tracked in ROADMAP.md item 9.
+
+**Compliance note, same standing as Bug 14's:** this doesn't touch the
+tokenize()/detokenize() reversibility guarantee itself when the debounce
+default resolves without a crash, but the crash-window tradeoff
+introduced by the mitigation is directly relevant to any GDPR Article 32
+/ audit-integrity claim about this framework's reversibility guarantee
+and should be disclosed alongside Bug 14's own disclosure, not treated
+as settled just because Bug 14 is.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same
 shape: the pipeline appeared to be working — no crash, no error thrown,
 requests returning 200 — while silently destroying or never producing the
-data it was supposed to produce. Bug 14 is the same shape in a different
+data it was supposed to produce. Bug 15 is a related but genuinely
+distinct shape, worth naming separately rather than folded into the list
+above: not silently wrong output, but silently, catastrophically
+*slower* output, with no error anywhere to signal it — `docker stats`
+and a manually timed `curl` request were what surfaced it, not a log
+line or a failed check. Every scale this project tested before the
+1,000,000-line load test (10,000, then 100,000 lines) was too small to
+ever cross the point where `TokenStore.save()`'s O(n) per-call cost
+became visible, which is exactly why nothing short of testing at a full
+order of magnitude beyond the last verified scale would have found it —
+the same argument ROADMAP item 9's own "scoped honestly, not oversold"
+framing already made about vertical-scale load testing in general, now
+with a second concrete bug (after Bug 12) to point to as evidence it
+wasn't a hypothetical concern. Bug 14 is the same shape in a different
 layer: not a document-ID collision or a missed detection, but
 `TokenStore.save()`'s blind-overwrite silently dropping a sibling
 process's reverse-map entries on every concurrent save — `resolve()`
