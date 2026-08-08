@@ -1045,15 +1045,23 @@ despite the store growing to hundreds of thousands of entries along the
 way.
 
 **A second, smaller, separate finding from this rerun**: `run_load_test.sh`'s
-own poll loop gives up after a fixed number of iterations (240) rather
-than a truly adaptive stability check, so it reported `FAIL` here even
-though the pipeline was healthy and steadily converging, not stalled --
-a false negative from the harness's own patience budget, not a real
-regression. This is a minor, separate scoping gap in the test tooling
-(not the pipeline), worth a follow-up (raising the poll cap, or making it
-time-based/adaptive rather than a fixed count) but not urgent, since
-manually re-running `reconcile.py` after the harness gives up is a
-sufficient, if manual, workaround for now.
+own poll loop gave up after a fixed number of iterations (240 * 15s = 1
+hour) rather than a truly adaptive stability check, so it reported `FAIL`
+here even though the pipeline was healthy and steadily converging, not
+stalled -- a false negative from the harness's own patience budget, not a
+real regression. This was a minor, separate scoping gap in the test
+tooling (not the pipeline).
+
+**Fixed, 2026-08-08.** `run_load_test.sh`'s poll loop now uses a
+wall-clock deadline (`REDACT_LOAD_TEST_MAX_WAIT_SECONDS`, default 14400s
+/ 4 hours) instead of a fixed 240-iteration count, so the ceiling scales
+with how long a run actually takes rather than an assumption baked in at
+100,000-line scale. The stability decision itself is unchanged (still 3
+consecutive polls with an unchanged anonymized+quarantine total); the fix
+only changes when the harness gives up waiting for that condition, not
+what the condition is. `bash -n` syntax-checked; not yet re-run against a
+live Docker stack (that verification needs the user's machine -- see
+ROADMAP item 9).
 
 **What a real fix still needs (not implemented here, and still worth
 doing even though the mitigation resolved this specific failure):**

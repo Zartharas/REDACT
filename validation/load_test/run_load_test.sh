@@ -85,8 +85,29 @@ echo "--- Polling reconciliation until ingestion stabilizes ---"
 # count-based instead of eyeballing log lines.
 PREV_TOTAL=-1
 STABLE_COUNT=0
-MAX_POLLS=240  # 240 * 15s = 1 hour ceiling; raise if testing N well into the millions
-for i in $(seq 1 $MAX_POLLS); do
+# Was a fixed MAX_POLLS=240 (240*15s = 1 hour ceiling) -- found to be too
+# low at the 1,000,000-line scale (ROADMAP item 9 / BUGS_AND_FIXES.md Bug
+# 15's confirmation run): that run took ~75 minutes to actually finish,
+# so the loop hit its iteration cap and reported a false FAIL while
+# ingestion was still healthy and climbing (971,625 -> 981,750 over the
+# next 180s when checked manually). Replaced with a wall-clock deadline
+# instead of an iteration count, so the cap scales with how long the run
+# actually takes rather than an assumption baked in at 100,000-line
+# scale. Default is generous (4 hours) since the cost of polling a few
+# extra times is 15s of curl calls, not a real resource -- the real
+# stability check below (3 consecutive unchanged totals) is what
+# actually decides when ingestion is done; this is only a safety
+# backstop against polling forever if something is genuinely stuck.
+MAX_WAIT_SECONDS="${REDACT_LOAD_TEST_MAX_WAIT_SECONDS:-14400}"
+POLL_START_TS=$(date +%s)
+i=0
+while true; do
+  i=$((i + 1))
+  NOW_TS=$(date +%s)
+  if [ $((NOW_TS - POLL_START_TS)) -ge "$MAX_WAIT_SECONDS" ]; then
+    echo "  reached ${MAX_WAIT_SECONDS}s poll deadline without 3 consecutive stable polls -- giving up."
+    break
+  fi
   sleep 15
   # track_total_hits=true is required here -- without it, Elasticsearch/
   # OpenSearch's _search API silently caps hits.total.value at exactly
