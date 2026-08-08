@@ -872,21 +872,18 @@ uncontended in the common case and costs almost nothing). The full
 8-process/400-save concurrent test itself completes in ~0.5 seconds wall
 clock.
 
-**Not yet done:** `validation/multiprocess_redis_test.py` (the true
-multi-*process* Redis counterpart to this test — `redis_storage_provider_test.py`
-only ever tested multiple *threads* in one process, a materially
-different and less demanding test that would not have caught this bug)
-was written the same session but has not yet been run against a live
-Redis instance — this sandbox has no Docker, same recurring limitation as
-elsewhere in this document. The file-backend fix is logically identical
-for Redis (same `TokenStore.save()` code path, same lock-around-critical-
-section pattern, just a Redis lock instead of an fcntl lock) and the
-underlying Redis client library operations (`SET NX PX`, Lua `EVAL`) are
-standard and well-documented, but per this document's own standing rule
-("verified" means an actual completed execution, not a plausible-looking
-implementation), this specific provider's cross-process safety should be
-treated as fixed-by-the-same-reasoning-as-the-file-backend but not yet
-independently confirmed until that run happens.
+**`validation/multiprocess_redis_test.py` confirmed live, 2026-08-08, run
+by the user locally** (`docker run -d --rm -p 6379:6379 --name
+redact-test-redis redis:7`, then `python validation/multiprocess_redis_test.py`
+against the real client): **0 of 400 tokens lost**, same 8-process x 50
+tokens x save-after-every-token stress pattern as the file-backend test.
+`RedisStorageProvider.lock_for_save()`'s single-node `SET NX PX` +
+Lua-release lock holds under real separate OS processes against a real
+Redis instance, not just in the file-backend's logically-analogous but
+distinct code path. This closes the one gap this bug's writeup originally
+left open — `redis_storage_provider_test.py`'s pre-existing test only ever
+exercised multiple *threads* in one process, which is exactly the kind of
+gap that let this bug go undetected for as long as it did.
 
 **Compliance note, stated as plainly as Bug 5/7/12's:** this is the same
 "silently wrong, no crash, no error visible to the caller" shape (for the
