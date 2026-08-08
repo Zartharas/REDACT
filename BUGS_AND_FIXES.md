@@ -565,21 +565,203 @@ step if this becomes a practical nuisance; not implemented here.
 
 ---
 
+## 12. Audit-trail document ID collisions under sustained load (Bug 4's failure mode, reintroduced)
+
+**Impact:** Critical (silent data loss in the audit trail specifically,
+not the main pipeline). **Status:** Verified fixed, 2026-08-07, found and
+fixed the same day it was discovered via the ROADMAP item 9 load test.
+
+Found while running `validation/load_test/run_load_test.sh 100000` for the
+first time — the first real test of this pipeline beyond the 10,000-line
+demo scale it had been exclusively verified against until this point (see
+`validation/load_test/README.md`).
+
+**How it surfaced:** the load test's reconciliation check
+(`validation/load_test/reconcile.py`) initially failed with
+`security-logs-anonymized-*` capped at exactly 10,000 regardless of the
+100,000-line input — which turned out to be a *different*, harmless bug in
+the reconciliation script itself (see the entry immediately below this
+one), not a real ceiling. Once that was fixed and the real counts pulled
+with `track_total_hits=true`, `security-logs-anonymized-*` matched
+exactly (100,000/100,000, `relation: "eq"`) and `security-logs-quarantine-*`
+correctly showed 0 — the main pipeline handled the full 10x-scale load
+without any data loss. But `redact-audit-trail-*` landed at only 55,577
+documents.
+
+**Root-caused via Logstash's own pipeline stats API**
+(`GET /_node/stats/pipelines/main`, reached with `docker exec redact-logstash
+curl ...` since Logstash's monitoring port isn't published to the host in
+`docker-compose.yml`): the `ruby` filter that fans out audit events
+correctly produced 189,159 total events from 100,000 inputs (100,000
+originals + 89,159 audit clones — the difference is entries with zero
+detected PII, which never trigger the fan-out), and the audit-trail
+`opensearch` output plugin reported successfully **sending** all 89,159 of
+them (`in: 89159, out: 89159`, no errors). The gap was specifically between
+what Logstash reported *sending* and what OpenSearch actually *stored* —
+ruling out both a Logstash-side drop and Bug 8's `_cat/indices`-staleness
+measurement pitfall (this used `_search` with `track_total_hits=true`
+throughout, not `_cat/indices`).
+
+**Root cause:** `logstash/redact-pipeline.conf`'s audit-trail output used
+`document_id => "%{[audit_event][authentication_tag]}"` (fixed in Bug 4/7
+above, at the time correctly closing a different, more severe bug —
+literally every audit record sharing one hardcoded ID string). But
+`authentication_tag` (`src/audit.py`'s `build_audit_event()`) is an HMAC
+over `field_type`, `method`, `policy_version`, `original_value_fingerprint`,
+and `timestamp` — where `timestamp` is `int(time.time())`, **second**
+granularity. At 10,000-line demo scale (roughly 10-90 seconds of wall
+time depending on which fix era), collisions were rare enough to go
+unnoticed. At 100,000 lines sustained over roughly 90-100 seconds of
+`redact-service` throughput (~950-1,000 events/sec, see the load test's own
+measurement), many genuinely distinct audit events land in the same
+wall-clock second *and* share identical field content — the exact same
+low-content-diversity, high-repetition property of this project's
+synthetic corpus that caused Bug 4 in the first place (`EventID=4634`,
+`TargetUserName=SYSTEM`, and similar fixed-field system events recur
+constantly and verbatim). Two distinct audit events with identical
+`field_type` + `original_value_fingerprint` + the same second of wall
+time produce the **identical** `authentication_tag`, and therefore the
+identical `document_id`, silently overwriting one another on write — this
+is Bug 4's Stage 1 failure mode, precisely, just reintroduced in a branch
+that Bug 4's actual fix (a random, non-content-derived ID) was never
+applied to. The retry-idempotency goal that motivated using
+`authentication_tag` as the ID in the first place was a real, legitimate
+requirement — it was the choice of a content-derived ID to satisfy it that
+reintroduced the collision risk.
+
+**Fix:** mirrors Bug 4's actual fix exactly. The `ruby` filter that creates
+each audit clone now also generates a fresh random UUID
+(`java.util.UUID.randomUUID.toString` — JRuby interop, no gem `require`
+needed, avoiding any uncertainty about stdlib availability inside
+Logstash's bundled JRuby) and stores it at `[@metadata][audit_doc_id]` on
+that clone specifically, not inherited from the parent event (each of the
+up-to-several audit clones fanned out from one input event needs its own
+independent ID, not a shared one). The output block's `document_id` now
+references `%{[@metadata][audit_doc_id]}` instead of the content-derived
+tag. Retries stay idempotent for the same reason the main event's UUID
+already does: Logstash's output retry logic resubmits the *same*
+in-memory cloned event object, so the UUID already set on it survives the
+retry unchanged; two genuinely distinct audit events get cryptographically
+independent UUIDs regardless of timing or content similarity.
+`authentication_tag` remains in the document as a field (verified via
+`audit.py`'s `verify_audit_event()`), it simply no longer doubles as the
+document's primary key.
+
+**Not yet re-verified against a live run** — the fix was made and
+documented the same session this bug was found, but a fresh
+`validation/load_test/run_load_test.sh 100000` (or larger) confirming
+`redact-audit-trail-*` now lands at exactly 189,159-minus-quarantined
+audit events, matching the ruby filter's own fan-out count, still needs
+to be run. This is the concrete next step before this entry is upgraded
+from "verified fixed in source, logic re-derived from Bug 4's precedent"
+to "verified fixed via a completed clean-room rerun," the same bar every
+other entry in this document is held to.
+
+**Compliance note:** this is a second consecutive finding (after the
+`_search` cap below) that only became visible once this project tested
+beyond demo scale — a strong argument, independent of any specific number
+in this project, for why "verified at 10,000 lines" and "verified at
+production volume" are different claims that should never be conflated
+in anything citing this framework's audit-trail reliability, especially
+given the audit trail's role in the NIST SP 800-53 / GDPR Article 32
+compliance mapping this project's chapter work discusses elsewhere.
+
+---
+
+## 13. `_search` silently caps reported document counts at 10,000 without `track_total_hits`
+
+**Impact:** None to the pipeline itself (a measurement pitfall in this
+project's own test tooling, not a real ceiling) — but it's what initially
+made Bug 12 above look like total data loss on the main index too, before
+being isolated to just the audit trail. Recorded with the same weight as
+Bug 8 (the `_cat/indices` staleness pitfall) because it's the same class
+of problem and just as capable of producing a false alarm.
+
+**Status:** Verified fixed, 2026-08-07 (source:
+`validation/load_test/reconcile.py`).
+
+Running `validation/load_test/run_load_test.sh 100000` for the first time,
+reconciliation failed with `security-logs-anonymized-*` reporting exactly
+10,000 documents no matter how large the actual input was — which looked,
+at first glance, exactly like Bug 12 (a silent ceiling on writes). The tell
+that it wasn't a real ceiling: the number was *exactly* 10,000, not
+"roughly 10% of input" or any number that would plausibly result from a
+resource limit or partial failure — an exact round number reported
+identically regardless of true document count is the signature of a
+reporting cap, not a real one (the same category of red flag Bug 8's
+entry already describes for `_cat/indices`, just a different endpoint
+producing it).
+
+**Root cause:** Elasticsearch/OpenSearch's `_search` API only tracks
+`hits.total.value` *accurately* up to 10,000 documents by default (the
+`track_total_hits` setting, which defaults to `10000`); past that, the
+reported total is silently capped at exactly 10,000 with
+`relation: "gte"` (at least 10,000, not exactly) instead of the real
+count, unless the request explicitly asks for full accuracy. Every prior
+reconciliation check in this project's history (`BUGS_AND_FIXES.md` bugs
+1-11) stayed at or under 10,000 total documents, so this cap was never
+crossed and never exposed as a problem until a load test intentionally
+went beyond that scale.
+
+**Confirmed directly:** re-querying the same indices with
+`track_total_hits=true` immediately showed the real counts —
+`security-logs-anonymized-*` at exactly 100,000 (`relation: "eq"`,
+matching the 100,000-line input exactly) and `security-logs-quarantine-*`
+at 0 — both correct, and consistent with Logstash's own pipeline stats
+(see Bug 12) showing the main pipeline handled the full load without
+error. Only the audit trail (Bug 12, a real and separate bug) showed an
+actual shortfall once measured correctly.
+
+**Fix:** `reconcile.py`'s `count()` function now appends
+`&track_total_hits=true` to every `_search` call, and additionally checks
+`hits.total.relation == "eq"`, raising an error rather than silently
+trusting an inexact count if that check ever fails for any reason (a
+belt-and-suspenders check, since `track_total_hits=true` should always
+produce `"eq"`, but asserting it explicitly costs nothing and catches a
+future regression immediately rather than reintroducing this exact
+false-alarm risk silently).
+
+**Lesson, stated the same way Bug 8's entry states its own:** any
+reconciliation or count-based verification against Elasticsearch/
+OpenSearch that might exceed 10,000 total matching documents needs
+`track_total_hits=true` (or a value higher than the expected count) on
+every `_search` call, the same way Bug 8 already established that
+`_search` should be preferred over `_cat/indices` for accuracy under
+write pressure. Both are instances of the same general principle: the
+default, most-obvious way to ask Elasticsearch/OpenSearch "how many
+documents are in this index" is optimized for search-result-page
+performance, not exact counting, and silently gives an approximate
+answer unless told not to.
+
+---
+
 ## Pattern across these bugs
 
-Every critical-impact bug on this list (1, 4, 5, 7) shared the same shape:
-the pipeline appeared to be working — no crash, no error thrown, requests
-returning 200 — while silently destroying or never producing the data it
-was supposed to produce. None of these were caught by the absence of
-errors; all were caught by manually cross-checking document counts against
-known-good baselines (raw line counts, expected quarantine rates) and, in
-Bug 5 and 7's case, by directly inspecting sample documents rather than
-trusting the aggregate count alone. This is the practical argument for
-building an explicit reconciliation check (source line count == anonymized
-count + quarantined count, and audit-index count > 0 whenever PII was
-detected) into the pipeline itself, using `_search`-based counts rather
-than `_cat/indices` (see Bug 8), rather than relying on manual spot checks
-going forward.
+Every critical-impact bug on this list (1, 4, 5, 7, 12) shared the same
+shape: the pipeline appeared to be working — no crash, no error thrown,
+requests returning 200 — while silently destroying or never producing the
+data it was supposed to produce. None of these were caught by the absence
+of errors; all were caught by manually cross-checking document counts
+against known-good baselines (raw line counts, expected quarantine rates,
+and — for Bug 12 specifically, the first bug this document needed a
+second signal for — Logstash's own pipeline stats API showing what was
+actually *sent* versus what OpenSearch actually *stored*) and, in Bug 5,
+7, and 12's case, by directly inspecting sample documents or plugin-level
+counters rather than trusting the aggregate index count alone. This is the
+practical argument for building an explicit reconciliation check (source
+line count == anonymized count + quarantined count, and audit-index count
+matching the fan-out count whenever PII was detected) into the pipeline
+itself, using `_search`-based counts with `track_total_hits=true` rather
+than `_cat/indices` or an unqualified `_search` (see Bugs 8 and 13),
+rather than relying on manual spot checks going forward. **Bug 12 also
+adds a new instance of a narrower, recurring sub-pattern already seen in
+Bug 4 and Bug 7: a document ID derived from event content plus a
+coarse-grained timestamp is not actually collision-resistant once volume
+or throughput increases enough for genuinely distinct events to share
+both — every document_id in this pipeline that matters for correctness
+should be reasoned about as "does this stay unique under 10x the load
+it was last verified at," not just "was this unique in the last test
+run."**
 
 **Final verification, this test run:** 10,000 source lines in, 9,984
 landed in `security-logs-anonymized`, 16 in `security-logs-quarantine`

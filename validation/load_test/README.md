@@ -100,14 +100,61 @@ python3 validation/load_test/reconcile.py
 
 ## Status
 
-**Not yet run.** This script and methodology were written and
-shell-syntax-checked (`bash -n`), and the corpus-generation step was
-timed standalone (5,000 lines in ~2.4s, so 100,000 lines should take
-roughly 45-50s of that step alone — not the bottleneck). The actual
-Docker-dependent run has not been executed, since this project's
-development sandbox has no Docker runtime available (see the note at the
-top of `docker-compose.yml` and throughout `BUGS_AND_FIXES.md` for the
-recurring pattern of Docker-dependent work in this project being handed
-off to be run locally). Running this at a few sizes and folding the
-results back into this README and `ROADMAP.md` item 9 is the concrete
-next step.
+**First run completed, 2026-08-07, at N=100,000** (run by the user
+locally). Results and what they found:
+
+- **Corpus generation and export:** as expected, not the bottleneck
+  (100,000 lines generated and split into the three raw source files in
+  well under a minute).
+- **Main pipeline (detection, anonymization, quarantine routing):**
+  correct at 10x demo scale. `security-logs-anonymized-*` landed at
+  exactly 100,000 documents (verified with `track_total_hits=true` — see
+  the note below), `security-logs-quarantine-*` at exactly 0, matching
+  the 100,000-line input exactly. No timeouts or errors beyond the
+  known, already-fixed Bug 3 startup cluster.
+- **Approximate throughput:** ~950-1,000 events/sec sustained,
+  end-to-end (file input → `http` filter → `redact-service` → OpenSearch
+  write), on one Docker Desktop machine with the stack's default resource
+  allocation.
+- **This run's script itself had a bug**, found and fixed the same
+  session: the stability-poll loop (2 consecutive unchanged 15-second
+  polls) and the reconciliation query both assumed demo-scale behavior
+  that didn't generalize. The `run_load_test.sh` poll loop's assumptions
+  turned out to be fine in practice (the real ingestion had genuinely
+  finished by the time polling stopped), but the *reconciliation query*
+  itself (`reconcile.py`) was missing `track_total_hits=true`, so
+  Elasticsearch/OpenSearch's default 10,000-hit accurate-counting cap
+  made `security-logs-anonymized-*` initially report exactly 10,000 no
+  matter the real count — indistinguishable at first glance from a real
+  ceiling. See `BUGS_AND_FIXES.md` Bug 13 for the full writeup; fixed by
+  adding `track_total_hits=true` to every `_search` call in
+  `reconcile.py`.
+- **A real pipeline bug was found and fixed as a direct result of this
+  test**, not a script bug: `redact-audit-trail-*` landed at only 55,577
+  documents out of the 89,159 audit events Logstash's own pipeline stats
+  confirmed were correctly sent. Root cause: the audit branch's
+  document ID (`authentication_tag`, an HMAC over event content plus a
+  *second*-granularity timestamp) collided for genuinely distinct audit
+  events sharing identical content within the same wall-clock second —
+  Bug 4's exact failure mode, reintroduced in a branch Bug 4's actual fix
+  (a random UUID) was never applied to. See `BUGS_AND_FIXES.md` Bug 12
+  for the full writeup, root-cause evidence (Logstash pipeline stats
+  showing sent-vs-stored counts), and the fix (a random UUID generated
+  per audit clone in `logstash/redact-pipeline.conf`'s `ruby` filter,
+  replacing the content-derived ID as the document's primary key).
+
+**This is exactly the kind of finding this test was built to surface** —
+a bug invisible at 10,000 lines that only appears once the system runs
+long enough, and with enough content repetition, for a coarse timestamp
+to stop being a reliable uniqueness guarantee. It's also a good
+illustration of this project's own stated scope limits: this was a
+single-machine test, and it still found a real, previously-undocumented
+data-loss bug — which says more about how much a single-machine test
+*can* find than it does about having exhausted what a real multi-node
+production deployment might additionally surface.
+
+**Not yet done:** a re-run confirming the Bug 12 fix holds (audit-trail
+document count should now match the fan-out count exactly, not just
+"higher than before"), and runs at additional sizes (e.g. 1,000,000) to
+see whether throughput holds roughly flat or degrades — the concrete next
+steps for this item.
