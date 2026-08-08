@@ -20,15 +20,29 @@ project's synthetic corpus. That makes any recall measured against the
 synthetic corpus optimistic in a way that will not transfer 1:1 to real
 production usernames drawn from a different population -- someone named
 "Zhiwei Tan" or "Aoife O'Sullivan" is not in Faker's default en_US list and
-this layer will miss them exactly as regex/NER already do. This layer is a
-real improvement, not a solved problem: swap in a larger, more representative
-name corpus (e.g. US Census surname/given-name frequency lists, or a
-locale-appropriate list for the deployment's actual user population) before
-trusting this measurement to generalize past this specific synthetic dataset.
-Validating this layer against the real Loghub datasets already used
-elsewhere in this project (see validation/real_data/) is the concrete next
-step to check whether the gain here is real or a dictionary-matches-itself
-artifact -- not yet done as of this commit.
+this layer will miss them exactly as regex/NER already do.
+
+Two follow-up validations have since been done (2026-08-07):
+1. Real log text (validation/real_data/, Loghub datasets): recall gains of
+   similar magnitude to the synthetic corpus replicate on real, unmodified
+   log lines (OpenSSH 0.0%->45.5%, Linux 3.4%->50.0%), confirming the gain
+   isn't an artifact of this project's own synthetic templates.
+2. A different name population (validation/non_us_name_test.py): tested
+   this exact en_US dictionary against flattened names built from Faker's
+   German/French/Spanish/Italian name providers, a population largely
+   disjoint from en_US. Result: 1.4% recall (28/2,000), collapsing almost
+   entirely -- direct, measured confirmation of the "Zhiwei Tan" concern
+   above, not just a theoretical risk. See that script's own docstring for
+   why real US Census data (the originally planned test) wasn't used
+   instead -- network access constraints and, more importantly, the one
+   real-world name dataset available on PyPI being sourced from a
+   documented Facebook data breach, rejected on inspection as
+   inappropriate for a PII-protection tool to validate itself against.
+
+Net effect: this layer is a real, measured improvement on the exact
+population it was built from, and a real, measured near-total gap on
+populations outside it. Both halves of that finding matter equally --
+neither should be dropped when this layer is cited.
 """
 import re
 
