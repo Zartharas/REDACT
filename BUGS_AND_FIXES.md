@@ -1161,19 +1161,17 @@ live-Redis re-verification, see below):**
   (which would have just moved this bug's O(n) problem into a different
   file rather than fixing it).
 
-**What this does NOT yet cover, stated plainly:** `RedisStorageProvider.
-save_incremental()` has not been re-run against a live Redis instance
-since this change -- `validation/multiprocess_redis_test.py` (the same 8-
-processes-x-50-tokens test that confirmed Bug 14's fix against real Redis)
-needs to be re-run by the user locally to confirm the new incremental
-`HSET` path holds under real cross-process concurrency the way the
-in-sandbox `FileStorageProvider` tests above already confirm for the file
-backend. Until that's done, the Redis path's real-world correctness under
-this specific change is verified by code review and the shared
-`TokenStore` logic (identical delta-tracking feeds both providers), not
-by a live measurement -- the same honesty standard this project applies
-everywhere else (see the standing "verified means an actual completed
-execution" rule). `compact()`'s own O(n) cost is also unavoidable by
+**Redis path confirmed, 2026-08-08, run by the user locally:**
+`validation/multiprocess_redis_test.py` (the same 8-processes-x-50-tokens
+test that confirmed Bug 14's fix against real Redis) was re-run against a
+live `redis:7` container (`docker run -d --rm -p 6379:6379 --name
+redact-test-redis redis:7`) after this change: **0 of 400 reverse-map
+entries lost.** `RedisStorageProvider.save_incremental()`'s per-key
+`HSET` path holds under real cross-process concurrency, closing the one
+gap left open when this fix first landed -- both providers are now
+verified live for the incremental-write path, not just the file backend.
+
+`compact()`'s own O(n) cost is also unavoidable by
 design (the snapshot format is a single JSON object, not itself
 append-only) -- this fix reduces how often that cost is paid by roughly
 `wal_compact_threshold_lines`-fold, it does not eliminate it, which is
