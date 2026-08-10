@@ -43,9 +43,9 @@ import random
 import sys
 from collections import Counter
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
-from src import detect  # noqa: E402
+import detect  # noqa: E402
 
 RAW_FILES = {
     "windows_event": "data/raw/windows_events.log",
