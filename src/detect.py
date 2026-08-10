@@ -294,7 +294,29 @@ def build_ner_candidate(text: str, log_type: str, regex_hits: list[dict]):
     written to distinguish an accidental-new-adjacency effect (already
     disclosed as a risk above) from a context-loss effect (removing the
     excised span may reduce NER's confidence in classifying nearby
-    tokens) -- not yet run.
+    tokens) -- run, and it found a specific, mechanical, fixable cause,
+    not a diffuse one: virtually every new false positive on BOTH real
+    datasets was the literal fragment "rhost=" (a dangling "key="
+    left behind once its IP value was excised, with nothing meaningful
+    following it) misclassified as PERSON by the real model at a
+    suspiciously consistent 0.85 confidence -- ~500/2,000 lines on
+    OpenSSH, ~320/2,000 on Linux. FIXED, same day: excision now removes
+    the key+"=" along with the value whenever they're immediately
+    adjacent (the exact shape fields.py's KV extractors produce), not
+    just the value's own characters -- see the excision loop below for
+    the fix itself and its own comment for why this is scoped narrowly
+    enough not to touch CloudTrail's JSON shape at all. A small number
+    (2/15 shown examples on OpenSSH) of a DIFFERENT artifact -- a
+    fragment of the syslog TAG itself (e.g. "sshd[24239") misclassified
+    as PERSON on a line where field-gating excised nothing at all --
+    remains unexplained; it did not reproduce when field-gating changed
+    nothing about the line, so it's more likely tied to the header-
+    stripping SIMULATION itself (removing the timestamp/hostname context
+    spaCy would otherwise see) than to excision, but this is not yet
+    confirmed and is a smaller, separate open item, not blocking the fix
+    above. Re-running the real-data validation to confirm the "rhost="
+    fix actually closes the precision gap (not just theoretically
+    should) is the next step, not yet done.
 
     windows_event and cloudtrail have NOT been checked against any real
     (non-synthetic) data at all -- Loghub's OpenSSH/Linux/Thunderbird
@@ -399,7 +421,37 @@ def build_ner_candidate(text: str, log_type: str, regex_hits: list[dict]):
         end = idx + len(value)
         search_cursor = end
         if any(h["start"] < end and idx < h["end"] for h in regex_hits):
-            excise_ranges.append((idx, end))
+            # Bug found via Task #10's real-data validation, 2026-08-09:
+            # excising ONLY the value (as this used to do) leaves a
+            # "key=" fragment dangling immediately before whitespace or
+            # another excised span -- e.g. "rhost=218.188.2.4" becomes
+            # "rhost= " once the IP is removed. Checked against real
+            # Loghub OpenSSH/Linux data specifically (not hypothesized):
+            # spaCy consistently misclassifies that orphaned "rhost="
+            # fragment as PERSON (score 0.85, the overwhelming majority
+            # of ~500 and ~320 new false positives measured on those two
+            # datasets respectively, once field-gating actually engaged).
+            # A short, out-of-context "word=" token with nothing
+            # meaningful following it doesn't read as normal English,
+            # and the model's own name-detection heuristic (unusual
+            # token shape in a position a proper noun could occupy)
+            # fires on it. Fix: if the value is immediately preceded by
+            # a bare `key=` (no other separator between them -- the
+            # exact shape fields.py's KV extractors produce), extend the
+            # excision to remove that key+"=" too, not just the value.
+            # The key name itself was never PII-bearing (field names are
+            # structural, per this function's own docstring below), so
+            # this loses nothing NER needed to see -- it just removes
+            # the specific dangling-fragment shape that was causing the
+            # misclassification. Scoped narrowly (requires a literal "="
+            # immediately before the value, nothing else): CloudTrail's
+            # JSON `"key": "value"` shape never matches this pattern (no
+            # "=" separator), so this fix only ever engages for
+            # windows_event/syslog's `=`-delimited KV fields, exactly
+            # where the bug was found.
+            key_match = re.search(r"[\w.-]+=$", text[:idx])
+            excise_start = key_match.start() if key_match else idx
+            excise_ranges.append((excise_start, end))
         elif any(c.isalpha() for c in value):
             any_alpha_value_unmasked = True
 

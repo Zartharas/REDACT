@@ -52,7 +52,18 @@ def test_excise_shortens_candidate_and_keeps_unmasked_content():
     another: the SSN field's characters should be REMOVED (not just
     replaced), the name should survive untouched, and the candidate
     should be strictly shorter than the original -- this length
-    reduction is the whole point of excising instead of masking."""
+    reduction is the whole point of excising instead of masking.
+
+    Engineering upgrade, 2026-08-09 (Task #10's real-data validation):
+    excision now removes the "key=" prefix along with the value when
+    they're immediately adjacent ("TargetSSN=123-45-6789", not just
+    "123-45-6789"), not only the value's own characters -- a dangling
+    "key=" fragment left behind by the old value-only excision was
+    getting misclassified as PERSON by the real spaCy model on real
+    Loghub data (see detect.build_ner_candidate's own docstring for the
+    full root-cause writeup). The length assertion below reflects that:
+    the whole "TargetSSN=123-45-6789" key+value pair is gone now, not
+    just the SSN digits."""
     text = "TargetUserName=Timothy Wong TargetSSN=123-45-6789"
     regex_hits = detect.scan_regex(text)
     assert any(h["type"] == "SSN" for h in regex_hits)
@@ -62,8 +73,9 @@ def test_excise_shortens_candidate_and_keeps_unmasked_content():
     assert candidate is not None
     assert "Timothy Wong" in candidate, "name field must survive unexcised"
     assert "123-45-6789" not in candidate, "regex-covered SSN field must be excised"
+    assert "TargetSSN=" not in candidate, "the dangling key= prefix must be excised too"
     assert len(candidate) < len(text), "excising must actually shorten the candidate"
-    assert len(candidate) == len(text) - len("123-45-6789")
+    assert len(candidate) == len(text) - len("TargetSSN=123-45-6789")
     assert segments is not None
 
 
@@ -111,6 +123,37 @@ def test_build_candidate_returns_unchanged_text_when_nothing_is_excised():
     assert segments is None
 
 
+def test_excision_removes_dangling_key_equals_not_just_the_value():
+    """Real-bug regression guard, found via Task #10's real-data
+    validation (2026-08-09): the ORIGINAL excise-just-the-value
+    implementation left a "key=" fragment dangling immediately before
+    whitespace/end-of-string whenever the excised value was immediately
+    preceded by a bare "key=" -- e.g. "rhost=218.188.2.4" became
+    "rhost= " once the IP was removed. Measured against real Loghub
+    OpenSSH/Linux data: spaCy consistently misclassified that orphaned
+    "rhost=" fragment as PERSON (score 0.85), producing ~500 and ~320 new
+    false positives respectively that naive never had -- a real
+    precision regression, not a hypothetical one. Confirms the fix: the
+    key+"=" is now excised along with the value, so no dangling
+    fragment survives into the candidate at all."""
+    text = "sshd[24200]: authentication failure; rhost=218.188.2.4 user=root"
+    regex_hits = detect.scan_regex(text)
+    assert any(h["type"] == "IP" for h in regex_hits)
+
+    candidate, segments = evaluate._build_ner_candidate(text, "syslog", regex_hits)
+
+    assert candidate is not None
+    assert "218.188.2.4" not in candidate
+    assert "rhost=" not in candidate, (
+        "the dangling key= fragment that spaCy misclassified as PERSON on "
+        "real data must not survive into the NER candidate"
+    )
+    # user=root's value has no alpha content worth flagging as a name and
+    # isn't regex-covered either -- unaffected either way, present here
+    # just to confirm the fix doesn't over-excise neighboring fields.
+    assert "user=root" in candidate
+
+
 def test_remap_hit_translates_offsets_back_to_original_text():
     """The correctness-critical piece: a hit's [start, end) reported
     against the (shorter) candidate must map back to the exact matching
@@ -133,16 +176,37 @@ def test_remap_hit_after_excised_span_still_resolves_correctly():
     original text) must still remap to the correct original position --
     this is the case an off-by-a-constant-everywhere bug would miss,
     since it specifically requires per-segment offsets, not one global
-    shift."""
-    text = "SSNTargetSSN=123-45-6789 TargetUserName=Timothy Wong"
-    regex_hits = detect.scan_regex(text)
-    candidate, segments = evaluate._build_ner_candidate(text, "windows_event", regex_hits)
+    shift.
 
-    idx = candidate.index("Timothy Wong")
+    Engineering upgrade, 2026-08-09: the original text here
+    ("SSNTargetSSN=123-45-6789 TargetUserName=Timothy Wong") stopped
+    genuinely exercising multiple segments once excision started
+    removing the "key=" prefix along with the value (see
+    test_excise_shortens_candidate_and_keeps_unmasked_content's own
+    docstring) -- the excised range now starts at position 0 (the "SSN"
+    text merges into "TargetSSN="'s own excision), leaving only ONE kept
+    segment, so this test was silently passing without actually
+    distinguishing per-segment offsets from a single global shift
+    anymore. Replaced with a text where the excised span (an IP address)
+    sits strictly BETWEEN two separate kept chunks -- both containing
+    "Timothy Wong" -- to restore genuine multi-segment coverage: the
+    SECOND occurrence lands in the second kept segment, which needs its
+    own, different offset than the first."""
+    text = "TargetUserName=Timothy Wong SRC=10.0.0.5 TargetDept=Timothy Wong"
+    regex_hits = detect.scan_regex(text)
+    assert any(h["type"] == "IP" for h in regex_hits)
+
+    candidate, segments = evaluate._build_ner_candidate(text, "windows_event", regex_hits)
+    assert segments is not None and len(segments) >= 2, (
+        "this test needs a genuinely multi-segment candidate to be meaningful"
+    )
+
+    idx = candidate.rindex("Timothy Wong")  # the SECOND occurrence, after the excised IP
     hit = {"type": "PERSON", "start": idx, "end": idx + len("Timothy Wong"), "method": "ner"}
     remapped = evaluate._remap_hit(hit, segments)
 
     assert text[remapped["start"]:remapped["end"]] == "Timothy Wong"
+    assert remapped["start"] == text.rindex("Timothy Wong")
 
 
 def test_run_evaluation_field_gate_calls_ner_on_excised_text_and_remaps_correctly(monkeypatch):
@@ -232,11 +296,17 @@ def test_cursor_based_search_finds_correct_occurrence_past_a_decoy():
 
     candidate, segments = evaluate._build_ner_candidate(text, "windows_event", regex_hits)
 
-    assert candidate == "Timothy Wong said hi TargetSSN= TargetUserName=Timothy Wong"
+    # "TargetSSN=" is gone too, not just "123-45-6789" -- see the
+    # key+"=" excision fix in test_excise_shortens_candidate_and_keeps_unmasked_content's
+    # own docstring; the two original spaces (one before "TargetSSN",
+    # one after "123-45-6789") both survive, producing a double space
+    # where the whole key=value pair used to be.
+    assert candidate == "Timothy Wong said hi  TargetUserName=Timothy Wong"
     assert "123-45-6789" not in candidate
+    assert "TargetSSN=" not in candidate
     # Both the decoy (untouched free text) and the real field occurrence
     # (never regex-covered, so never excised) must survive -- excision
-    # only ever removes the SSN value.
+    # only ever removes the SSN key=value pair.
     assert candidate.count("Timothy Wong") == 2
 
 
