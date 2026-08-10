@@ -35,3 +35,19 @@ validation/real_name_frequency/raw/*.zip
 # canonical corpus (data/synthetic_logs.jsonl), so it doesn't need to be
 # tracked either.
 data/synthetic_logs_100k.jsonl
+
+# Generated corpus for run_replica_and_queue_test.sh (ROADMAP item 12) --
+# same fixed-seed regeneration pattern as the load-test corpora above.
+data/replica_queue_test_corpus_*.jsonl
+
+# CloudTrailFlaws_raw.jsonl (validation/real_data/prepare_cloudtrail_dataset.py)
+# -- regenerable from the public flaws.cloud release, same pattern as the
+# Loghub *.log files above (already covered by *.log; this one is .jsonl
+# so needs its own line). The 240MB source .tar it's derived from must
+# never be committed under any circumstance -- caught and reverted the one
+# time this almost happened, 2026-08-10, see BUGS_AND_FIXES.md if it
+# recurs. Real accident, not a hypothetical: `git add -A` after running
+# prepare_cloudtrail_dataset.py picked up both the .tar and this file
+# before this rule existed.
+validation/real_data/datasets/CloudTrailFlaws_raw.jsonl
+*.tar
