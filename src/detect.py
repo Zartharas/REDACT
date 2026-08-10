@@ -314,9 +314,15 @@ def build_ner_candidate(text: str, log_type: str, regex_hits: list[dict]):
     stripping SIMULATION itself (removing the timestamp/hostname context
     spaCy would otherwise see) than to excision, but this is not yet
     confirmed and is a smaller, separate open item, not blocking the fix
-    above. Re-running the real-data validation to confirm the "rhost="
-    fix actually closes the precision gap (not just theoretically
-    should) is the next step, not yet done.
+    above. RE-CONFIRMED against real data, same day: OpenSSH precision
+    0.778 -> 0.987 (FP 523 -> 24, TP +1); Linux precision 0.797 -> 0.974
+    (FP 357 -> 37, TP unchanged). Both now show FEWER false positives
+    than the NAIVE baseline itself (OpenSSH 24 vs. naive's own 49; Linux
+    37 vs. naive's own 122) -- not just closing the regression, a real
+    precision improvement over naive on real, unmodified log text, with
+    recall unchanged or better. This confirms the excision approach
+    itself was sound; the bug was exactly the dangling-key-fragment
+    mechanism above, nothing deeper.
 
     windows_event and cloudtrail have NOT been checked against any real
     (non-synthetic) data at all -- Loghub's OpenSSH/Linux/Thunderbird
@@ -330,18 +336,21 @@ def build_ner_candidate(text: str, log_type: str, regex_hits: list[dict]):
 
     PRODUCTION IMPACT: src/service.py and src/pipeline.py call this
     function as the default detection path for EVERY log_type, not just
-    syslog. Today's actual production exposure to the syslog regression
-    above is limited by an ACCIDENTAL safety net, not a designed one --
-    fields.py's syslog extractor can't see past the RFC3164 timestamp
-    prefix real syslog lines carry, so field-gating currently falls back
-    to naive-equivalent behavior on real syslog traffic under this
-    project's own logstash/redact-pipeline.conf (no header-stripping
-    filter exists there). That protection would silently disappear the
-    moment header-stripping is added without this being root-caused
-    first -- do not add syslog header-stripping to the Logstash pipeline
-    until then. windows_event/cloudtrail traffic is NOT protected by any
-    equivalent accidental fallback and DOES actually engage field-gating
-    today, with the real-data question above still open for those types.
+    syslog. UPDATED after the re-confirmed fix above: syslog-header
+    stripping is no longer blocked by an open, unquantified risk -- the
+    specific mechanism that made it risky (the dangling key= fragment)
+    is fixed and re-verified against real data, with field-gated now
+    showing FEWER false positives than naive's own baseline once
+    engaged. Adding header-stripping to logstash/redact-pipeline.conf is
+    a reasonable next step, though still untested against a live
+    Logstash instance specifically and not yet done. windows_event/
+    cloudtrail traffic is NOT protected by fields.py's syslog-specific
+    timestamp-prefix gap (they were never affected by it) and DOES
+    actually engage field-gating today; no real (non-synthetic) dataset
+    has been sourced for either type yet, so their real-data behavior
+    remains an open question -- lower-probability given the fix above
+    addressed a KV-syntax-specific artifact and both those log types use
+    more rigidly delimited extraction, but not confirmed either way.
 
     A hit's [start, end) reported against the (shorter) candidate string
     is remapped back to the ORIGINAL text's coordinate space via
