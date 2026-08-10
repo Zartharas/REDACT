@@ -18,6 +18,7 @@ from collections import defaultdict
 
 sys.path.insert(0, "src")
 import detect  # noqa: E402
+import fields  # noqa: E402
 
 
 def overlaps(a: dict, b: dict) -> bool:
@@ -48,11 +49,96 @@ def load_dataset(path: str) -> list[dict]:
         return [json.loads(line) for line in f]
 
 
+def _mask_regex_covered_fields(text: str, log_type: str, regex_hits: list[dict]):
+    """Field-level counterpart to the whole-line entropy gate below.
+
+    The whole-line gate (use_entropy_gate) skips NER for the entire line
+    the moment ANY regex hit exists anywhere in it -- cheap and fast, but
+    this is exactly the mechanism behind the documented PERSON recall
+    collapse (0.127 tiered vs. 0.404 naive, see README.md's Known
+    Limitations section and BUGS_AND_FIXES.md): an SSN regex hit in one
+    field silently suppresses NER for a PERSON name sitting in a
+    completely different field on the same line.
+
+    This function narrows the gate to field granularity using fields.py's
+    existing structured-field extraction (already built for drift.py, not
+    written new for this). For each field the extractor recognizes,
+    checks whether a regex hit falls inside that specific field's
+    character span; only THOSE spans get masked out (replaced with '#',
+    same length, so all other offsets in the line stay valid) before
+    NER runs. A name sitting in an unmasked field, or in free text
+    outside any recognized field, is still visible to NER.
+
+    Returns:
+      - the masked text, if NER should still run on it (there's
+        unmasked content that could plausibly hold a name or other
+        NER-only entity)
+      - None, if every recognized field on this line was already
+        regex-covered and nothing alphabetic remains outside the masked
+        spans -- the one case where skipping the NER call entirely is
+        actually safe, which is what lets this still recover some of
+        the throughput advantage the whole-line gate had.
+      - the ORIGINAL text unchanged, if fields.py doesn't recognize this
+        log_type's structure at all (unrecognized log_type, or a syslog
+        message shape outside its documented coverage) or extracted no
+        fields -- falling back to running NER on the full line is the
+        conservative, recall-safe choice when field structure isn't
+        known, not a silent skip.
+
+    Known, disclosed limitation: field boundaries are located via
+    text.find(value), since fields.py returns values, not offsets. This
+    is correct except when a field's value string is not unique within
+    the line (e.g. the same short value coincidentally appears earlier
+    as a substring of something else) -- an edge case, not something
+    this implementation claims to have ruled out, and one a real
+    per-field extractor returning offsets directly would close properly.
+
+    The "safe to skip NER entirely" decision below only looks at
+    extracted FIELD VALUES, not the whole line -- field names (`SRC=`,
+    `PWD=`, the syslog tag prefix, KV separators) are structural, not
+    PII-bearing, and checking the whole line's alphabetic content for
+    the skip decision would make it almost never trigger, since field
+    names are alphabetic too and appear on nearly every structured line.
+    """
+    extracted = fields.extract_fields(log_type, text) if log_type else {}
+    if not extracted:
+        return text
+
+    masked = list(text)
+    any_field_masked = False
+    any_alpha_value_unmasked = False
+    for value in extracted.values():
+        if not value:
+            continue
+        idx = text.find(value)
+        if idx == -1:
+            continue
+        end = idx + len(value)
+        if any(h["start"] < end and idx < h["end"] for h in regex_hits):
+            any_field_masked = True
+            for i in range(idx, end):
+                masked[i] = "#"
+        elif any(c.isalpha() for c in value):
+            any_alpha_value_unmasked = True
+
+    if not any_field_masked:
+        return text
+    if any_alpha_value_unmasked:
+        return "".join(masked)
+    return None
+
+
 def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = False,
-                    use_flattened: bool = False):
+                    use_flattened: bool = False, use_field_gate: bool = False):
     """use_entropy_gate: if True, only run NER on lines with no regex hit at all
     (the 'tiered' strategy described in the chapter). If False, run NER on
     every line regardless of regex results (the naive strategy).
+    use_field_gate: field-level variant of use_entropy_gate (see
+    _mask_regex_covered_fields above) -- only masks the specific fields a
+    regex hit actually covers, instead of skipping NER for the whole
+    line. Mutually exclusive with use_entropy_gate in intent (both are
+    ways of deciding when to call NER); if both are somehow passed True,
+    use_field_gate takes precedence per the branch order below.
     use_flattened: if True, also run the flattened-username name-dictionary
     layer (src/flattened_names.py), added specifically to address the
     documented 5.9% recall gap on concatenated name tokens."""
@@ -61,13 +147,20 @@ def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = 
     for entry in entries:
         text = entry["log"]
         gold = entry["pii"]
+        log_type = entry.get("log_type")
 
         regex_hits = detect.scan_regex(text)
         pred = list(regex_hits)
 
         if use_ner:
-            if use_entropy_gate and regex_hits:
-                pass  # tiered strategy: skip NER if regex already found something
+            if use_field_gate and regex_hits:
+                ner_text = _mask_regex_covered_fields(text, log_type, regex_hits)
+                if ner_text is not None:
+                    pred += detect.scan_ner(ner_text)
+                # else: every regex-coverable field was masked and nothing
+                # alphabetic remained -- safe to skip the NER call entirely.
+            elif use_entropy_gate and regex_hits:
+                pass  # whole-line tiered strategy: skip NER if regex already found something
             else:
                 pred += detect.scan_ner(text)
 
@@ -138,6 +231,10 @@ if __name__ == "__main__":
 
     per_type, elapsed = run_evaluation(entries, use_ner=True, use_entropy_gate=True)
     summarize(per_type, len(entries), elapsed, "Regex + NER (tiered: NER only when regex found nothing)")
+
+    per_type, elapsed = run_evaluation(entries, use_ner=True, use_field_gate=True)
+    summarize(per_type, len(entries), elapsed,
+              "Regex + NER (field-gated: NER skipped only for regex-covered fields, not whole lines)")
 
     per_type, elapsed = run_evaluation(entries, use_ner=True, use_entropy_gate=False)
     summarize(per_type, len(entries), elapsed, "Regex + NER (naive: NER on every line)")

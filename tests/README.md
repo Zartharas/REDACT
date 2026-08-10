@@ -34,6 +34,20 @@ actually matters: a token minted before a `TOKEN_KEY` rotation still
 resolves correctly after it, because `TokenStore` reversibility is
 lookup-table-based, not key-based.
 
+**Covered** (`test_field_level_gate.py`, runs in CI on every push): the
+field-level NER gate added to `src/evaluate.py`
+(`_mask_regex_covered_fields`, `run_evaluation(..., use_field_gate=True)`)
+-- the engineering upgrade meant to close the documented PERSON recall
+gap between the whole-line "tiered" strategy (0.127) and "naive" (0.404).
+Monkeypatches `detect.scan_ner` to a recording stub rather than the real
+spaCy/Presidio model (same reason as `test_service_auth.py` below: no
+model download possible in this environment), so what's actually verified
+here is the masking mechanics -- which characters get masked before NER
+runs, and when the NER call is skipped entirely vs. made -- not real
+recall numbers. Real recall/throughput numbers for this configuration
+need a live `python src/evaluate.py` run against the full corpus with
+the model available; not claimed as already measured.
+
 **Covered** (`test_service_auth.py`, runs in CI on every push): the
 `X-Redact-Api-Key` auth check added to `src/service.py` -- `/health`
 stays open, `/anonymize` rejects a missing or wrong key with 401, and
