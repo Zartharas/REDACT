@@ -25,6 +25,19 @@ FROM logstash:8.15.0
 
 RUN bin/logstash-plugin install logstash-output-opensearch
 
+# Added 2026-08-10 (ROADMAP item 12, the queue-decoupled ingestion path):
+# logstash-output-redis, used by logstash-pipeline-queued.conf's `redis`
+# output block. Confirmed via elastic.co's own plugin documentation and
+# the logstash-plugins GitHub org (the official maintainer, same as
+# logstash-output-opensearch above) that this is NOT bundled in the base
+# logstash:8.15.0 image by default and needs this same explicit install
+# step. Only used by the "queued" Compose profile's logstash-queued
+# service -- the default logstash service (redact-pipeline.conf) never
+# calls the redis output block, so installing this plugin doesn't change
+# that service's behavior, just adds it to the same built image both
+# services share.
+RUN bin/logstash-plugin install logstash-output-redis
+
 RUN rm -f /usr/share/logstash/pipeline/logstash.conf
 
 COPY redact-pipeline.conf /usr/share/logstash/pipeline/redact-pipeline.conf

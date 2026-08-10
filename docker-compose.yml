@@ -81,7 +81,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: redact-service
+    # container_name and a fixed host port removed, 2026-08-10 (ROADMAP
+    # item 12): Compose refuses to scale a service that declares a fixed
+    # container_name ("Cannot scale service ... container name conflict"),
+    # and a fixed host-side port mapping ("8080:8080") would collide the
+    # moment a second replica tried to bind the same host port. Neither
+    # is needed for the pipeline itself -- logstash and the redact-lb
+    # proxy below both reach this service over redact-net using Compose's
+    # internal DNS (the service name "redact-service" resolves to every
+    # healthy replica's container IP), never via the host. Ad hoc manual
+    # testing (curl'ing /anonymize directly from the host, as this
+    # project's own BUGS_AND_FIXES.md live-debugging sessions did
+    # throughout) now needs `docker compose exec redact-service curl
+    # localhost:8080/health` (or similar, naming one specific replica)
+    # instead of `curl localhost:8080` from the host directly -- a real,
+    # disclosed tradeoff of enabling scaling, not an oversight.
     environment:
       - REDACT_PSEUDO_KEY=${REDACT_PSEUDO_KEY:?set a real key in .env, do not use a default}
       - REDACT_AUDIT_KEY=${REDACT_AUDIT_KEY:?set a real key in .env, do not use a default}
@@ -101,8 +115,8 @@ services:
       - REDACT_TOKEN_STORE_PATH=/app/output/token_store.json
     volumes:
       - redact-output:/app/output
-    ports:
-      - "8080:8080"
+    # No host port mapping (see comment above) -- reachable only over
+    # redact-net now, from logstash, redact-lb, and queue-consumer.
     networks:
       - redact-net
     healthcheck:
@@ -111,6 +125,149 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+
+  # Reverse proxy in front of the (now scalable) redact-service pool,
+  # 2026-08-10, ROADMAP item 12's "real reverse proxy/load balancer in
+  # front" option. Why this instead of relying on Compose's own embedded
+  # DNS round-robin directly: Docker's embedded DNS (127.0.0.11) DOES
+  # return every healthy replica's IP for the service name
+  # "redact-service" when scaled, but whether a given HTTP client
+  # actually round-robins across those IPs depends on whether it
+  # re-resolves DNS per request or per connection -- a client that opens
+  # one persistent/pooled connection and reuses it (keepalive) will keep
+  # talking to whichever single replica it first resolved, silently
+  # defeating the load-balancing this item exists to test. nginx's
+  # `resolver 127.0.0.11 valid=5s` + a variable in `proxy_pass` is the
+  # standard, documented technique for forcing periodic re-resolution
+  # inside a container on Docker's own network, giving actual
+  # request-level distribution across replicas rather than a
+  # connection-level accident. See logstash/nginx-lb.conf for the config
+  # itself. NOT YET VERIFIED against a live multi-replica run in this
+  # sandbox (no Docker daemon here) -- needs the user's machine, same as
+  # every other Docker Compose claim in this project.
+  redact-lb:
+    image: nginx:1.27-alpine
+    depends_on:
+      - redact-service
+    volumes:
+      - ./logstash/nginx-lb.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - redact-net
+
+  # Redis, 2026-08-10 (ROADMAP item 12): backs the queued ingestion path
+  # (redact:raw-events list, see logstash/redact-pipeline-queued.conf and
+  # src/queue_consumer.py). NOT currently wired up as redact-service's
+  # own TokenStore backend -- RedisStorageProvider (src/anonymize.py) is
+  # fully implemented and verified against a live Redis instance for
+  # both single- and multi-process safety (Bug 14/ROADMAP item 6), but
+  # src/service.py has no env-var-driven way to select it yet; it always
+  # uses FileStorageProvider today (see Dockerfile's own comment on this
+  # same gap, found while wiring up this queue). Not started by
+  # default (see the "queued" profile below) since the synchronous
+  # pipeline this stack has always used doesn't need it.
+  redis:
+    image: redis:7-alpine
+    networks:
+      - redact-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Queue-decoupled ingestion path, 2026-08-10 (ROADMAP item 12) -- an
+  # ALTERNATIVE to the synchronous logstash service below, not a
+  # replacement for it. Both `logstash` (default, always starts) and
+  # this profile's services can point at the same raw log files and the
+  # same redact-service pool; they are not meant to run against the same
+  # input files at the same time (that would double-process every line).
+  # Activate with `docker compose --profile queued up` instead of the
+  # default `docker compose up`.
+  #
+  # WHY A QUEUE, AND WHY THIS SHAPE SPECIFICALLY: the synchronous
+  # logstash service's http filter blocks each of its pipeline.workers
+  # threads on a full round trip to redact-service per event -- this
+  # project's own load testing (100,000 and 1,000,000-line runs,
+  # BUGS_AND_FIXES.md) confirmed redact-service's per-request cost
+  # (CPU-bound NER) is the actual bottleneck, not Logstash itself, so a
+  # burst of input just backs up through Logstash's own pipeline with no
+  # buffering. Publishing raw events to a queue instead lets ingestion
+  # (reading the log files) run at its own pace, decoupled from
+  # anonymization throughput, and a burst queues rather than stalls.
+  #
+  # WHY A REDIS LIST (RPUSH/BLPOP), NOT REDIS STREAMS, DESPITE THE
+  # ROADMAP TEXT NAMING STREAMS FIRST: verified via Logstash's own plugin
+  # documentation (elastic.co/guide, 2026-08-10) that the OFFICIAL
+  # logstash-output-redis plugin supports only `data_type => list`
+  # (RPUSH) or `channel` (PUBLISH) -- it does NOT support XADD/Streams.
+  # A separate, unofficial plugin (logstash-output-redis-streams, from
+  # redis-field-engineering, not the logstash-plugins org, low visible
+  # adoption at time of writing) does exist and claims XADD support
+  # installable via `bin/logstash-plugin install`, but it hasn't been
+  # verified live in this environment (no Docker daemon in this
+  # sandbox), and given this exact project's own hard-earned lesson this
+  # session (a one-character Logstash config mistake silently crashed
+  # the whole pipeline for hours before being caught -- see Bug 16,
+  # BUGS_AND_FIXES.md) it would be dishonest to build the "closed for
+  # good" queue path on an unverified third-party plugin. A plain Redis
+  # list, written via the OFFICIAL plugin, is the lower-risk choice that
+  # still achieves the actual architectural goal (decoupling ingestion
+  # rate from anonymization throughput). DISCLOSED, REAL TRADEOFF versus
+  # true Streams: BLPOP removes an item from the list the instant a
+  # consumer pops it -- if that consumer then crashes before finishing
+  # (calling redact-service, writing to OpenSearch), that one event is
+  # lost, not redelivered. Redis Streams' consumer groups
+  # (XREADGROUP/XACK/XPENDING/XCLAIM) exist specifically to survive that
+  # case and are the documented next step if logstash-output-redis-streams
+  # gets verified working -- src/queue_consumer.py's own docstring has
+  # the concrete migration path. Multiple redact-lb/redact-service
+  # replicas are NOT protected from this either way; it's specific to
+  # the queue's delivery guarantee, not the detection/anonymization path.
+  logstash-queued:
+    build:
+      context: ./logstash
+      dockerfile: Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDACT_QUEUE_KEY=${REDACT_QUEUE_KEY:-redact:raw-events}
+    volumes:
+      - ./data/raw:/var/log/security:ro
+      - ./logstash/redact-pipeline-queued.conf:/usr/share/logstash/pipeline/redact-pipeline.conf:ro
+    networks:
+      - redact-net
+    profiles: ["queued"]
+
+  queue-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python3", "src/queue_consumer.py"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      redact-lb:
+        condition: service_started
+      opensearch:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDACT_QUEUE_KEY=${REDACT_QUEUE_KEY:-redact:raw-events}
+      - REDACT_SERVICE_URL=http://redact-lb:8080/anonymize
+      - REDACT_SERVICE_API_KEY=${REDACT_SERVICE_API_KEY:?set a real key in .env, do not use a default}
+      - OPENSEARCH_HOST=http://opensearch:9200
+    networks:
+      - redact-net
+    profiles: ["queued"]
+    # Scale with: docker compose --profile queued up --scale queue-consumer=N
+    # BLPOP against the same Redis key is atomic per Redis's own semantics
+    # (a given list element is delivered to exactly one popping client),
+    # so N consumer processes correctly load-balance the queue with zero
+    # extra coordination -- no consumer-group setup needed for THIS
+    # guarantee specifically, only for the crash-redelivery guarantee
+    # disclosed above, which BLPOP genuinely does not provide.
 
   logstash:
     build:
@@ -122,8 +279,20 @@ services:
         condition: service_healthy
       redact-service:
         condition: service_healthy
+      redact-lb:
+        condition: service_started
     environment:
-      - REDACT_SERVICE_URL=http://redact-service:8080/anonymize
+      # Changed 2026-08-10 (ROADMAP item 12) from a direct
+      # http://redact-service:8080 URL to the redact-lb nginx proxy in
+      # front of the (now scalable) redact-service pool -- see redact-lb's
+      # own comment above for why a real proxy was added instead of
+      # relying on Compose's embedded DNS round-robin directly. Running
+      # with a single redact-service replica (the default,
+      # `docker compose up` with no --scale flag) behaves identically to
+      # before this change -- redact-lb just adds one extra network hop
+      # to a single upstream in that case. The benefit only shows up when
+      # scaled: `docker compose up --build --scale redact-service=3`.
+      - REDACT_SERVICE_URL=http://redact-lb:8080/anonymize
       - REDACT_SERVICE_API_KEY=${REDACT_SERVICE_API_KEY:?set a real key in .env, do not use a default}
       - OPENSEARCH_HOST=http://opensearch:9200  # http, not https, matching
                                                   # DISABLE_SECURITY_PLUGIN above

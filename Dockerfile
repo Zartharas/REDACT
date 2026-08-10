@@ -22,9 +22,30 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
+COPY requirements.txt requirements-redis.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-redis.txt \
     && python -m spacy download en_core_web_lg
+# requirements-redis.txt added to the base install, 2026-08-10 (ROADMAP
+# item 12): this same image now also runs src/queue_consumer.py
+# (docker-compose.yml's queue-consumer service, `command:
+# ["python3", "src/queue_consumer.py"]`), which needs the redis package
+# unconditionally -- not "only where you're actually configuring Redis"
+# the way requirements-redis.txt's own header comment describes for
+# RedisStorageProvider, since queue-consumer's whole job is reading from
+# Redis. Checked while writing this comment, worth stating plainly since
+# it's a real, separate, pre-existing gap this change doesn't touch:
+# src/service.py has no env-var-driven way to select RedisStorageProvider
+# at all right now -- it always calls
+# `anonymize.TokenStore(TOKEN_STORE_PATH, ...)` with a bare path, which
+# anonymize.py's own TokenStore.__init__ auto-wraps in FileStorageProvider
+# for backward compatibility (see anonymize.py). RedisStorageProvider is
+# fully implemented and verified (Bug 14/ROADMAP item 6, live multi-
+# process testing) but only ever exercised directly by validation
+# scripts, never wired up as a redact-service runtime option. Installing
+# the redis package here does NOT change that -- it's needed for
+# queue_consumer.py only. Wiring an actual env-var switch into
+# service.py is a separate, real, not-yet-done task, not implied by
+# anything in this Dockerfile change.
 
 FROM python:3.12-slim
 
@@ -109,4 +130,14 @@ EXPOSE 8080
 # --preload was deliberately not used here). This means worker_count x
 # model-memory at steady state -- size the container's memory limit
 # accordingly, not just for one copy of the model.
-CMD ["sh", "-c", "gunicorn --chdir src --workers $(nproc) --bind 0.0.0.0:8080 --timeout 60 service:app"]
+# --access-logfile - added 2026-08-10 (ROADMAP item 12): with
+# container_name no longer fixed (see docker-compose.yml's redact-service
+# comment -- required to allow --scale), Compose auto-names each replica
+# distinctly (e.g. redact-..._redact-service-1, -2, -3), and each
+# replica's own `docker compose logs` output now shows a gunicorn access
+# log line per request it actually handled. That's the direct,
+# verifiable evidence for "did redact-lb's nginx proxy actually
+# distribute requests across all replicas, or did they all land on one"
+# -- without this flag there was no way to answer that question short of
+# adding new instrumentation.
+CMD ["sh", "-c", "gunicorn --chdir src --workers $(nproc) --bind 0.0.0.0:8080 --timeout 60 --access-logfile - service:app"]
