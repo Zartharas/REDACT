@@ -28,3 +28,10 @@ validation/load_test/results/
 # as validation/real_data/'s Loghub logs (*.log, already ignored above),
 # not checked into the repo.
 validation/real_name_frequency/raw/*.zip
+
+# One-off 100K-line synthetic corpus generated for the field-gated
+# throughput follow-up (run_100k_throughput_check.sh) -- same fixed-seed
+# regeneration pattern as data/load_test_corpus_*.jsonl above, not the
+# canonical corpus (data/synthetic_logs.jsonl), so it doesn't need to be
+# tracked either.
+data/synthetic_logs_100k.jsonl
