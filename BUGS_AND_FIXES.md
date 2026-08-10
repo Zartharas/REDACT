@@ -1296,6 +1296,60 @@ the chapter, break it down by detected type
 (`redact_detections_total{type=...}` via the Prometheus metrics endpoint
 added earlier this session) rather than citing the aggregate count alone.
 
+**Verified directly, same day, rather than left as a plausible
+explanation.** A live OpenSearch aggregation against the actual
+2026-08-10 run (`redact-audit-trail-*`, `audit_event.field_type.keyword`,
+terms agg) confirmed the buckets sum to exactly 893,150 -- matching the
+reconciled total precisely, so the numbers are trustworthy despite
+`terminated_early: true` in the response (that flag looked like a repeat
+of Bug 13's silent-cap failure at first; it wasn't -- the exact bucket-sum
+match rules that out here). Breakdown: `IP` 500,631, `PERSON` 267,018,
+`EMAIL` 50,575, `CREDIT_CARD` 25,176, `SSN` 24,980, `MRN` 24,770 -- a
+29.90% PERSON share of all detections.
+
+`validation/load_test/verify_type_breakdown.py` (new this session) then
+independently reproduced this locally: sampled 3,000 lines per log type
+from the same seeded raw corpus still on disk from the 1,000,000-line
+run, ran both `detect_all` (naive) and `detect_all_field_gated` on
+identical text, and tallied by type. **First pass surfaced a second real
+finding, not a bug in the underlying detection code:** naive's
+regex-covered-type counts (IP/EMAIL/SSN/CREDIT_CARD/MRN) came back at
+almost exactly 2x field-gated's. Root cause: `scan_ner()`'s Presidio
+`AnalyzerEngine.analyze()` call requests
+`entities=list(_PRESIDIO_TO_CANONICAL.keys())` (`src/detect.py:66`),
+which includes `EMAIL_ADDRESS`/`IP_ADDRESS`/`US_SSN`/`CREDIT_CARD`, not
+just `PERSON` -- Presidio's own built-in recognizers for those types
+independently re-detect the same substrings this project's own
+`scan_regex()` already caught, any time NER runs on text that still
+contains them. `detect_all` (naive) calls `scan_ner` on the full
+original line every single time, so every regex-covered value picks up a
+same-type overlapping duplicate hit from Presidio's built-in recognizer
+on top of `scan_regex`'s own hit; `detect_all_field_gated`'s
+`build_ner_candidate` excises exactly those spans before calling
+`scan_ner`, so Presidio's built-in recognizers never see that text there
+and can't produce the duplicate. This is not a production bug --
+`src/service.py`'s real pipeline (line 257-259) already filters
+`HIGH_ENTROPY` and calls `anonymize.dedup_spans()` before anything is
+counted or audited, which collapses same-type overlapping spans down to
+one and erases this exact artifact -- but it meant the verification
+script's first pass was measuring raw, pre-dedup ensemble output instead
+of what's actually audited, and needed the identical two-step filter
+`service.py` uses to be a fair comparison. Fixed the same way, same day.
+
+**Confirmed, second pass, matching `service.py`'s real pipeline exactly:**
+every regex-covered type came back byte-identical between naive and
+field-gated (as expected by construction once dedup is applied). PERSON
+-- the only type that can actually differ -- came back naive=2,391 vs.
+field-gated=2,346 on the local sample (a 1.9% gap, field-gated's PERSON
+share 29.08% vs. naive's 29.47%), closely bracketing the live production
+run's 29.90% PERSON share. All three numbers (local naive, local
+field-gated, live production) cluster within about 1-3 percentage points
+of each other -- direct, independently reproduced confirmation that the
+893,150 exact match is a real consequence of recall parity between the
+two detection strategies on this corpus, not evidence that field-gating
+silently failed to engage in production, closing the question this
+section originally left open.
+
 **Throughput note, stated with the same hedging this project's own A/B
 test (same session) earned the hard way:** 439.4 lines/sec end-to-end is
 notably higher than the 2026-08-08 run's ~224 lines/sec. This is a
