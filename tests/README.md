@@ -36,23 +36,37 @@ lookup-table-based, not key-based.
 
 **Covered** (`test_field_level_gate.py`, runs in CI on every push): the
 field-level NER gate added to `src/evaluate.py`
-(`_mask_regex_covered_fields`, `run_evaluation(..., use_field_gate=True)`)
--- the engineering upgrade meant to close the documented PERSON recall
-gap between the whole-line "tiered" strategy (0.113) and "naive" (0.359).
-Monkeypatches `detect.scan_ner` to a recording stub rather than the real
-spaCy/Presidio model (same reason as `test_service_auth.py` below: no
-model download possible in this environment), so what's actually verified
-here is the masking mechanics -- which characters get masked before NER
-runs, and when the NER call is skipped entirely vs. made -- not real
-recall numbers. **Real numbers now exist, run by the user locally
-2026-08-09** (`python src/evaluate.py` against the full corpus with the
-real model): the recall fix works as designed (0.356, nearly matching
-naive), but the throughput-preservation claim this design started with
-did NOT hold up -- field-gated measured slower than naive (~100 vs. ~119
-events/sec), not faster, because the "skip NER entirely" path this
-depends on rarely fires in practice. Full numbers and root-cause
-reasoning in README.md's comparison table and
-`_mask_regex_covered_fields`'s own updated docstring.
+(`_build_ner_candidate`, `_remap_hit`, `run_evaluation(...,
+use_field_gate=True)`) -- the engineering upgrade meant to close the
+documented PERSON recall gap between the whole-line "tiered" strategy
+(0.113) and "naive" (0.359). Two implementations, both same day
+(2026-08-09), both mentioned here since the second replaced the first:
+
+1. First implementation (`_mask_regex_covered_fields`, now superseded):
+   replaced regex-covered field spans with same-length `#` placeholders.
+   Run by the user locally against the real model: the recall fix worked
+   (0.356, nearly matching naive), but the throughput-preservation claim
+   it was designed for did NOT hold up -- measured slower than naive
+   (~100 vs. ~119 events/sec), not faster, because same-length masking
+   doesn't reduce what spaCy has to process, and the one path that could
+   skip the NER call entirely rarely fires on lines that actually contain
+   a PERSON.
+2. Second implementation (`_build_ner_candidate` + `_remap_hit`), built
+   the same day specifically to fix that: excises (removes) regex-covered
+   spans instead of masking them, so the candidate passed to NER is
+   actually shorter, with offsets remapped back to the original line's
+   coordinates afterward. This file's tests were rewritten to match --
+   confirming candidates are measurably shorter when something is
+   excised, and, the correctness-critical piece, that offsets round-trip
+   back to the exact original substring (including the non-trivial case
+   of a hit sitting after an excised span). Monkeypatches `detect.scan_ner`
+   to a recording stub rather than the real spaCy/Presidio model (same
+   reason as `test_service_auth.py` below: no model download possible in
+   this environment), so what's verified here is the excision/remapping
+   mechanics, not real recall/throughput numbers for this second version
+   -- those need a fresh `python src/evaluate.py` run with the model
+   available, not yet done. Full history and reasoning in README.md's
+   comparison table and `_build_ner_candidate`'s own docstring.
 
 **Covered** (`test_vault_storage_provider.py`, runs in CI on every
 push): `VaultStorageProvider` and its CAS-based `_VaultLockContext`
