@@ -211,6 +211,8 @@ Verified by actually running the service and sending it requests, not just confi
 
 **What's real vs. what's still unverified in `logstash/redact-pipeline.conf`:** the service it calls has been run and tested directly, output confirmed. The Logstash config itself has since been run against a live Logstash 8.15.0 instance (a Docker-capable environment became available after this section was originally written) — repeatedly, end to end, against all 10,000 synthetic lines at once. That testing found and fixed seven real bugs, including two that silently destroyed or misrouted the majority of events while returning `200 OK` on every request, no crash or error to signal anything was wrong. Full details, root causes, and fixes live in `BUGS_AND_FIXES.md`. Notably, the original design used the `clone` and `split` filters for the audit-trail fan-out; `clone` turned out not to deep-copy the `[tags]` array reliably under this pipeline's `ecs_compatibility => v8` setting, and got replaced with a hand-rolled `ruby` filter using `event.clone` instead (Bug 5 in that file). Confirm both filters' current documented behavior against your own installed Logstash version before relying on any of this in production — this was tested against one specific version, on one machine, not across the plugin's whole version history.
 
+**Engineering upgrade, not yet re-verified live:** `redact-service` now requires an `X-Redact-Api-Key` header on every route except `/health` (see `src/service.py`'s `_require_api_key`, checked with `hmac.compare_digest` for constant-time comparison) — it previously had no authentication at all, meaning anything on the Docker network that could reach port 8080 could call `/anonymize` directly. `redact-pipeline.conf`'s `http` filter now sends this header, sourced from the same `REDACT_SERVICE_API_KEY` env var `docker-compose.yml` wires into both containers. The auth check itself is unit-tested (`tests/test_service_auth.py`, no Docker needed — mocks the spaCy analyzer to test the auth layer in isolation), but the header actually flowing correctly through a live Logstash `http` filter under this pipeline's `ecs_compatibility => v8` setting has **not** been re-confirmed against a real Docker Compose run yet, the same "run it and check" standard every other claim in this file is held to. Worth a full stack rerun before trusting this in anything beyond a dev environment.
+
 ## Taxonomy drift detection (Section 3.3)
 
 ```bash
@@ -251,6 +253,9 @@ One real API correction turned up along the way: the chapter's original DAG skel
 python src/export_raw_logs.py                 # splits the JSONL corpus into per-source raw files
 echo "REDACT_PSEUDO_KEY=$(openssl rand -hex 32)" > .env
 echo "REDACT_AUDIT_KEY=$(openssl rand -hex 32)" >> .env
+echo "REDACT_SERVICE_API_KEY=$(openssl rand -hex 32)" >> .env
+echo "REDACT_FINGERPRINT_KEY=$(openssl rand -hex 32)" >> .env
+echo "REDACT_TOKEN_KEY=$(openssl rand -hex 32)" >> .env
 docker compose up --build
 ```
 

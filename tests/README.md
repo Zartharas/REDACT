@@ -27,6 +27,15 @@ check. All deterministic, no Docker, no spaCy, no network.
 Redis service container): the Redis `StorageProvider` correctness tests —
 skipped automatically if no Redis is reachable.
 
+**Covered** (`test_service_auth.py`, runs in CI on every push): the
+`X-Redact-Api-Key` auth check added to `src/service.py` -- `/health`
+stays open, `/anonymize` rejects a missing or wrong key with 401, and
+accepts the correct one. Tests this without a live Docker stack or the
+real spaCy model by monkeypatching `detect._get_analyzer()` to a no-op
+before importing `service` (see that file's own docstring for why that's
+needed: `service.py` calls the analyzer warmup at module level, on
+purpose, so it can't just be skipped by importing under `__main__`).
+
 **Not covered here, deliberately** — these are real, verified parts of
 this project (see `BUGS_AND_FIXES.md` and `ROADMAP.md` for their own
 verification history), just not practical to run on every push from a

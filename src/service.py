@@ -17,6 +17,7 @@ Then POST to http://localhost:8080/anonymize with body:
 import sys
 import os
 import json
+import hmac
 
 sys.path.insert(0, os.path.dirname(__file__))
 import detect      # noqa: E402
@@ -28,6 +29,21 @@ from flask import Flask, request, jsonify  # noqa: E402
 app = Flask(__name__)
 
 POLICY_VERSION = "redact-v0.1"
+# Engineering upgrade, added after the original build-and-verify pass:
+# /anonymize had no authentication at all -- anything on the network that
+# could reach this port could call it. Low real risk in the single-machine
+# demo topology this project has verified so far (see BUGS_AND_FIXES.md),
+# but exactly the kind of gap that's cheap to close now and expensive to
+# retrofit once there's more than one caller. A shared-secret header,
+# checked with hmac.compare_digest (constant-time, so response timing
+# doesn't leak how many leading characters of the key were correct) --
+# not a full auth system (OAuth, mTLS), since this service is meant to sit
+# behind Logstash on a private network, not be internet-facing; a bearer
+# token that Logstash's http filter sends on every request is proportional
+# to that threat model. /health is deliberately exempt (see the check
+# inside the route below) so Docker Compose's healthcheck, which only
+# calls /health and doesn't know about this key, keeps working unchanged.
+SERVICE_API_KEY = os.environ.get("REDACT_SERVICE_API_KEY", "demo-service-api-key-do-not-use-in-prod")
 PSEUDO_KEY = os.environ.get("REDACT_PSEUDO_KEY", "demo-pseudonymization-key-do-not-use-in-prod")
 AUDIT_KEY = os.environ.get("REDACT_AUDIT_KEY", "demo-audit-signing-key-do-not-use-in-prod")
 # Deliberately a separate key from AUDIT_KEY: the audit-signing key authenticates
@@ -72,6 +88,24 @@ TOKEN_STORE_SAVE_EVERY = int(os.environ.get("REDACT_TOKEN_STORE_SAVE_EVERY", "25
 os.makedirs(os.path.dirname(TOKEN_STORE_PATH) or ".", exist_ok=True)
 _store = anonymize.TokenStore(TOKEN_STORE_PATH, token_key=TOKEN_KEY,
                                save_every_n_calls=TOKEN_STORE_SAVE_EVERY)
+
+
+@app.before_request
+def _require_api_key():
+    # /health stays open (no key needed) so container healthchecks and
+    # uptime probes don't need to know a secret just to ask "are you up."
+    # Every other route requires a matching X-Redact-Api-Key header.
+    if request.path == "/health":
+        return None
+    provided = request.headers.get("X-Redact-Api-Key", "")
+    # compare_digest needs equal-length inputs to be meaningfully constant-
+    # time; comparing against the real key (not a fixed-length dummy) is
+    # still safer than == here since == short-circuits on the first
+    # mismatched byte, which is the actual timing side-channel this guards
+    # against.
+    if not hmac.compare_digest(provided, SERVICE_API_KEY):
+        return jsonify({"error": "missing or invalid X-Redact-Api-Key header"}), 401
+    return None
 
 
 @app.route("/health", methods=["GET"])

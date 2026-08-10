@@ -42,7 +42,7 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
       - name: Run fast validation suite
-        run: pytest tests/test_fast_validation.py -v
+        run: pytest tests/ -v -m "not needs_redis"
 
   redis-tests:
     runs-on: ubuntu-latest
