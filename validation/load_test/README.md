@@ -198,3 +198,72 @@ the mitigation-vs-fix distinction, and what's still open: Bug 15 in
 **Still open:** runs beyond 1,000,000 lines, to see how far the current
 fix's remaining O(n) compaction cost (now paid far less often, not
 eliminated) can be pushed before it becomes visible again.
+
+### 1,000,000 lines again, 2026-08-10: field-gated NER as the live default, a real Logstash config bug, then a clean PASS
+
+Rerun via `run_1m_load_test.sh` (repo root) to exercise everything added
+since the 2026-08-08 run: service auth, the non-root Dockerfile,
+Prometheus metrics, and — the actual point of this rerun — field-gated
+NER (`detect_all_field_gated`) wired into `service.py` as the default
+detection path, with `log_type` forwarded from Logstash's `http` filter
+to `redact-service` for the first time ever at this scale.
+
+**First attempt failed before a single line was processed.** The
+`http` filter's body hash gained a second key
+(`"log_type" => "%{log_type}"`) separated from the first by a comma —
+valid-looking Ruby/JSON syntax, a hard parse error in Logstash's own
+config DSL, which separates hash entries by whitespace only. Logstash
+crashed at startup; since the `logstash` service has no healthcheck,
+`docker compose ps` still reported it as running, and this script's own
+poll loop read three consecutive `total=0` readings as "stable,"
+reporting a fabricated `~5,208 lines/sec` for a run that had indexed
+nothing. `RECONCILIATION: FAIL` did catch the actual mismatch (expected
+1,000,000, got 0) — the throughput number above it just shouldn't have
+been trusted, and after this run wasn't. Root-caused via
+`docker compose logs logstash --tail 200` (not `redact-logstash` — that's
+the container name, not the Compose service name).
+
+**Fixed on three levels**, not just the one-line syntax fix: the comma
+was removed from `logstash/redact-pipeline.conf`; `run_load_test.sh`'s
+stability check now requires `TOTAL > 0` in addition to three consecutive
+identical readings (an all-zero "stable" reading no longer exits the
+poll loop early) and its throughput line is gated on
+`RECONCILE_STATUS`, printing `n/a` instead of a fabricated number when
+reconciliation didn't pass; and `run_1m_load_test.sh` now runs
+`bin/logstash --config.test_and_exit` as a pre-flight step, catching this
+exact class of mistake in seconds instead of after a full build-and-run
+cycle. Full writeup: Bug 16 in `BUGS_AND_FIXES.md`.
+
+**Clean rerun, same day:** pre-flight printed `Configuration OK` /
+`Logstash config syntax OK.`, then the full run completed —
+
+| Index | Expected | Actual | Result |
+|---|---|---|---|
+| `security-logs-anonymized-*` | 1,000,000 | **1,000,000** | exact |
+| `security-logs-quarantine-*` | 0 | **0** | exact |
+| `redact-audit-trail-*` | — | **893,150** | see note below |
+
+Wall clock 2,276s, **~439.4 lines/sec end-to-end**.
+
+**On the audit count matching 2026-08-08's exactly:** plausible, not
+alarming — the corpus generator is seeded (`Faker.seed(42)`), so both
+runs process the same 1,000,000 raw lines, and the majority of audit
+events come from regex-detected types (EMAIL, SSN, CREDIT_CARD, IP, MRN)
+that are identical between naive and field-gated detection. Only PERSON
+detections can differ, and this project's own real-data validation
+(`validation/real_data/`) already found field-gated's recall
+statistically indistinguishable from naive's after the key-prefix
+excision fix — an exact aggregate match is consistent with that, not
+independent proof of it. Breaking this down by detected type via the
+Prometheus `redact_detections_total{type=...}` metric would be needed
+before citing this number as direct evidence of detection parity.
+
+**On 439.4 vs. 224 lines/sec:** worth reporting, not worth concluding
+anything from on its own. This is a single, uncontrolled run on a
+different day against a different Docker Desktop session — image layer
+caching, host load, and ordinary run-to-run variance are all live
+confounds, and this project's own order-controlled A/B test (same
+session, see `tests/README.md`) already found field-gated and naive
+statistically indistinguishable at the algorithm level. Treat this as a
+data point pending a controlled rerun, not a claim that field-gating (or
+anything else) made the end-to-end pipeline faster.

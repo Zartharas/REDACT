@@ -1189,6 +1189,128 @@ as settled just because Bug 14 is.
 
 ---
 
+## 16. Logstash config hash literal using comma separators -- a hard parse error, invisible until the container was inspected directly
+
+**Found:** 2026-08-10, during the first attempt at rerunning the
+1,000,000-line load test with field-gated NER wired in as
+`redact-service`'s default detection path (see `src/detect.py`'s
+`detect_all_field_gated`). That change needed `log_type` forwarded from
+Logstash to `redact-service` for the first time ever at this scale, so
+`logstash/redact-pipeline.conf`'s `http` filter body was edited from a
+single-key hash to a two-key one:
+
+```
+# BROKEN -- comma between hash entries
+body => { "log" => "%{message}", "log_type" => "%{log_type}" }
+```
+
+This is valid Ruby and valid JSON, both of which use commas between
+hash/object entries -- and Logstash's config DSL looks enough like both
+that this reads as correct on sight. It isn't: Logstash config hash
+literals separate entries with whitespace only, no comma. The comma is a
+hard `LogStash::ConfigurationError` at pipeline startup, not a runtime
+warning.
+
+**Why this stayed invisible longer than it should have:** the `logstash`
+service in `docker-compose.yml` has no healthcheck, so a crashed pipeline
+still shows as `Up`/`Started` under `docker compose ps` -- there is
+nothing in Compose's own state that distinguishes "Logstash is running
+and processing events" from "Logstash's container process is alive but
+the pipeline inside it never started." The load test ran its full
+corpus-generation and stack-startup sequence, then polled OpenSearch for
+30-45 seconds, saw `anonymized=0 quarantine=0 total=0` on every single
+poll, and its own stability check -- three consecutive *identical*
+values -- read that as "ingestion has stabilized," not "ingestion never
+started." It exited "successfully," reconciliation printed
+`RECONCILIATION: FAIL` (expected 1,000,000 vs. actual 0, so the numeric
+check itself did catch the mismatch), but the throughput line above it
+still printed a fabricated `~5,208.3 lines/sec` computed from
+`elapsed_seconds` alone with no gate on whether reconciliation had
+actually passed -- exactly the kind of plausible-looking wrong number
+this project's `README.md` and this file both already warn against
+trusting.
+
+**Root cause, found by direct inspection, not guesswork:** `docker compose
+logs logstash --tail 200` (not `redact-logstash` -- that's the
+`container_name:`, not the Compose service name; the first attempt to
+check logs used the wrong one and got "no such service") showed the
+exact `LogStash::ConfigurationError` and line number pointing straight at
+the extra comma.
+
+**Fix, three parts, in order of when each one matters:**
+
+1. **The actual bug:** removed the comma —
+   `body => { "log" => "%{message}" "log_type" => "%{log_type}" }` — and
+   added an inline comment on this exact spot in
+   `logstash/redact-pipeline.conf` documenting the syntax rule, since it's
+   the only multi-key hash literal in the file and the next person editing
+   it (including a future instance of this project's own author) will hit
+   the same instinct to reach for a comma.
+2. **The load-test harness's blind spot:** `run_load_test.sh`'s stability
+   check now requires `TOTAL > 0` in addition to three consecutive
+   identical readings -- an all-zero "stable" reading no longer exits the
+   poll loop early, and a `PREV_TOTAL -eq 0` warning at the end of the
+   loop points directly at `docker compose logs logstash` instead of
+   letting the run fall through to a misleadingly clean-looking summary.
+   The throughput line itself is now gated on `RECONCILE_STATUS`: a
+   failed reconciliation prints `n/a (reconciliation did not pass...)`
+   instead of computing a number from wall-clock time alone.
+3. **Catching the next instance of this bug class before a full run, not
+   after:** `run_1m_load_test.sh` now runs
+   `docker compose run --rm logstash bin/logstash --config.test_and_exit
+   -f /usr/share/logstash/pipeline/redact-pipeline.conf` as an explicit
+   pre-flight step. This validates config syntax in seconds without
+   starting the pipeline or needing OpenSearch/`redact-service` reachable
+   at all -- the fastest possible feedback loop for this exact mistake,
+   and one that should run after any future edit to
+   `redact-pipeline.conf`, not just before a full load test.
+
+**Confirmed fixed, same day, full clean rerun:** `docker compose down -v`
+then `run_1m_load_test.sh` again -- pre-flight printed `Configuration OK`
+/ `Logstash config syntax OK.`, then the full 1,000,000-line run
+completed with `RECONCILIATION: PASS`:
+`security-logs-anonymized-*` = 1,000,000 exact,
+`security-logs-quarantine-*` = 0 exact,
+`redact-audit-trail-*` = 893,150,
+wall clock 2,276s, ~439.4 lines/sec end-to-end. This is this project's
+first 1,000,000-line run with field-gated NER as the live default
+detection path (see `src/detect.py` and `src/service.py`) and with
+`log_type` actually flowing through Logstash into `redact-service`
+end-to-end, not just unit- and evaluation-script-tested in isolation.
+
+**Read the 893,150 audit-trail count carefully before assuming it proves
+field-gating changed nothing:** it is identical, to the exact digit, to
+the 2026-08-08 1,000,000-line run's audit count (see Bug 15 above), which
+predates field-gating entirely. That's plausible, not alarming: the
+corpus generator is seeded (`Faker.seed(42)`), so the same 1,000,000 raw
+lines exist in both runs, and the large majority of audit events come
+from regex-detected types (EMAIL, SSN, CREDIT_CARD, IP, MRN) that are
+byte-for-byte identical between the naive and field-gated detection
+paths -- only PERSON detections can differ, and this project's own
+extensive same-session real-data validation (`validation/real_data/`)
+already found field-gated's recall statistically indistinguishable from
+naive's after the key-prefix excision fix. An exact match at the
+aggregate level is consistent with that finding, not independent proof
+of it -- if this number needs to be relied on as evidence of parity in
+the chapter, break it down by detected type
+(`redact_detections_total{type=...}` via the Prometheus metrics endpoint
+added earlier this session) rather than citing the aggregate count alone.
+
+**Throughput note, stated with the same hedging this project's own A/B
+test (same session) earned the hard way:** 439.4 lines/sec end-to-end is
+notably higher than the 2026-08-08 run's ~224 lines/sec. This is a
+single, uncontrolled run against a different Docker Desktop session on a
+different day -- image layer caching, host machine load, and general
+run-to-run variance are all live confounds, and this project's own
+order-controlled A/B test earlier this session found field-gated and
+naive detection statistically indistinguishable at the algorithm level.
+Do not cite 439.4 vs. 224 lines/sec as evidence that field-gating (or
+anything else) made the pipeline faster without a controlled rerun
+isolating the variable -- it is reported here as a data point, not a
+conclusion.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same
