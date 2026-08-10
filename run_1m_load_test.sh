@@ -38,6 +38,25 @@ done
 echo "--- .env now has these keys set (values redacted) ---"
 sed 's/=.*/=<redacted>/' .env
 
+# Fast pre-flight, added 2026-08-10 after the first 1M-line attempt hit a
+# real Logstash config syntax error (a comma in a hash literal --
+# invalid Logstash DSL, valid-looking Ruby/JSON -- that crashed the whole
+# pipeline at startup, see logstash/redact-pipeline.conf's own comment on
+# the fix) that only surfaced after a ~90s image build and a full stack
+# startup, reported as a false "success" by the load test's own stability
+# poll (0/0/0/0 looked "stable" to it -- also since fixed, see
+# run_load_test.sh). Logstash's own --config.test_and_exit flag parses
+# the pipeline config without starting it or needing OpenSearch/
+# redact-service reachable at all -- catches exactly this class of
+# mistake in seconds instead of minutes, and should be run after any
+# future edit to redact-pipeline.conf, not just before a full load test.
+echo
+echo "--- Pre-flight: validating Logstash pipeline config syntax ---"
+docker compose build logstash
+docker compose run --rm logstash \
+  bin/logstash --config.test_and_exit -f /usr/share/logstash/pipeline/redact-pipeline.conf
+echo "Logstash config syntax OK."
+
 echo
 echo "--- Running the 1,000,000-line load test ---"
 ./validation/load_test/run_load_test.sh 1000000

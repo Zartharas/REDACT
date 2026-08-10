@@ -124,7 +124,21 @@ while true; do
     | python3 -c "import sys,json;print(json.load(sys.stdin).get('hits',{}).get('total',{}).get('value',0))" 2>/dev/null || echo 0)
   TOTAL=$((ANON + QUAR))
   echo "  poll $i: anonymized=${ANON} quarantine=${QUAR} total=${TOTAL}"
-  if [ "$TOTAL" -eq "$PREV_TOTAL" ]; then
+  # Real bug, found via the 1,000,000-line run, 2026-08-10: a broken
+  # Logstash config (a hard parse error at pipeline startup -- see
+  # logstash/redact-pipeline.conf's own history for the specific bug)
+  # crashed Logstash before it ever processed a single event. Every poll
+  # read anonymized=0, quarantine=0, total=0 -- three (then four)
+  # consecutive IDENTICAL values, which this loop's stability check
+  # couldn't distinguish from "ingestion genuinely finished." It exited
+  # "successfully" after 45s and the summary reported a nonsensical
+  # ~5,200 lines/sec for a run that indexed exactly nothing. Fixed:
+  # stability now additionally requires TOTAL > 0 -- an all-zero
+  # "stable" reading no longer exits the loop early; it keeps polling
+  # until the MAX_WAIT_SECONDS deadline instead, and the deadline
+  # message below makes that failure mode visible rather than silently
+  # reported as done.
+  if [ "$TOTAL" -eq "$PREV_TOTAL" ] && [ "$TOTAL" -gt 0 ]; then
     STABLE_COUNT=$((STABLE_COUNT + 1))
   else
     STABLE_COUNT=0
@@ -135,6 +149,12 @@ while true; do
     break
   fi
 done
+if [ "$PREV_TOTAL" -eq 0 ]; then
+  echo "  WARNING: poll loop ended with total=0 -- nothing was ever indexed." >&2
+  echo "  This usually means Logstash failed to start (a config error) or" >&2
+  echo "  never reached redact-service. Check 'docker compose logs logstash'" >&2
+  echo "  before trusting anything below this line." >&2
+fi
 END_TS=$(date +%s)
 ELAPSED=$((END_TS - START_TS))
 
@@ -150,7 +170,16 @@ python3 validation/load_test/reconcile.py | tee -a "$SUMMARY_FILE"
 RECONCILE_STATUS=${PIPESTATUS[0]}
 set -e
 
-THROUGHPUT=$(python3 -c "print(f'{${N} / ${ELAPSED}:.1f}')" 2>/dev/null || echo "n/a")
+# Guard against reporting a meaningless throughput number when
+# reconciliation didn't pass or nothing was ever indexed (RECONCILE_STATUS
+# nonzero, or the poll loop's own PREV_TOTAL=0 warning above) -- this is
+# exactly what silently reported ~5,200 "lines/sec" for the all-zero
+# 2026-08-10 run before this guard existed.
+if [ "$RECONCILE_STATUS" -eq 0 ]; then
+  THROUGHPUT=$(python3 -c "print(f'{${N} / ${ELAPSED}:.1f}')" 2>/dev/null || echo "n/a")
+else
+  THROUGHPUT="n/a (reconciliation did not pass -- see above, do not trust a throughput number from a failed run)"
+fi
 
 {
   echo ""
