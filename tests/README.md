@@ -48,6 +48,23 @@ recall numbers. Real recall/throughput numbers for this configuration
 need a live `python src/evaluate.py` run against the full corpus with
 the model available; not claimed as already measured.
 
+**Covered** (`test_vault_storage_provider.py`, runs in CI on every
+push): `VaultStorageProvider` and its CAS-based `_VaultLockContext`
+(`src/anonymize.py`) -- the engineering upgrade closing this project's
+previously-unimplemented Vault backend. No live Vault server is
+reachable from this environment, so these 8 tests inject a small fake
+`hvac` module into `sys.modules` (a minimal in-memory stand-in for
+Vault's KV v2 `read_secret_version`/`create_or_update_secret` API,
+including `cas` version-conflict behavior) rather than skip Vault
+coverage entirely. This verifies `VaultStorageProvider`'s own logic --
+load/save round trip, `save()` being a full replace rather than a merge,
+the lock correctly blocking a second concurrent holder and correctly
+force-acquiring a lock left stale by a simulated crashed process, and an
+end-to-end check through a real `TokenStore` -- against Vault's
+documented API surface. It does NOT confirm that surface behaves the way
+the fake assumes against a real Vault server; see
+`VaultStorageProvider`'s own docstring for that disclosure.
+
 **Covered** (`test_metrics.py`, runs in CI on every push): the Prometheus
 metrics added to `src/service.py` -- `/metrics` stays behind the same
 `X-Redact-Api-Key` check as `/anonymize` (unlike `/health`), the four

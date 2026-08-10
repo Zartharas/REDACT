@@ -1,0 +1,17 @@
+# Separate from requirements.txt, same pattern as requirements-redis.txt:
+# VaultStorageProvider (src/anonymize.py) is a production TokenStore
+# backend, not something every dev/test environment needs.
+# FileStorageProvider (the default) has no external dependency at all.
+# Install this only where you're actually configuring redact-service to
+# use Vault.
+#
+# STATUS: NOT verified against a live Vault instance in this project's
+# development environment -- see VaultStorageProvider's own class
+# docstring in src/anonymize.py for why (no network access to run a
+# Vault server here) and what WAS verified instead (its own logic,
+# against a mocked hvac client, in tests/test_vault_storage_provider.py).
+# Confirming this against a real Vault server -- KV v2 mounted, a token
+# with read/write/list on the configured path_prefix, CAS behavior on
+# create_or_update_secret -- is a real next step for whoever deploys
+# this, not something already done.
+hvac

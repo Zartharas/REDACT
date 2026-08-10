@@ -136,6 +136,119 @@ class _RedisLockContext:
         return False
 
 
+class _VaultLockContext:
+    """Optimistic-concurrency lock built on Vault KV v2's own CAS (check-
+    and-set) primitive, used by VaultStorageProvider.lock_for_save() --
+    the Vault-side counterpart to _FlockContext (file) and
+    _RedisLockContext (Redis) above, serving the same purpose: closing
+    the gap between one process's load() and its subsequent save() (see
+    StorageProvider.lock_for_save()'s own docstring).
+
+    Vault's KV v2 secrets engine has no native TTL/expiry primitive for
+    ordinary key-value writes the way Redis's SET ... PX does (Vault's
+    lease/TTL system belongs to its DYNAMIC secrets engines -- database
+    credentials, PKI certificates -- not plain KV data). This
+    implementation compensates with an explicit staleness check instead:
+    the lock record stores its own acquisition timestamp, and a lock
+    older than ttl_s is treated as abandoned (a crashed holder) and
+    force-acquired by the next caller, rather than blocking forever.
+    Acquisition uses Vault's `cas` parameter -- create_or_update_secret
+    only succeeds if the secret's CURRENT version matches the version
+    passed in -- which is what makes "check it's free, then take it"
+    atomic against a concurrent process doing the identical check at the
+    identical moment; without CAS, two processes could both read
+    "unlocked" and both believe they'd acquired it.
+
+    NOT verified against a live Vault instance in this environment (see
+    VaultStorageProvider's own class docstring for why) -- implemented
+    and reasoned through against Vault's documented KV v2 CAS semantics,
+    and exercised here with a mocked hvac client
+    (tests/test_vault_storage_provider.py), not confirmed against a real
+    Vault server's actual behavior.
+    """
+
+    def __init__(self, client, mount_point: str, lock_path: str,
+                 ttl_s: float = 10.0, acquire_timeout_s: float = 15.0):
+        import uuid
+        self._client = client
+        self._mount_point = mount_point
+        self._lock_path = lock_path
+        self._ttl_s = ttl_s
+        self._acquire_timeout_s = acquire_timeout_s
+        self._owner_token = uuid.uuid4().hex
+
+    def _read_lock(self):
+        import hvac.exceptions
+        try:
+            resp = self._client.secrets.kv.v2.read_secret_version(
+                path=self._lock_path, mount_point=self._mount_point,
+            )
+            return resp["data"]["data"], resp["data"]["metadata"]["version"]
+        except hvac.exceptions.InvalidPath:
+            return None, 0
+
+    def __enter__(self):
+        import time
+        deadline = time.monotonic() + self._acquire_timeout_s
+        delay = 0.05
+        while True:
+            data, version = self._read_lock()
+            is_free = (
+                not data
+                or not data.get("owner")
+                or (time.time() - float(data.get("acquired_at", 0))) > self._ttl_s
+            )
+            if is_free:
+                try:
+                    self._client.secrets.kv.v2.create_or_update_secret(
+                        path=self._lock_path,
+                        secret={"owner": self._owner_token, "acquired_at": time.time()},
+                        mount_point=self._mount_point,
+                        cas=version,
+                    )
+                    return self
+                except Exception:
+                    # Lost the race against a concurrent acquirer's own CAS
+                    # write between our read above and this write -- retry
+                    # from the top rather than assuming we hold the lock.
+                    pass
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"could not acquire Vault save-lock {self._lock_path!r} "
+                    f"within {self._acquire_timeout_s}s -- another process "
+                    f"may be stuck holding it, or Vault is unreachable"
+                )
+            time.sleep(delay)
+            delay = min(delay * 1.5, 0.5)  # capped exponential backoff
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Only release if this context still appears to hold it -- same
+        # "release only your own acquisition" principle
+        # _RedisLockContext's Lua release script enforces via an owner-
+        # token comparison. A lock we lost to another process's
+        # staleness-triggered force-acquisition should not be clobbered
+        # by our own late release.
+        data, version = self._read_lock()
+        if data and data.get("owner") == self._owner_token:
+            try:
+                self._client.secrets.kv.v2.create_or_update_secret(
+                    path=self._lock_path,
+                    secret={"owner": None, "acquired_at": 0},
+                    mount_point=self._mount_point,
+                    cas=version,
+                )
+            except Exception:
+                # Best-effort release. If this fails (e.g. a concurrent
+                # staleness-triggered force-acquisition landed between our
+                # read and this write), the staleness check on the NEXT
+                # acquire attempt is what actually protects correctness,
+                # not this release -- so a failed release here is not a
+                # correctness bug, only a lock that stays held slightly
+                # longer than necessary.
+                pass
+        return False
+
+
 def _overlaps(a: dict, b: dict) -> bool:
     return a["start"] < b["end"] and b["start"] < a["end"]
 
@@ -531,6 +644,111 @@ class RedisStorageProvider(StorageProvider):
             pipe.hset(self._reverse_key, mapping=new_reverse)
         pipe.execute()
         return True
+
+
+class VaultStorageProvider(StorageProvider):
+    """HashiCorp Vault-backed persistence via the KV v2 secrets engine --
+    the open-source, self-hostable secrets-store option this project's own
+    "Known limitations" section (README.md) named as not yet implemented,
+    alongside RedisStorageProvider above.
+
+    STATUS: NOT verified against a live Vault instance. Unlike
+    RedisStorageProvider (verified against a real Redis, both single- and
+    multi-process, see that class's own docstring), this environment has
+    no route to run a Vault server -- no network access to install or
+    download it, the same constraint documented throughout
+    BUGS_AND_FIXES.md for anything needing external infrastructure this
+    sandbox doesn't have. Implemented against Vault's documented KV v2
+    HTTP API and the `hvac` client library's documented behavior, and
+    exercised here with a mocked hvac client
+    (tests/test_vault_storage_provider.py) to verify THIS CLASS'S OWN
+    logic in isolation -- not the same thing as confirming it against a
+    real Vault server's actual behavior. Treat this the same way this
+    project treats every other environment-blocked claim: a real next
+    step for whoever deploys this against actual Vault infrastructure,
+    not something already confirmed working.
+
+    Design choices, and why they differ from RedisStorageProvider:
+    - One secret per direction (`{path_prefix}/forward`,
+      `{path_prefix}/reverse`), each holding the ENTIRE forward or
+      reverse map as that secret's data (a flat dict of string keys to
+      string values) -- not one Vault secret per token the way
+      RedisStorageProvider uses one Redis hash FIELD per token. Vault's
+      KV v2 write always replaces a secret's entire data at that path in
+      one new version; there is no per-field partial-write primitive the
+      way Redis's HSET offers. A one-secret-per-token design would
+      restore that granularity, but at the cost of a Vault LIST
+      operation plus N individual reads on every load() (KV v2 has no
+      "read every secret under this prefix in one call" primitive
+      either) -- worse for the frequent case (load() at process startup)
+      to optimize the less frequent one (an individual save()). This
+      implementation makes that tradeoff explicitly, not accidentally.
+    - save_incremental() is DELIBERATELY NOT overridden here (the base
+      class default applies -- always returns False). See
+      StorageProvider.save_incremental()'s own docstring: a provider
+      returning True is asserting it persisted the given batch in
+      O(batch size), not O(total store size). This provider cannot make
+      that claim honestly given the one-secret-per-direction design
+      above -- a "fake" incremental save here would just be save()'s own
+      O(n) read-then-write cost renamed, not a real fix, and asserting a
+      false performance property is exactly the kind of overstatement
+      this project's own standing directive is to avoid. TokenStore.save()
+      correctly falls back to its generic read-merge-write path via
+      load()/save() below when this returns False -- correct, just
+      without the O(batch size) speedup RedisStorageProvider's HSET path
+      and FileStorageProvider's WAL provide. A future one-secret-per-
+      token redesign could close this gap; not attempted here without a
+      real Vault instance available to verify the LIST-then-N-reads
+      load() path against.
+    """
+
+    def __init__(self, vault_addr: str, vault_token: "str | None" = None,
+                 mount_point: str = "secret", path_prefix: str = "redact/tokenstore"):
+        # Imported lazily, same pattern as RedisStorageProvider's `import
+        # redis` above and detect.py's presidio_analyzer import -- callers
+        # who never configure Vault shouldn't need hvac installed.
+        import hvac  # noqa: E402
+        self._hvac = hvac
+        self._client = hvac.Client(
+            url=vault_addr,
+            token=vault_token or os.environ.get("VAULT_TOKEN"),
+        )
+        self._mount_point = mount_point
+        self._forward_path = f"{path_prefix}/forward"
+        self._reverse_path = f"{path_prefix}/reverse"
+        self._lock_path = f"{path_prefix}/save-lock"
+
+    def _read_secret(self, path: str) -> dict[str, str]:
+        try:
+            resp = self._client.secrets.kv.v2.read_secret_version(
+                path=path, mount_point=self._mount_point,
+            )
+            return dict(resp["data"]["data"])
+        except self._hvac.exceptions.InvalidPath:
+            # Nothing written at this path yet -- e.g. the very first
+            # load() before any token has ever been minted. Same "empty,
+            # not an error" contract FileStorageProvider.load() and
+            # RedisStorageProvider.load() both already follow for their
+            # own not-yet-created cases.
+            return {}
+
+    def _write_secret(self, path: str, data: dict[str, str]) -> None:
+        self._client.secrets.kv.v2.create_or_update_secret(
+            path=path, secret=data, mount_point=self._mount_point,
+        )
+
+    def load(self) -> tuple[dict[str, str], dict[str, str]]:
+        return self._read_secret(self._forward_path), self._read_secret(self._reverse_path)
+
+    def save(self, forward: dict[str, str], reverse: dict[str, str]) -> None:
+        self._write_secret(self._forward_path, forward)
+        self._write_secret(self._reverse_path, reverse)
+
+    def lock_for_save(self):
+        # See _VaultLockContext's own docstring for the CAS-plus-
+        # staleness-check design and why Vault needs a different
+        # mechanism than Redis's native SET ... PX TTL.
+        return _VaultLockContext(self._client, self._mount_point, self._lock_path)
 
 
 class TokenStore:
