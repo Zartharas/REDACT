@@ -35,9 +35,76 @@ import re, json, random, sys, os, time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 import detect
+import fields
 from faker import Faker
 
 IP_RE = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
+
+# Engineering upgrade, 2026-08-09 (Task #10): extends this script to also
+# measure the field-gated condition against real data, not just naive.
+# Checking what fields.py would actually see on the real, unmodified
+# Loghub files (not a synthetic guess) surfaced a real gap two ways:
+#
+# 1. A raw Loghub line has a leading RFC3164 "Mon DD HH:MM:SS host "
+#    timestamp/hostname prefix before the syslog tag (confirmed against
+#    the actual OpenSSH_2k.log/Linux_2k.log content). fields.py's
+#    extract_fields_syslog is anchored at the start of the string, so
+#    this prefix means fields.py returns {} for essentially every RAW
+#    line -- field-gating never engages, and detect_all_field_gated()
+#    correctly, safely falls back to running NER on the full original
+#    line (see detect.build_ner_candidate's documented fallback), same
+#    as naive would. This is the honest, as-deployed-today result: THIS
+#    PROJECT'S OWN logstash/redact-pipeline.conf reads whole raw lines
+#    via a plain `file` input with no grok/timestamp-stripping filter
+#    before calling redact-service, so this raw-line condition is what a
+#    real deployment against unmodified syslog would actually see right
+#    now, not a worst-case strawman.
+# 2. Separately (found by fetching Linux_2k.log specifically), some
+#    daemons there use a PAM-decorated tag ("sshd(pam_unix)[19939]:")
+#    that _SYSLOG_TAG_RE didn't handle at all even once the header is
+#    stripped -- fixed in fields.py the same day (see
+#    validation/syslog_coverage_extension_round4_test.py for the
+#    dedicated regression coverage).
+#
+# _strip_syslog_header below simulates what a syslog-aware ingestion step
+# (e.g. Logstash's own grok SYSLOGTIMESTAMP+SYSLOGHOST patterns) WOULD
+# produce, so the field-gated condition can also be measured under that
+# more favorable, commonly-used real-world setup -- clearly labeled as a
+# simulation of a preprocessing step this project doesn't currently have
+# wired in, not a claim that it already does.
+_RFC3164_HEADER_RE = re.compile(r'^[A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+')
+
+
+def strip_syslog_header(line: str) -> tuple[int, str]:
+    """Returns (prefix_length, remainder) if `line` starts with a
+    standard RFC3164 "Mon DD HH:MM:SS host " header, else (0, line)
+    unchanged. Thunderbird's raw format does NOT match this (it uses a
+    much longer, dataset-specific custom header -- "- <epoch> <date>
+    <host> Mon DD HH:MM:SS <host>/<host> tag[pid]: ...", not standard
+    syslog), so this deliberately returns the line unchanged for
+    Thunderbird rather than guessing at a bespoke parser for one
+    dataset's own format -- the same "targeted, not general-purpose"
+    scoping this project's other fields.py patterns already use."""
+    m = _RFC3164_HEADER_RE.match(line)
+    if not m:
+        return 0, line
+    return m.end(), line[m.end():]
+
+
+def field_gate_engagement(entries, log_type: str, strip_header: bool = False) -> tuple[int, int]:
+    """Diagnostic, not scoring: how many lines does fields.py actually
+    recognize structure in at all (the precondition for field-gating to
+    do anything other than fall back to naive-equivalent behavior)? This
+    is the single most honest number for whether field-gating is doing
+    anything on a given real dataset, independent of whatever the
+    eventual recall/precision/timing numbers say."""
+    engaged = 0
+    for e in entries:
+        text = e['log']
+        _, body = strip_syslog_header(text) if strip_header else (0, text)
+        if fields.extract_fields(log_type, body):
+            engaged += 1
+    return engaged, len(entries)
 
 USER_FIELD_DATASETS = {
     'OpenSSH': re.compile(r'\buser (\w+)'),
@@ -96,7 +163,20 @@ def build_ip_only_corpus(name):
     ]
 
 
-def evaluate(entries, label, use_flattened=False):
+def evaluate(entries, label, use_flattened=False, field_gate_log_type=None,
+             strip_syslog_header_flag=False):
+    """field_gate_log_type: if set, uses detect.detect_all_field_gated()
+    instead of the naive scan_regex()+scan_ner() path -- the production
+    detection function src/service.py and src/pipeline.py now call by
+    default (see src/detect.py's detect_all_field_gated). strip_syslog_header_flag:
+    if True, strips a standard RFC3164 header (see strip_syslog_header
+    above) from each line before field-gating, and shifts the resulting
+    hit offsets back by the same constant amount before scoring against
+    gold spans recorded in the ORIGINAL (unstripped) line's coordinates --
+    a simple constant-offset shift is correct here because header
+    stripping removes one fixed-length CONTIGUOUS prefix, unlike
+    build_ner_candidate's own per-segment remapping, which handles
+    multiple, possibly non-adjacent excised spans."""
     tp = fp = fn = 0
     person_tp = person_fn = 0
     person_flat_tp = person_flat_total = 0
@@ -106,9 +186,33 @@ def evaluate(entries, label, use_flattened=False):
     t0 = time.perf_counter()
     for e in entries:
         gold = e['pii']
-        preds = detect.scan_regex(e['log']) + detect.scan_ner(e['log'])
-        if use_flattened:
-            preds = preds + detect.scan_flattened(e['log'])
+        if field_gate_log_type is not None:
+            text = e['log']
+            if strip_syslog_header_flag:
+                prefix_len, body = strip_syslog_header(text)
+            else:
+                prefix_len, body = 0, text
+            hits = detect.detect_all_field_gated(
+                body, log_type=field_gate_log_type, use_flattened=use_flattened
+            )
+            if prefix_len:
+                hits = [{**h, 'start': h['start'] + prefix_len,
+                         'end': h['end'] + prefix_len} for h in hits]
+            # detect_all_field_gated() always includes scan_entropy()
+            # internally (matching detect_all()'s own default), unlike
+            # the naive branch below, which -- in THIS script specifically
+            # -- never calls scan_entropy() at all. Gold spans here only
+            # ever carry PERSON/IP types, so an unfiltered HIGH_ENTROPY
+            # hit can never match anything and would just inflate FP,
+            # unfairly penalizing field-gated's precision against a naive
+            # baseline that was never exposed to that layer in this
+            # script. Filtered out here so the comparison stays scoped to
+            # what both conditions are actually being judged on.
+            preds = [h for h in hits if h['type'] != 'HIGH_ENTROPY']
+        else:
+            preds = detect.scan_regex(e['log']) + detect.scan_ner(e['log'])
+            if use_flattened:
+                preds = preds + detect.scan_flattened(e['log'])
         # De-duplicate overlapping same-type hits from different layers
         # (mirrors evaluate.py's run_evaluation): without this, two layers
         # correctly agreeing on the same real span gets the second one
@@ -195,8 +299,49 @@ if __name__ == '__main__':
         # than this project's own synthetic templates.
         evaluate(entries, f"{name} + flattened-username layer", use_flattened=True)
 
+        # Engineering upgrade, 2026-08-09 (Task #10): field-gated
+        # condition, using detect.detect_all_field_gated() -- the same
+        # function src/service.py and src/pipeline.py now call by
+        # default in production, not a separate research-only path.
+        # Two sub-conditions, both honestly labeled:
+        engaged_raw, total = field_gate_engagement(entries, 'syslog', strip_header=False)
+        print(f"  field-gate engagement (RAW, as this project's current "
+              f"logstash/redact-pipeline.conf would actually send it -- no "
+              f"header-stripping step exists there today): {engaged_raw}/{total} "
+              f"lines got real field structure ({engaged_raw/total:.1%}); the "
+              f"rest fall back to naive-equivalent full-line NER, per "
+              f"detect.build_ner_candidate's documented fallback")
+        evaluate(entries, f"{name} + field-gated (RAW, log_type=syslog)",
+                 field_gate_log_type='syslog')
+
+        engaged_stripped, total = field_gate_engagement(entries, 'syslog', strip_header=True)
+        if engaged_stripped != engaged_raw:
+            print(f"  field-gate engagement (RFC3164 header stripped, "
+                  f"SIMULATING a syslog-aware ingestion step this project "
+                  f"does not currently have wired in): {engaged_stripped}/{total} "
+                  f"lines got real field structure ({engaged_stripped/total:.1%})")
+            evaluate(entries, f"{name} + field-gated (header-stripped simulation, log_type=syslog)",
+                     field_gate_log_type='syslog', strip_syslog_header_flag=True)
+        else:
+            # Thunderbird's raw format doesn't match the standard RFC3164
+            # header shape strip_syslog_header looks for (it uses a much
+            # longer, dataset-specific custom prefix -- see that
+            # function's own docstring), so stripping had no effect here;
+            # skip the redundant second run rather than print two
+            # identical results as if they were independent findings.
+            print(f"  field-gate engagement (header-stripped): identical to RAW "
+                  f"({engaged_stripped}/{total}) -- {name}'s header doesn't match "
+                  f"the standard RFC3164 shape strip_syslog_header looks for, "
+                  f"so stripping had no effect; not re-run as a separate condition")
+
     for name in IP_ONLY_DATASETS:
         entries = build_ip_only_corpus(name)
         print(f"{name}: {len(entries)} lines, IP-only ground truth, "
               f"{sum(len(e['pii']) for e in entries)} IP spans")
         evaluate(entries, name)
+        # Field-gating deliberately NOT run here: these two datasets'
+        # ground truth is IP-only, and IP is a regex hit (scan_regex),
+        # never NER-dependent -- field-gating only changes what NER sees,
+        # so it cannot change this condition's result at all. Running it
+        # anyway would just reprint identical numbers under a different
+        # label, not a real additional data point.

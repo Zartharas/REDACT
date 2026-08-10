@@ -86,6 +86,19 @@ def test_syslog_coverage_round3():
     assert "ALL CHECKS PASSED" in result.stdout
 
 
+def test_syslog_coverage_round4():
+    """Task #10 (real-data validation) found this the hard way: fetching
+    the actual Loghub Linux_2k.log showed _SYSLOG_TAG_RE's own comment was
+    wrong about already covering it -- PAM-decorated tags like
+    "sshd(pam_unix)[19939]:" had no path through the old regex at all.
+    See validation/syslog_coverage_extension_round4_test.py's own
+    docstring for the full story, including a verbatim spot check against
+    the real line that surfaced this."""
+    result = run_script("validation/syslog_coverage_extension_round4_test.py", timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL CHECKS PASSED" in result.stdout
+
+
 def test_entropy_uuid_exclusion_regression():
     """Regenerates the entropy fair-test corpus (deterministic, Random(42))
     and checks the false-alarm rate stays at the post-UUID-exclusion-fix

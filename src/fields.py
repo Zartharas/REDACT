@@ -71,12 +71,11 @@ def extract_fields_cloudtrail(text: str) -> dict[str, str]:
     return fields
 
 
-# Tag prefix common to syslog lines this project's generator and the
-# Loghub OpenSSH/Linux datasets both use: "process[pid]: rest" or
-# "process: rest" (no pid). Captured separately from the message body so
-# the two known message shapes below (KV-style, and the sshd
-# preposition-style auth line) can each parse just the body, not have to
-# also account for the tag prefix in their own patterns.
+# Tag prefix common to syslog lines this project's generator uses:
+# "process[pid]: rest" or "process: rest" (no pid). Captured separately
+# from the message body so the two known message shapes below (KV-style,
+# and the sshd preposition-style auth line) can each parse just the body,
+# not have to also account for the tag prefix in their own patterns.
 #
 # [\w-]+, not \w+: found while adding the systemd-logind pattern below
 # (2026-08-08) -- a plain \w+ doesn't match the hyphen in real daemon tags
@@ -86,7 +85,38 @@ def extract_fields_cloudtrail(text: str) -> dict[str, str]:
 # recognize the message body shape. Widening the tag character class
 # fixes this for any hyphenated daemon name, not only the one that
 # surfaced it.
-_SYSLOG_TAG_RE = re.compile(r"^(?P<tag>[\w-]+)(?:\[(?P<pid>\d+)\])?:\s*(?P<rest>.*)$")
+#
+# Optional (?P<module>[\w-]+) parenthesized group added 2026-08-09
+# (ROADMAP item 8 follow-on, Task #10's real-data validation): the
+# earlier comment here claimed this regex already covered "the Loghub
+# OpenSSH/Linux datasets" tag shape -- checked directly against the real,
+# unmodified Loghub files (validation/real_data/download_loghub.sh) while
+# extending the field-gate validation to real data, and that claim was
+# WRONG for Linux and Thunderbird: PAM-backed daemons commonly log as
+# "sshd(pam_unix)[19939]:" or "crond(pam_unix)[2915]:", not
+# "sshd[19939]:" -- the parenthesized PAM module name has no path through
+# the old regex at all (fails to match "(" after the tag), so
+# extract_fields_syslog silently returned {} for every line shaped this
+# way, not just declined to recognize the message body. The module name
+# itself isn't used for anything (matched and discarded, same as the pid
+# group when a caller doesn't need it) -- what matters is that the tag
+# and message body still split out correctly when it's present.
+#
+# Still does NOT handle a leading RFC3164 "Mon DD HH:MM:SS host " (or,
+# for Thunderbird, an even longer custom multi-field) prefix before the
+# tag -- this regex is and remains anchored at the start of the STRING,
+# so a raw, unmodified real syslog line (which almost always has that
+# header) still returns {} until something upstream strips it first. See
+# validation/real_data/inject_and_evaluate.py's own comments on
+# _strip_syslog_header for the honest, disclosed state of that gap,
+# including the fact that this project's OWN logstash/redact-pipeline.conf
+# does not currently do that stripping either -- this project's synthetic
+# syslog templates (generate_logs.py) never included a timestamp/host
+# prefix, so this gap was invisible to every synthetic-only test run
+# before this one.
+_SYSLOG_TAG_RE = re.compile(
+    r"^(?P<tag>[\w-]+)(?:\((?P<module>[\w-]+)\))?(?:\[(?P<pid>\d+)\])?:\s*(?P<rest>.*)$"
+)
 
 # sshd auth-message shapes. Order matters: "Failed password for invalid
 # user X" must be tried before the plain "Failed password for X" pattern,

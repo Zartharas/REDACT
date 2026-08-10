@@ -20,8 +20,13 @@ pytest tests/test_redis_validation.py  # needs a live Redis (auto-skips if none 
 
 **Covered** (`test_fast_validation.py`, runs in CI on every push): the
 TokenStore/WAL correctness and O(n)-growth regression guards from Bug 15,
-all three syslog coverage rounds, the entropy UUID-exclusion regression
-check. All deterministic, no Docker, no spaCy, no network.
+all four syslog coverage rounds (round 4, 2026-08-09: `_SYSLOG_TAG_RE` now
+handles PAM-decorated tags like `sshd(pam_unix)[pid]:`, found by fetching
+the real, unmodified Loghub `Linux_2k.log` while extending the real-data
+validation to cover field-gated NER -- see `validation/real_data/`'s own
+notes below and README.md's flattened-username section for the full
+story), the entropy UUID-exclusion regression check. All deterministic,
+no Docker, no spaCy, no network.
 
 **Covered, conditionally** (`test_redis_validation.py`, runs in CI with a
 Redis service container): the Redis `StorageProvider` correctness tests —
@@ -190,6 +195,12 @@ standard CI runner:
   model download, and this project's own dev sandbox has never had
   network access to fetch it either (see `BUGS_AND_FIXES.md` for how
   those specific numbers were verified: run by a human, locally).
+  `inject_and_evaluate.py` also needs `validation/real_data/download_loghub.sh`
+  run first (real Loghub log files, not committed to the repo) --
+  its field-gated condition, added 2026-08-09, was smoke-tested with a
+  monkeypatched `scan_ner` to confirm the offset-remapping and
+  HIGH_ENTROPY-filtering mechanics are correct, but its actual real-model
+  recall/precision/timing numbers have not been produced yet.
 - `validation/real_name_frequency/build_real_name_test.py` — needs the
   SSA/Census raw data downloaded first (`download_name_data.sh`), which
   isn't committed to the repo (see `validation/real_name_frequency/raw/README.md`).
