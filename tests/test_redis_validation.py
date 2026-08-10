@@ -13,7 +13,10 @@ from urllib.parse import urlparse
 
 import pytest
 
-from tests.conftest import run_script
+# See test_fast_validation.py's own comment on this import for why it's
+# `conftest`, not `tests.conftest` -- the latter only worked under
+# `python -m pytest`, not a bare `pytest` invocation.
+from conftest import run_script
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 

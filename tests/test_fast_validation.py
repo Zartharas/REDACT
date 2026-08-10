@@ -9,7 +9,20 @@ run_script for why) and asserts on its exit code and/or a specific line
 in its printed output -- the same signal a human reads when running it
 by hand.
 """
-from tests.conftest import run_script
+# Bare `conftest` import, not `tests.conftest`: pytest's default
+# "prepend" import mode inserts THIS FILE'S OWN DIRECTORY (tests/, since
+# there's no tests/__init__.py) onto sys.path -- not the repo root. That
+# insertion happens the same way regardless of how pytest is invoked, so
+# `import conftest` resolves correctly whether run as `python -m pytest`
+# (which also happens to put the repo root on sys.path, masking this) or
+# a bare `pytest` console-script invocation (which does not put the repo
+# root on sys.path, exposing it). `from tests.conftest import ...` only
+# worked by accident under the first invocation style -- found the hard
+# way when a bare `pytest tests/ -v` run on a real machine raised
+# ModuleNotFoundError: No module named 'tests.conftest', while
+# `python -m pytest` in this project's own sandboxed dev environment
+# never exposed it.
+from conftest import run_script
 
 
 def test_multiprocess_tokenstore_zero_loss():
