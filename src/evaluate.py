@@ -85,7 +85,30 @@ def _build_ner_candidate(text: str, log_type: str, regex_hits: list[dict]):
     actually SHORTER than the original line, not just internally altered.
     Since NER cost scales with input length/token count, this is the
     correct lever for a real throughput improvement, not a same-length
-    swap that only changes content. A hit's [start, end) reported against
+    swap that only changes content.
+
+    RE-MEASURED against the real model, same day (2026-08-09), after
+    this rewrite: the recall prediction held almost exactly -- PERSON
+    recall 0.360 (vs. the masking version's 0.356), precision 0.658 (vs.
+    0.657), confirming excision and masking hide the identical
+    characters from NER, just structured differently. Throughput
+    improved substantially but did NOT fully close the gap to naive:
+    ~110 events/sec, cutting the shortfall from 16.1% slower than naive
+    down to 4.3% slower -- real progress, not a net win. Likely
+    explanation, not independently confirmed: spaCy/Presidio's per-call
+    cost on these already-short log lines (roughly 50-150 characters)
+    isn't purely proportional to character count -- some of it is fixed
+    pipeline overhead a modest excision (often under 20 characters)
+    barely moves, while this function's own bookkeeping
+    (extract_fields()/text.find()/slicing) adds a small real cost of its
+    own on every gated line. Honest conclusion: use this where the
+    PERSON-recall gap matters more than a strict throughput win over
+    naive -- it is NOT a faster replacement for the whole-line tiered
+    strategy, which remains the only genuinely fast option among this
+    module's five conditions (~264 events/sec), at tiered's own
+    documented recall cost.
+
+    A hit's [start, end) reported against
     the (shorter) candidate string is remapped back to the ORIGINAL
     text's coordinate space via `_remap_hit` below and the `segments`
     this function returns, since callers (and the gold-span comparison in

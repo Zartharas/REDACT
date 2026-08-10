@@ -63,10 +63,18 @@ documented PERSON recall gap between the whole-line "tiered" strategy
    to a recording stub rather than the real spaCy/Presidio model (same
    reason as `test_service_auth.py` below: no model download possible in
    this environment), so what's verified here is the excision/remapping
-   mechanics, not real recall/throughput numbers for this second version
-   -- those need a fresh `python src/evaluate.py` run with the model
-   available, not yet done. Full history and reasoning in README.md's
-   comparison table and `_build_ner_candidate`'s own docstring.
+   mechanics, not real recall/throughput numbers for this second version.
+
+   **Re-measured by the user locally against the real model, same day:**
+   the recall prediction held almost exactly (0.360 vs. the first
+   version's 0.356, precision 0.658 vs. 0.657), and throughput improved
+   substantially (~110 vs. ~100 events/sec) but did not fully close the
+   gap to naive (~114.5) -- 4.3% slower, down from 16.1% slower, real
+   progress but not a net throughput win. Honest conclusion: this is a
+   recall fix at close to throughput parity with naive, not a faster
+   replacement for the whole-line tiered strategy. Full history and
+   reasoning in README.md's comparison table and
+   `_build_ner_candidate`'s own docstring.
 
 **Covered** (`test_vault_storage_provider.py`, runs in CI on every
 push): `VaultStorageProvider` and its CAS-based `_VaultLockContext`
