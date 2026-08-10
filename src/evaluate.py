@@ -274,18 +274,35 @@ def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = 
     documented 5.9% recall gap on concatenated name tokens.
     profile: optional dict to accumulate timing, added 2026-08-09 while
     chasing the remaining 4.3%-slower-than-naive gap on the field-gated
-    condition after the excision rewrite closed most of it. Only
-    meaningful with use_field_gate=True. If passed, this function fills
-    in profile['candidate_build_seconds'] (total time inside
-    _build_ner_candidate, across all gated lines),
-    profile['ner_call_seconds'] (total time inside detect.scan_ner calls
-    specifically for the field-gated path), profile['ner_calls_made'],
-    and profile['ner_calls_skipped'] -- so the two competing hypotheses
-    for where the remaining gap lives (fixed per-call spaCy/Presidio
-    pipeline overhead that a modest excision barely reduces, vs. this
-    function's own extract_fields()/text.find()/splicing bookkeeping
-    cost) can be told apart with real measurement instead of continued
-    reasoning about which one is more plausible."""
+    condition after the excision rewrite closed most of it. Works with
+    ANY use_ner configuration (field-gated, tiered, naive), not just
+    field-gated -- the point is to let the SAME instrumentation run
+    against different conditions for a true apples-to-apples comparison.
+    Fills in whichever of these apply to the lines actually processed:
+      - profile['candidate_build_seconds'], profile['ner_call_seconds'],
+        profile['ner_calls_made'], profile['ner_calls_skipped']: the
+        field-gated candidate path specifically (use_field_gate=True,
+        line has a regex hit) -- ner_call_seconds here times scan_ner()
+        on the EXCISED candidate text.
+      - profile['regex_hit_ner_seconds'] / ['regex_hit_ner_calls']: time
+        spent in scan_ner() on the FULL, unmodified text, for lines that
+        DO have a regex hit -- populated when running naive/tiered
+        (every regex-hit line goes through here), letting a naive run's
+        cost on this exact subset of lines be compared directly against
+        the field-gated candidate path's cost on the identical subset.
+      - profile['no_regex_hit_ner_seconds'] / ['no_regex_hit_ner_calls']:
+        time spent in scan_ner() on the full text for lines with NO
+        regex hit at all -- populated by every configuration (including
+        field-gated, since a line with nothing for field-gating to act
+        on falls through to the same plain scan_ner(text) call naive
+        would make), a built-in control: this number SHOULD come out
+        close to identical across configurations, since none of them
+        treat a no-regex-hit line any differently.
+    An earlier version of this profiling only measured the field-gated
+    candidate path, silently missing the field-gated condition's own
+    no-regex-hit lines entirely (5,394 of 10,000 on this project's
+    corpus, more than half the run) -- fixed the same day, before this
+    gave a real answer to the question it was built to answer."""
     per_type = defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0})
     t0 = time.time()
     for entry in entries:
@@ -326,7 +343,36 @@ def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = 
             elif use_entropy_gate and regex_hits:
                 pass  # whole-line tiered strategy: skip NER if regex already found something
             else:
-                pred += detect.scan_ner(text)
+                # Engineering upgrade, 2026-08-09: this branch is reached
+                # by every line in the naive/tiered conditions, AND by
+                # the field-gated condition's lines that have NO regex
+                # hit at all (use_field_gate's own condition above is
+                # `and regex_hits`, so an empty regex_hits list falls
+                # through here). The first profiling pass measured only
+                # the field-gated candidate path (profile['ner_call_seconds']
+                # above) and completely missed this branch -- on the full
+                # corpus, that meant 5,394 of 10,000 lines' NER cost was
+                # invisible to the measurement, more than half the run.
+                # Splitting by whether THIS line had a regex hit (not by
+                # which strategy is active) is what makes an apples-to-
+                # apples comparison possible: running this same profiling
+                # against the naive condition gives its true cost on the
+                # EXACT SAME subset of lines field-gated's candidate path
+                # processes, instead of comparing against naive's
+                # average across all 10,000 lines (a different, easier
+                # population -- lines with no regex hit are typically
+                # shorter/simpler).
+                if profile is not None:
+                    _t_ner_start = time.perf_counter()
+                raw_hits = detect.scan_ner(text)
+                if profile is not None:
+                    _bucket = "regex_hit" if regex_hits else "no_regex_hit"
+                    profile[f"{_bucket}_ner_seconds"] = (
+                        profile.get(f"{_bucket}_ner_seconds", 0.0)
+                        + (time.perf_counter() - _t_ner_start)
+                    )
+                    profile[f"{_bucket}_ner_calls"] = profile.get(f"{_bucket}_ner_calls", 0) + 1
+                pred += raw_hits
 
         if use_flattened:
             pred += detect.scan_flattened(text)
@@ -405,12 +451,34 @@ if __name__ == "__main__":
     _ner_s = field_gate_profile.get("ner_call_seconds", 0.0)
     _calls_made = field_gate_profile.get("ner_calls_made", 0)
     _calls_skipped = field_gate_profile.get("ner_calls_skipped", 0)
+    _no_hit_s = field_gate_profile.get("no_regex_hit_ner_seconds", 0.0)
+    _no_hit_calls = field_gate_profile.get("no_regex_hit_ner_calls", 0)
     print(f"  field-gate profile: _build_ner_candidate={_build_s:.2f}s, "
-          f"detect.scan_ner={_ner_s:.2f}s, "
-          f"NER calls made={_calls_made}, skipped entirely={_calls_skipped}")
+          f"detect.scan_ner(candidate)={_ner_s:.2f}s over {_calls_made} calls, "
+          f"skipped entirely={_calls_skipped}, "
+          f"no-regex-hit lines (unaffected by gating)={_no_hit_s:.2f}s over {_no_hit_calls} calls")
 
-    per_type, elapsed = run_evaluation(entries, use_ner=True, use_entropy_gate=False)
+    naive_profile: dict = {}
+    per_type, elapsed = run_evaluation(entries, use_ner=True, use_entropy_gate=False,
+                                        profile=naive_profile)
     summarize(per_type, len(entries), elapsed, "Regex + NER (naive: NER on every line)")
+    _naive_hit_s = naive_profile.get("regex_hit_ner_seconds", 0.0)
+    _naive_hit_calls = naive_profile.get("regex_hit_ner_calls", 0)
+    _naive_no_hit_s = naive_profile.get("no_regex_hit_ner_seconds", 0.0)
+    _naive_no_hit_calls = naive_profile.get("no_regex_hit_ner_calls", 0)
+    print(f"  naive profile: detect.scan_ner(full text)={_naive_hit_s:.2f}s over "
+          f"{_naive_hit_calls} regex-hit-line calls, "
+          f"no-regex-hit lines={_naive_no_hit_s:.2f}s over {_naive_no_hit_calls} calls")
+    # The controlled comparison this profiling exists to make: SAME
+    # subset of lines (has a regex hit), field-gated's candidate cost
+    # vs. naive's full-text cost. This is the number that actually
+    # settles whether excision helps, isolated from the no-regex-hit
+    # lines both conditions handle identically anyway.
+    if _calls_made and _naive_hit_calls:
+        print(f"  controlled comparison, regex-hit lines only "
+              f"({_calls_made} lines): field-gated "
+              f"{(_build_s + _ner_s) / _calls_made * 1000:.2f}ms/line "
+              f"vs. naive {_naive_hit_s / _naive_hit_calls * 1000:.2f}ms/line")
 
     per_type, elapsed = run_evaluation(entries, use_ner=True, use_entropy_gate=False,
                                         use_flattened=True)

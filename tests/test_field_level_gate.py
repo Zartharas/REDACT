@@ -284,3 +284,67 @@ def test_run_evaluation_populates_profile_dict():
     # Second entry is fully regex-covered -> skipped entirely.
     assert profile.get("ner_calls_made", 0) == 1
     assert profile.get("ner_calls_skipped", 0) == 1
+
+
+def test_profile_dict_covers_the_no_regex_hit_fallthrough_branch(monkeypatch):
+    """Engineering upgrade, 2026-08-09: the first version of this
+    profiling only measured the field-gated candidate path, silently
+    missing every line that falls through to the plain
+    `else: scan_ner(text)` branch because it has NO regex hit at all --
+    on the real corpus this was 5,394 of 10,000 lines, more than half
+    the run's NER cost invisible to the measurement. Confirms a
+    no-regex-hit line's scan_ner call now shows up under
+    'no_regex_hit_ner_seconds'/'no_regex_hit_ner_calls', for the
+    field-gated condition specifically (this is the fall-through branch
+    a plain PERSON-only free-text line with no SSN/EMAIL/IP/etc. would
+    take even with use_field_gate=True)."""
+    monkeypatch.setattr(detect, "scan_ner", lambda text, min_score=0.5: [])
+
+    entries = [{
+        "log": "a free text line mentioning Timothy Wong, nothing regex-shaped",
+        "log_type": "windows_event",
+        "pii": [],
+    }]
+
+    profile: dict = {}
+    evaluate.run_evaluation(entries, use_ner=True, use_field_gate=True, profile=profile)
+
+    assert profile.get("no_regex_hit_ner_calls", 0) == 1
+    assert profile.get("no_regex_hit_ner_seconds", 0.0) >= 0.0
+    # This line never reached the field-gated candidate path at all.
+    assert profile.get("ner_calls_made", 0) == 0
+    assert profile.get("ner_calls_skipped", 0) == 0
+
+
+def test_profile_dict_naive_run_buckets_by_regex_hit_presence(monkeypatch):
+    """Confirms the SAME profiling, run against a plain naive
+    configuration (use_field_gate=False, use_entropy_gate=False), splits
+    calls into the 'regex_hit' and 'no_regex_hit' buckets correctly --
+    this is what makes the controlled, same-subset comparison in
+    evaluate.py's __main__ possible: naive's regex_hit_ner_seconds on
+    the has-a-regex-hit lines is directly comparable to field-gated's
+    candidate_build_seconds + ner_call_seconds on the identical subset,
+    since both are populated by profiling the SAME lines."""
+    monkeypatch.setattr(detect, "scan_ner", lambda text, min_score=0.5: [])
+
+    entries = [
+        {  # has a regex hit (SSN)
+            "log": "TargetUserName=Timothy Wong TargetSSN=123-45-6789",
+            "log_type": "windows_event",
+            "pii": [],
+        },
+        {  # no regex hit at all
+            "log": "a free text line mentioning Timothy Wong, nothing regex-shaped",
+            "log_type": "windows_event",
+            "pii": [],
+        },
+    ]
+
+    profile: dict = {}
+    evaluate.run_evaluation(entries, use_ner=True, use_entropy_gate=False, profile=profile)
+
+    assert profile.get("regex_hit_ner_calls", 0) == 1
+    assert profile.get("no_regex_hit_ner_calls", 0) == 1
+    # Naive never touches the field-gated-specific keys at all.
+    assert "candidate_build_seconds" not in profile
+    assert "ner_calls_made" not in profile
