@@ -18,15 +18,99 @@ import sys
 import os
 import json
 import hmac
+import time
 
 sys.path.insert(0, os.path.dirname(__file__))
 import detect      # noqa: E402
 import anonymize   # noqa: E402
 import audit        # noqa: E402
 
-from flask import Flask, request, jsonify  # noqa: E402
+from flask import Flask, request, jsonify, Response  # noqa: E402
+from prometheus_client import (  # noqa: E402
+    Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST,
+)
 
 app = Flask(__name__)
+
+# Engineering upgrade: this service had no metrics of any kind before this
+# -- Bug 15 (the O(n)-per-request TokenStore.save() cost, BUGS_AND_FIXES.md)
+# was only caught via manual `docker stats` and hand-timed `curl` calls
+# during a scheduled load test, not by anything that would have surfaced
+# it under normal, unmonitored operation. These four metrics target
+# exactly that kind of gap: a way to see request latency, what's actually
+# being detected, and TokenStore.save() behavior in production without
+# needing to reproduce a load test to notice a regression.
+#
+# Deliberately module-level (not per-worker-namespaced): each gunicorn
+# worker process gets its own independent copy of these metric objects
+# (same reason each worker warms its own copy of the NER model -- see
+# detect._get_analyzer() below), and a Prometheus scrape hitting one
+# worker via a load balancer only sees that worker's own counters, not a
+# cluster-wide total. This is the standard, disclosed limitation of the
+# prometheus_client default registry under a forking multi-process
+# server; prometheus_client's own multiprocess mode
+# (PROMETHEUS_MULTIPROC_DIR) exists specifically to fix this by
+# aggregating across workers on disk, and is a reasonable next step for
+# a real production deployment, but is NOT wired up here -- adding it
+# without a way to actually verify it in this environment (no live
+# multi-worker gunicorn run possible here, see this project's standing
+# disclosure pattern for anything Docker-dependent) would be asserting
+# something unverified.
+def _metric(cls, name, *args, **kwargs):
+    """Idempotent metric registration.
+
+    Returns the already-registered collector if `name` is already in
+    prometheus_client's default registry, instead of letting a second
+    registration under the same name raise
+    prometheus_client.registry.DuplicateTimeseries. This module gets
+    re-imported within the same process more than once in practice: this
+    project's own test suite (tests/test_service_auth.py) deliberately
+    forces a clean `sys.modules` re-import of service.py per test to pick
+    up different env vars, and a real deployment's dev-mode Flask
+    reloader or gunicorn's --reload flag would hit the exact same
+    situation. Silently reusing the existing collector on a re-import is
+    the correct behavior there -- the metric should keep accumulating
+    across the "reload," not fail to come back up at all.
+    """
+    from prometheus_client import REGISTRY
+    existing = REGISTRY._names_to_collectors.get(name)
+    if existing is not None:
+        return existing
+    return cls(name, *args, **kwargs)
+
+
+REQUEST_LATENCY = _metric(
+    Histogram, "redact_anonymize_request_seconds",
+    "Wall-clock time to handle one /anonymize request, from receiving the "
+    "parsed JSON body to returning the response.",
+)
+DETECTIONS_TOTAL = _metric(
+    Counter, "redact_detections_total",
+    "PII/PHI spans detected and anonymized, labeled by canonical entity type "
+    "(EMAIL, SSN, CREDIT_CARD, PERSON, IP, MRN). Counts spans after "
+    "dedup_spans() and after HIGH_ENTROPY hits are filtered out, matching "
+    "what actually gets anonymized and audited, not raw ensemble output.",
+    ["type"],
+)
+TOKEN_STORE_SIZE = _metric(
+    Gauge, "redact_token_store_size",
+    "Number of forward-map entries in this worker's in-memory TokenStore "
+    "view. Per-worker, not cluster-wide -- see the module comment above.",
+)
+STORE_SAVE_LATENCY = _metric(
+    Histogram, "redact_store_save_seconds",
+    "Wall-clock time spent inside TokenStore.save() per call, including "
+    "calls the save-every-N debounce short-circuits (see "
+    "REDACT_TOKEN_STORE_SAVE_EVERY below) -- expect a bimodal "
+    "distribution: near-instant skipped calls, and real read/write calls.",
+)
+STORE_SAVE_TOTAL = _metric(
+    Counter, "redact_store_save_total",
+    "TokenStore.save() calls, labeled by whether the call actually "
+    "persisted something ('persisted') or was skipped by the "
+    "save-every-N debounce ('skipped').",
+    ["outcome"],
+)
 
 POLICY_VERSION = "redact-v0.1"
 # Engineering upgrade, added after the original build-and-verify pass:
@@ -113,8 +197,27 @@ def health():
     return jsonify({"status": "ok"})
 
 
+@app.route("/metrics", methods=["GET"])
+def metrics():
+    # Kept BEHIND the X-Redact-Api-Key check above (unlike /health) --
+    # request-count and detection-count metrics don't contain PII values
+    # themselves, but they do reveal traffic volume and roughly what kind
+    # of data this deployment is processing, which is worth the same
+    # access control as /anonymize rather than left open by default. A
+    # Prometheus scrape_config against this service needs to supply the
+    # header (authorization: {type: Bearer, credentials_file: ...} or
+    # bearer_token_file, per Prometheus's own scrape_config docs) --
+    # untested against a live Prometheus instance in this environment,
+    # same disclosure as everything else here that needs a real running
+    # stack to fully verify.
+    TOKEN_STORE_SIZE.set(len(_store._forward))
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+
 @app.route("/anonymize", methods=["POST"])
 def anonymize_endpoint():
+    request_start = time.time()
+
     body = request.get_json(force=True, silent=True) or {}
     if "log" not in body:
         return jsonify({"error": "request body must include a 'log' field"}), 400
@@ -145,8 +248,14 @@ def anonymize_endpoint():
             original_value=original_value, audit_key=AUDIT_KEY,
             fingerprint_key=FINGERPRINT_KEY,
         ))
+        DETECTIONS_TOTAL.labels(type=span["type"]).inc()
 
-    _store.save()
+    save_start = time.time()
+    persisted = _store.save()
+    STORE_SAVE_LATENCY.observe(time.time() - save_start)
+    STORE_SAVE_TOTAL.labels(outcome="persisted" if persisted else "skipped").inc()
+
+    REQUEST_LATENCY.observe(time.time() - request_start)
 
     return jsonify({
         "anonymized": anonymized_text,

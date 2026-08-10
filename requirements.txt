@@ -3,3 +3,4 @@ presidio-anonymizer
 faker
 flask
 gunicorn
+prometheus-client

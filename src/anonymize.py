@@ -598,7 +598,15 @@ class TokenStore:
         self._lock = threading.Lock()
         self._forward, self._reverse = self._provider.load()
 
-    def save(self, force: bool = False):
+    def save(self, force: bool = False) -> bool:
+        # Return value (added as an engineering upgrade alongside
+        # src/service.py's Prometheus metrics -- no caller checked this
+        # before, so adding it is not a behavior change for any of
+        # them): True if this call actually persisted something (either
+        # path below), False if the debounce above short-circuited it.
+        # Lets a caller distinguish "I called save() and it was a no-op"
+        # from "I called save() and it wrote," which service.py's
+        # redact_store_save_total{outcome=...} metric needs.
         # Debounce, added 2026-08-08 (Bug 15, BUGS_AND_FIXES.md). Every
         # call below this point -- the read-merge-write critical section --
         # costs O(total accumulated store size), not O(1): FileStorageProvider
@@ -645,7 +653,7 @@ class TokenStore:
             self._calls_since_save += 1
             should_write = force or self._calls_since_save >= self._save_every_n_calls
             if not should_write:
-                return
+                return False
             self._calls_since_save = 0
             pending_forward = dict(self._pending_forward)
             pending_reverse = dict(self._pending_reverse)
@@ -675,7 +683,7 @@ class TokenStore:
                     self._pending_forward.pop(k, None)
                 for k in pending_reverse:
                     self._pending_reverse.pop(k, None)
-            return
+            return True
 
         # Fallback path for providers without save_incremental() support:
         # read-merge-write, not a blind overwrite of whatever this
@@ -742,6 +750,7 @@ class TokenStore:
             # re-send entries this fallback path already covered.
             self._pending_forward.clear()
             self._pending_reverse.clear()
+            return True
 
     def get_or_create_token(self, original: str, pii_type: str) -> str:
         with self._lock:

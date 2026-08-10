@@ -48,6 +48,19 @@ recall numbers. Real recall/throughput numbers for this configuration
 need a live `python src/evaluate.py` run against the full corpus with
 the model available; not claimed as already measured.
 
+**Covered** (`test_metrics.py`, runs in CI on every push): the Prometheus
+metrics added to `src/service.py` -- `/metrics` stays behind the same
+`X-Redact-Api-Key` check as `/anonymize` (unlike `/health`), the four
+metric families are present in the scrape output, `redact_detections_total`
+increments per detected span type, `redact_store_save_total` records
+whether a save actually persisted or was skipped by the debounce, and
+`redact_anonymize_request_seconds` records a latency sample. Also
+exercises `service._metric()`'s idempotent-registration helper indirectly
+-- these tests are what would fail with
+`prometheus_client.registry.DuplicateTimeseries` if that helper
+regressed, since they force the same `sys.modules`-eviction re-import
+pattern `test_service_auth.py` uses.
+
 **Covered** (`test_service_auth.py`, runs in CI on every push): the
 `X-Redact-Api-Key` auth check added to `src/service.py` -- `/health`
 stays open, `/anonymize` rejects a missing or wrong key with 401, and
