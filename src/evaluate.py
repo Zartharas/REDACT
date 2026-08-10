@@ -55,10 +55,11 @@ def _mask_regex_covered_fields(text: str, log_type: str, regex_hits: list[dict])
     The whole-line gate (use_entropy_gate) skips NER for the entire line
     the moment ANY regex hit exists anywhere in it -- cheap and fast, but
     this is exactly the mechanism behind the documented PERSON recall
-    collapse (0.127 tiered vs. 0.404 naive, see README.md's Known
-    Limitations section and BUGS_AND_FIXES.md): an SSN regex hit in one
-    field silently suppresses NER for a PERSON name sitting in a
-    completely different field on the same line.
+    collapse (0.113 tiered vs. 0.359 naive, measured live 2026-08-09
+    against this project's current corpus -- see README.md's comparison
+    table and Known Limitations section): an SSN regex hit in one field
+    silently suppresses NER for a PERSON name sitting in a completely
+    different field on the same line.
 
     This function narrows the gate to field granularity using fields.py's
     existing structured-field extraction (already built for drift.py, not
@@ -69,6 +70,25 @@ def _mask_regex_covered_fields(text: str, log_type: str, regex_hits: list[dict])
     NER runs. A name sitting in an unmasked field, or in free text
     outside any recognized field, is still visible to NER.
 
+    MEASURED RESULT (README.md's comparison table, run 2026-08-09 against
+    the real spaCy model -- this module's own dev sandbox has no route to
+    that model, so this is the first time these numbers existed): the
+    recall fix works as designed -- PERSON recall 0.356, nearly closing
+    the entire gap to naive's 0.359, with BETTER precision than naive
+    besides (0.657 vs. 0.637). The throughput claim below did NOT hold up
+    against real data: field-gated measured ~100 events/sec, SLOWER than
+    naive's ~119, not faster. Root cause: a PERSON-bearing field is
+    essentially never also regex-covered (a name doesn't live in a field
+    that matches SSN/EMAIL/CREDIT_CARD/IP/MRN), so the full-skip branch
+    below rarely fires, NER runs anyway on most lines, and this
+    function's own extract_fields()/masking work becomes pure overhead on
+    top of a NER call that was happening regardless. Left both the
+    original design reasoning and this correction in place, rather than
+    quietly rewriting history, since the discrepancy between predicted
+    and measured behavior is itself useful information about when a
+    "this should be faster" intuition needs verifying before being
+    trusted.
+
     Returns:
       - the masked text, if NER should still run on it (there's
         unmasked content that could plausibly hold a name or other
@@ -76,8 +96,10 @@ def _mask_regex_covered_fields(text: str, log_type: str, regex_hits: list[dict])
       - None, if every recognized field on this line was already
         regex-covered and nothing alphabetic remains outside the masked
         spans -- the one case where skipping the NER call entirely is
-        actually safe, which is what lets this still recover some of
-        the throughput advantage the whole-line gate had.
+        actually safe, and the ONLY mechanism by which this function
+        could recover any of the whole-line gate's throughput advantage.
+        Measured to fire rarely enough in practice that it does not, on
+        this corpus -- see MEASURED RESULT above.
       - the ORIGINAL text unchanged, if fields.py doesn't recognize this
         log_type's structure at all (unrecognized log_type, or a syslog
         message shape outside its documented coverage) or extracted no

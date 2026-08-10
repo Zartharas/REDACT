@@ -38,15 +38,21 @@ lookup-table-based, not key-based.
 field-level NER gate added to `src/evaluate.py`
 (`_mask_regex_covered_fields`, `run_evaluation(..., use_field_gate=True)`)
 -- the engineering upgrade meant to close the documented PERSON recall
-gap between the whole-line "tiered" strategy (0.127) and "naive" (0.404).
+gap between the whole-line "tiered" strategy (0.113) and "naive" (0.359).
 Monkeypatches `detect.scan_ner` to a recording stub rather than the real
 spaCy/Presidio model (same reason as `test_service_auth.py` below: no
 model download possible in this environment), so what's actually verified
 here is the masking mechanics -- which characters get masked before NER
 runs, and when the NER call is skipped entirely vs. made -- not real
-recall numbers. Real recall/throughput numbers for this configuration
-need a live `python src/evaluate.py` run against the full corpus with
-the model available; not claimed as already measured.
+recall numbers. **Real numbers now exist, run by the user locally
+2026-08-09** (`python src/evaluate.py` against the full corpus with the
+real model): the recall fix works as designed (0.356, nearly matching
+naive), but the throughput-preservation claim this design started with
+did NOT hold up -- field-gated measured slower than naive (~100 vs. ~119
+events/sec), not faster, because the "skip NER entirely" path this
+depends on rarely fires in practice. Full numbers and root-cause
+reasoning in README.md's comparison table and
+`_mask_regex_covered_fields`'s own updated docstring.
 
 **Covered** (`test_vault_storage_provider.py`, runs in CI on every
 push): `VaultStorageProvider` and its CAS-based `_VaultLockContext`
