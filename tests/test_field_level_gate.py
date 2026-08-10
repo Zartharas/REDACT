@@ -26,8 +26,17 @@ reduce what spaCy has to process, so field-gated measured SLOWER than
 naive. Replaced the same day with `_build_ner_candidate`, which excises
 (removes, doesn't just mask) regex-covered spans so the candidate is
 genuinely shorter, plus `_remap_hit` to translate resulting offsets back
-to the original text. This file was rewritten to match; see
-src/evaluate.py's own docstring for the full before/after reasoning.
+to the original text. Re-measured: recall carried over almost exactly,
+throughput improved substantially (16.1% slower than naive -> 4.3%
+slower) but didn't fully close the gap. Same day, still chasing that
+remaining gap: added a forward-advancing search cursor to
+_build_ner_candidate's field-value lookup (previously a bare
+text.find(value) per field, rescanning from position 0 every time) and
+a `profile` dict on run_evaluation to measure candidate-build time vs.
+NER-call time separately, so the next real-model run gives actual
+evidence instead of more reasoning about which hypothesis is more
+plausible. This file was rewritten/extended to match each change; see
+src/evaluate.py's own docstring for the full history and reasoning.
 """
 import os
 import sys
@@ -198,3 +207,80 @@ def test_run_evaluation_field_gate_skips_ner_when_fully_covered(monkeypatch):
     evaluate.run_evaluation(entries, use_ner=True, use_field_gate=True)
 
     assert calls == [], "NER must not be called when nothing unexcised remains"
+
+
+def test_cursor_based_search_finds_correct_occurrence_past_a_decoy():
+    """Engineering upgrade, 2026-08-09 (chasing the remaining 4.3%
+    throughput gap): _build_ner_candidate's field-value search now
+    advances a cursor across fields instead of restarting text.find()
+    from position 0 for every field, since fields.py emits values in
+    left-to-right source order. This is primarily a speed optimization
+    (avoids O(len(text)) rescans), verified here on a case where an
+    earlier field's processing has already advanced the cursor past a
+    decoy occurrence of a LATER field's value -- confirming the
+    forward search doesn't accidentally break correctness for the
+    common case, not that it resolves the pre-existing "value isn't
+    unique in the line" ambiguity in general (it doesn't, when the
+    FIRST field processed is the one with an earlier decoy -- see
+    _build_ner_candidate's own updated comment)."""
+    # "Timothy Wong" appears twice: once as decoy free text at the very
+    # start, once as TargetUserName's real value after TargetSSN (which
+    # gets processed first and advances the cursor past the decoy).
+    text = "Timothy Wong said hi TargetSSN=123-45-6789 TargetUserName=Timothy Wong"
+    regex_hits = detect.scan_regex(text)
+    assert any(h["type"] == "SSN" for h in regex_hits)
+
+    candidate, segments = evaluate._build_ner_candidate(text, "windows_event", regex_hits)
+
+    assert candidate == "Timothy Wong said hi TargetSSN= TargetUserName=Timothy Wong"
+    assert "123-45-6789" not in candidate
+    # Both the decoy (untouched free text) and the real field occurrence
+    # (never regex-covered, so never excised) must survive -- excision
+    # only ever removes the SSN value.
+    assert candidate.count("Timothy Wong") == 2
+
+
+def test_run_evaluation_populates_profile_dict():
+    """Engineering upgrade, 2026-08-09: run_evaluation's optional
+    profile dict, added to give real, measurable evidence for where
+    time goes in the field-gated path (candidate-building vs. the NER
+    call itself) instead of continuing to guess. Confirms the dict gets
+    populated with the expected keys and plausible values, using the
+    same fake_scan_ner stub as other tests here (this only checks that
+    the profiling plumbing works, not real timing numbers -- those need
+    the real model)."""
+    monkeypatch_calls = []
+
+    def fake_scan_ner(text, min_score=0.5):
+        monkeypatch_calls.append(text)
+        return []
+
+    entries = [
+        {
+            "log": "TargetUserName=Timothy Wong TargetSSN=123-45-6789",
+            "log_type": "windows_event",
+            "pii": [],
+        },
+        {
+            "log": "SRC=10.0.0.5 DST=10.0.0.9",
+            "log_type": "windows_event",
+            "pii": [],
+        },
+    ]
+
+    original_scan_ner = detect.scan_ner
+    detect.scan_ner = fake_scan_ner
+    try:
+        profile: dict = {}
+        evaluate.run_evaluation(entries, use_ner=True, use_field_gate=True, profile=profile)
+    finally:
+        detect.scan_ner = original_scan_ner
+
+    assert "candidate_build_seconds" in profile
+    assert profile["candidate_build_seconds"] >= 0.0
+    assert "ner_call_seconds" in profile
+    assert profile["ner_call_seconds"] >= 0.0
+    # First entry has an unmasked name -> one real NER call.
+    # Second entry is fully regex-covered -> skipped entirely.
+    assert profile.get("ner_calls_made", 0) == 1
+    assert profile.get("ner_calls_skipped", 0) == 1

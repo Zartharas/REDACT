@@ -160,15 +160,49 @@ def _build_ner_candidate(text: str, log_type: str, regex_hits: list[dict]):
     if not extracted:
         return text, None
 
+    # Engineering upgrade, 2026-08-09 (chasing the remaining 4.3%
+    # throughput gap the excision rewrite didn't close): this used to be
+    # a bare `text.find(value)` per field, restarting the scan from
+    # position 0 of the line EVERY time, for EVERY field -- O(len(text))
+    # work repeated once per extracted field, on every gated line.
+    # fields.py's own extractors emit values in left-to-right source
+    # order (the KV extractors iterate `_KV_KEY_RE.finditer(text)`
+    # matches in order; extract_fields_cloudtrail's walk() visits a JSON
+    # object's keys and a list's elements in their natural,
+    # already-left-to-right order), so a single forward-advancing search
+    # cursor covers the same ground once across all fields instead of
+    # once per field. `text.find(value, search_cursor)` falls back to a
+    # from-the-start search only if the forward search comes up empty
+    # (the value's true occurrence sits before the cursor -- the source-
+    # order assumption above doesn't strictly hold for every message
+    # shape), so correctness never regresses versus the old
+    # always-from-0 behavior in the worst case.
+    #
+    # This is measured and characterized here as a SPEED optimization,
+    # not a fix for the pre-existing "value isn't unique in the line"
+    # ambiguity this function's own docstring already discloses above.
+    # An earlier draft of this comment overclaimed the cursor also
+    # resolves that ambiguity in general; checked against a constructed
+    # duplicate-value example while writing this and found that's only
+    # true when an EARLIER-processed field has already advanced the
+    # cursor past a decoy occurrence -- if the very first field
+    # processed is the one with an earlier decoy, cursor and no-cursor
+    # search land on the identical (still ambiguous) result, since both
+    # start from position 0. Worth stating precisely rather than
+    # claiming a correctness win this change doesn't reliably deliver.
+    search_cursor = 0
     excise_ranges = []
     any_alpha_value_unmasked = False
     for value in extracted.values():
         if not value:
             continue
-        idx = text.find(value)
+        idx = text.find(value, search_cursor)
+        if idx == -1:
+            idx = text.find(value)
         if idx == -1:
             continue
         end = idx + len(value)
+        search_cursor = end
         if any(h["start"] < end and idx < h["end"] for h in regex_hits):
             excise_ranges.append((idx, end))
         elif any(c.isalpha() for c in value):
@@ -223,7 +257,8 @@ def _remap_hit(hit: dict, segments: list[tuple[int, int]]) -> dict:
 
 
 def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = False,
-                    use_flattened: bool = False, use_field_gate: bool = False):
+                    use_flattened: bool = False, use_field_gate: bool = False,
+                    profile: dict | None = None):
     """use_entropy_gate: if True, only run NER on lines with no regex hit at all
     (the 'tiered' strategy described in the chapter). If False, run NER on
     every line regardless of regex results (the naive strategy).
@@ -236,7 +271,21 @@ def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = 
     order below.
     use_flattened: if True, also run the flattened-username name-dictionary
     layer (src/flattened_names.py), added specifically to address the
-    documented 5.9% recall gap on concatenated name tokens."""
+    documented 5.9% recall gap on concatenated name tokens.
+    profile: optional dict to accumulate timing, added 2026-08-09 while
+    chasing the remaining 4.3%-slower-than-naive gap on the field-gated
+    condition after the excision rewrite closed most of it. Only
+    meaningful with use_field_gate=True. If passed, this function fills
+    in profile['candidate_build_seconds'] (total time inside
+    _build_ner_candidate, across all gated lines),
+    profile['ner_call_seconds'] (total time inside detect.scan_ner calls
+    specifically for the field-gated path), profile['ner_calls_made'],
+    and profile['ner_calls_skipped'] -- so the two competing hypotheses
+    for where the remaining gap lives (fixed per-call spaCy/Presidio
+    pipeline overhead that a modest excision barely reduces, vs. this
+    function's own extract_fields()/text.find()/splicing bookkeeping
+    cost) can be told apart with real measurement instead of continued
+    reasoning about which one is more plausible."""
     per_type = defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0})
     t0 = time.time()
     for entry in entries:
@@ -249,12 +298,29 @@ def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = 
 
         if use_ner:
             if use_field_gate and regex_hits:
+                if profile is not None:
+                    _t_build_start = time.perf_counter()
                 ner_text, segments = _build_ner_candidate(text, log_type, regex_hits)
+                if profile is not None:
+                    profile["candidate_build_seconds"] = (
+                        profile.get("candidate_build_seconds", 0.0)
+                        + (time.perf_counter() - _t_build_start)
+                    )
                 if ner_text is not None:
+                    if profile is not None:
+                        _t_ner_start = time.perf_counter()
                     raw_hits = detect.scan_ner(ner_text)
+                    if profile is not None:
+                        profile["ner_call_seconds"] = (
+                            profile.get("ner_call_seconds", 0.0)
+                            + (time.perf_counter() - _t_ner_start)
+                        )
+                        profile["ner_calls_made"] = profile.get("ner_calls_made", 0) + 1
                     if segments is not None:
                         raw_hits = [_remap_hit(h, segments) for h in raw_hits]
                     pred += raw_hits
+                elif profile is not None:
+                    profile["ner_calls_skipped"] = profile.get("ner_calls_skipped", 0) + 1
                 # else: every regex-coverable field was excised and nothing
                 # alphabetic remained -- safe to skip the NER call entirely.
             elif use_entropy_gate and regex_hits:
@@ -330,9 +396,18 @@ if __name__ == "__main__":
     per_type, elapsed = run_evaluation(entries, use_ner=True, use_entropy_gate=True)
     summarize(per_type, len(entries), elapsed, "Regex + NER (tiered: NER only when regex found nothing)")
 
-    per_type, elapsed = run_evaluation(entries, use_ner=True, use_field_gate=True)
+    field_gate_profile: dict = {}
+    per_type, elapsed = run_evaluation(entries, use_ner=True, use_field_gate=True,
+                                        profile=field_gate_profile)
     summarize(per_type, len(entries), elapsed,
               "Regex + NER (field-gated: NER skipped only for regex-covered fields, not whole lines)")
+    _build_s = field_gate_profile.get("candidate_build_seconds", 0.0)
+    _ner_s = field_gate_profile.get("ner_call_seconds", 0.0)
+    _calls_made = field_gate_profile.get("ner_calls_made", 0)
+    _calls_skipped = field_gate_profile.get("ner_calls_skipped", 0)
+    print(f"  field-gate profile: _build_ner_candidate={_build_s:.2f}s, "
+          f"detect.scan_ner={_ner_s:.2f}s, "
+          f"NER calls made={_calls_made}, skipped entirely={_calls_skipped}")
 
     per_type, elapsed = run_evaluation(entries, use_ner=True, use_entropy_gate=False)
     summarize(per_type, len(entries), elapsed, "Regex + NER (naive: NER on every line)")
