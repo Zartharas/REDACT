@@ -4,13 +4,34 @@
 # way the OpenSearch or Logstash images are, so it's the one piece of this
 # Docker setup closest to "should just work" without further verification.
 
-FROM python:3.12-slim
+# Engineering upgrade: split into a builder stage and a final runtime
+# stage. requirements.txt (presidio-analyzer/anonymizer, spaCy underneath
+# them) pulls in pip's own build machinery and the en_core_web_lg model
+# download -- none of that needs to exist in the image that actually runs
+# in production. Building into a venv here and copying only the finished
+# venv into the final stage keeps pip's build artifacts, any transient
+# build-time files, and this stage's own base-image layer history out of
+# what ships. Both stages still use the same python:3.12-slim base, so
+# this is not a distroless/Alpine-style minimal-base change (spaCy's own
+# compiled dependencies are the reason a slim Debian base was chosen over
+# Alpine's musl libc in the first place -- untested here, not claimed).
+FROM python:3.12-slim AS builder
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && python -m spacy download en_core_web_lg
+
+FROM python:3.12-slim
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app
 
 COPY src/ ./src/
 
@@ -19,6 +40,35 @@ ENV REDACT_TOKEN_STORE_PATH=/app/output/token_store.json
 # Set them via docker-compose environment or a secrets mechanism -- shipping
 # a default key in an image is exactly the kind of thing this chapter's own
 # audit-trail section argues against.
+
+# Engineering upgrade: this container ran as root by default before this,
+# despite service.py never actually needing root privileges for anything
+# it does (bind to a non-privileged port, read/write one output
+# directory). Standard container-hardening practice, and a real finding
+# from reviewing this Dockerfile with a security-engineering eye rather
+# than only a "does it work" one.
+#
+# -r for a system account (no login shell needed, no interactive-user
+# baggage), fixed UID/GID (1000) rather than letting useradd pick one, so
+# this is reproducible across rebuilds and matches a predictable UID a
+# host-side bind mount or CI scanner might expect. /app/output is created
+# and chowned here, before the USER switch below, since the redact-output
+# named volume docker-compose.yml mounts there needs to inherit this
+# ownership on first creation for the non-root process to be able to
+# write token_store.json into it -- Docker copies a fresh named volume's
+# initial content (including ownership) from whatever already exists at
+# that path in the image at container start. An EXISTING volume created
+# by an earlier, root-owned version of this image will NOT retroactively
+# get these permissions -- `docker compose down -v` (a fresh volume) or a
+# manual `chown -R 1000:1000` on the existing volume's data is needed
+# when upgrading a running deployment across this change, not implied
+# automatically by rebuilding the image alone.
+RUN groupadd -r -g 1000 redact \
+    && useradd -r -u 1000 -g redact -d /app -s /usr/sbin/nologin redact \
+    && mkdir -p /app/output \
+    && chown -R redact:redact /app
+
+USER redact
 
 EXPOSE 8080
 

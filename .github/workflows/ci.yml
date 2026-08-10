@@ -21,6 +21,19 @@ name: CI
 # those routinely is a real gap this workflow doesn't close; see
 # BUGS_AND_FIXES.md/ROADMAP.md's own stated scope limits for why that's
 # disclosed here rather than silently left out.
+#
+# container-scan: builds the redact-service image on the runner (this one
+# CAN afford a Docker build+model download, since it only runs once per
+# push and doesn't need Compose orchestrating three containers) and scans
+# it with Trivy for known CVEs. Set to report-only (exit-code 0) rather
+# than fail-the-build for now -- turning that into a hard gate on
+# CRITICAL/HIGH findings is a reasonable next step, but doing it in the
+# same change as introducing the scan would risk an unrelated, unreviewed
+# base-image CVE blocking every future push on day one. This job has not
+# yet been run against a real push (added and reasoned through in this
+# environment, which cannot build Docker images itself) -- treat its
+# first few runs on GitHub's actual runners as verification, not
+# something already confirmed working.
 
 on:
   push:
@@ -70,3 +83,20 @@ jobs:
         env:
           REDIS_URL: redis://localhost:6379/0
         run: pytest tests/test_redis_validation.py -v
+
+  container-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build redact-service image
+        run: docker build -t redact-service:ci .
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: redact-service:ci
+          format: table
+          exit-code: "0"
+          severity: CRITICAL,HIGH
+        # Report-only for now (exit-code 0, see the reasoning in this
+        # file's own header comment) -- findings show up in the job log,
+        # this does not yet block a merge.
