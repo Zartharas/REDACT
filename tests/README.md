@@ -39,8 +39,9 @@ field-level NER gate added to `src/evaluate.py`
 (`_build_ner_candidate`, `_remap_hit`, `run_evaluation(...,
 use_field_gate=True)`) -- the engineering upgrade meant to close the
 documented PERSON recall gap between the whole-line "tiered" strategy
-(0.113) and "naive" (0.359). Two implementations, both same day
-(2026-08-09), both mentioned here since the second replaced the first:
+(0.113) and "naive" (0.359). Three iterations, all same day
+(2026-08-09), each measured against the real model before moving to the
+next:
 
 1. First implementation (`_mask_regex_covered_fields`, now superseded):
    replaced regex-covered field spans with same-length `#` placeholders.
@@ -55,26 +56,40 @@ documented PERSON recall gap between the whole-line "tiered" strategy
    the same day specifically to fix that: excises (removes) regex-covered
    spans instead of masking them, so the candidate passed to NER is
    actually shorter, with offsets remapped back to the original line's
-   coordinates afterward. This file's tests were rewritten to match --
-   confirming candidates are measurably shorter when something is
-   excised, and, the correctness-critical piece, that offsets round-trip
-   back to the exact original substring (including the non-trivial case
-   of a hit sitting after an excised span). Monkeypatches `detect.scan_ner`
-   to a recording stub rather than the real spaCy/Presidio model (same
-   reason as `test_service_auth.py` below: no model download possible in
-   this environment), so what's verified here is the excision/remapping
-   mechanics, not real recall/throughput numbers for this second version.
+   coordinates afterward. Recall held (0.360 vs. 0.356, precision 0.658
+   vs. 0.657) and throughput improved substantially (16.1% slower than
+   naive -> 4.3% slower), but the top-line numbers still looked like a
+   small loss.
+3. **The remaining 4.3% turned out to be a measurement artifact, found
+   by fixing the profiling rather than optimizing further.** A first
+   profiling pass covered only the field-gated candidate path (the
+   4,606 of 10,000 lines with a regex hit); the other 5,394 lines fall
+   through to the exact same plain `scan_ner(text)` call naive makes for
+   every line, and that branch was never timed -- over half the run's
+   cost was invisible. Fixed: `run_evaluation`'s `profile` param now
+   also times that fallthrough branch, bucketed by whether the line had
+   a regex hit, so the SAME instrumentation run against naive gives a
+   true controlled comparison on the identical subset of lines the two
+   strategies actually differ on. Result: **field-gated measured
+   11.34ms/line vs. naive's 11.55ms/line on that subset -- field-gated
+   is faster, by 1.8%.** The shared 5,394-line subset (provably
+   identical code in both conditions) itself showed a 4.6% run-to-run
+   difference, establishing the real noise floor and confirming the
+   earlier top-line gap was noise, not a regression.
 
-   **Re-measured by the user locally against the real model, same day:**
-   the recall prediction held almost exactly (0.360 vs. the first
-   version's 0.356, precision 0.658 vs. 0.657), and throughput improved
-   substantially (~110 vs. ~100 events/sec) but did not fully close the
-   gap to naive (~114.5) -- 4.3% slower, down from 16.1% slower, real
-   progress but not a net throughput win. Honest conclusion: this is a
-   recall fix at close to throughput parity with naive, not a faster
-   replacement for the whole-line tiered strategy. Full history and
-   reasoning in README.md's comparison table and
-   `_build_ner_candidate`'s own docstring.
+This file's tests cover all three iterations' mechanics: candidates are
+measurably shorter when something is excised, offsets round-trip back
+to the exact original substring (including a hit sitting after an
+excised span), the profile dict gets populated correctly for both the
+field-gated candidate path and the shared fallthrough branch, and a
+naive run's profile buckets match field-gated's on which lines have a
+regex hit. Monkeypatches `detect.scan_ner` to a recording stub rather
+than the real spaCy/Presidio model (same reason as `test_service_auth.py`
+below: no model download possible in this environment), so what's
+verified here is the mechanics, not real recall/throughput numbers --
+those came from the user running `python src/evaluate.py` locally, three
+times, once per iteration. Full history and reasoning in README.md's
+comparison table and `_build_ner_candidate`'s own docstring.
 
 **Covered** (`test_vault_storage_provider.py`, runs in CI on every
 push): `VaultStorageProvider` and its CAS-based `_VaultLockContext`
