@@ -46,6 +46,7 @@ from collections import Counter
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 import detect  # noqa: E402
+import anonymize  # noqa: E402
 
 RAW_FILES = {
     "windows_event": "data/raw/windows_events.log",
@@ -64,13 +65,33 @@ def sample_lines(path: str, n: int, seed: int = 42) -> list[str]:
 
 
 def tally(lines: list[str], log_type: str, field_gated: bool) -> Counter:
+    """Mirrors src/service.py's exact pipeline (line 257-259), not raw
+    ensemble output: HIGH_ENTROPY is filtered out, then dedup_spans()
+    collapses same-type overlapping spans -- required here specifically
+    because scan_ner()'s Presidio analyzer requests entities=list(
+    _PRESIDIO_TO_CANONICAL.keys()) (src/detect.py:66), which includes
+    EMAIL_ADDRESS/IP_ADDRESS/US_SSN/CREDIT_CARD, not just PERSON --
+    Presidio's own built-in recognizers for those types independently
+    re-detect the same substrings this project's own scan_regex() already
+    caught, whenever NER runs on text that still contains them. naive
+    calls scan_ner on the full original line every time, so every
+    regex-covered value gets a same-type overlapping duplicate hit from
+    Presidio's built-in recognizer on top of scan_regex's own hit;
+    field-gated's build_ner_candidate excises exactly those spans before
+    calling scan_ner, so Presidio's built-in recognizers never see that
+    text there and never produce the duplicate. Without dedup_spans(),
+    naive's regex-type counts come out ~2x field-gated's here -- not a
+    real detection-strategy difference, an artifact of comparing raw
+    ensemble output instead of what's actually anonymized/audited."""
     counts = Counter()
     for line in lines:
         if field_gated:
             hits = detect.detect_all_field_gated(line, log_type=log_type)
         else:
             hits = detect.detect_all(line, use_ner=True)
-        for h in hits:
+        typed_spans = [h for h in hits if h["type"] != "HIGH_ENTROPY"]
+        typed_spans = anonymize.dedup_spans(typed_spans)
+        for h in typed_spans:
             counts[h["type"]] += 1
     return counts
 
