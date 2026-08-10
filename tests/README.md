@@ -77,11 +77,34 @@ the next:
    The shared 5,394-line subset (provably identical code in both
    conditions) itself showed a 4.6% run-to-run difference -- LARGER than
    the 1.8% gap, meaning that gap is within noise, not a confirmed win.
-   Corrected the same day, on rereading these two numbers side by side:
-   the honest claim is field-gated's throughput is at worst
-   statistically indistinguishable from naive's on this subset, not
-   confirmed faster. A larger synthetic sample to get real statistical
-   power on this specific question is a tracked follow-up, not yet run.
+
+4. **Re-run at 100,000 lines (10x), same day: the gap didn't resolve --
+   it got thrown out as unmeasurable at this precision.** Recall/precision
+   held (PERSON recall 0.359 vs. naive's 0.358, field-gated's precision
+   edge over naive now confirmed at a larger sample: 0.651 vs. 0.629).
+   Throughput: 1.24% gap on the regex-hit subset (down from 1.8%), but
+   the identical-code control subset's "noise floor" barely moved (4.2%
+   on 53,329 calls vs. 4.6% on 5,394) -- a gap that should shrink by
+   roughly sqrt(10) with 10x the samples if it were ordinary sampling
+   noise, and didn't, pointing at something systematic (evaluate.py
+   always profiles field-gated before naive, in the same process).
+   `validation/field_gate_throughput_ab_test.py` tested this directly:
+   same 2,000-line sample, alternating which condition runs first across
+   6 repetitions in the same process. Result: per-repetition swings of
+   -23.7% to +15.2%, a 95% confidence interval on the mean spanning
+   [-23.7%, +5.5%] -- crossing zero by a wide margin, and not reliably
+   containing either single-pass estimate. Resolving a true ~1-2% effect
+   against this much noise would take roughly 400 repetitions, not 6 --
+   impractical on shared hardware, and not worth it for an effect this
+   small either way. The order-effect check ruled out simple monotonic
+   warmup as the cause (field-gated got faster running 2nd, naive got
+   SLOWER running 2nd -- opposite directions, so it's ordinary system
+   noise, not a warmup artifact specifically). **Honest final answer:
+   field-gated's throughput is statistically indistinguishable from
+   naive's on this hardware** -- not confirmed faster, not confirmed
+   slower. The load-bearing claim for this feature is the recall/precision
+   improvement, confirmed at two sample sizes, not a throughput edge that
+   was never reliably measurable to begin with.
 
 **Wired into production, 2026-08-09, same day this closed:** `build_ner_candidate`/
 `remap_hit` moved from `evaluate.py` to `src/detect.py` (which

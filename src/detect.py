@@ -241,22 +241,43 @@ def build_ner_candidate(text: str, log_type: str, regex_hits: list[dict]):
     the test machine -- LARGER than the 1.8% "win" this measured, meaning
     that specific throughput-win claim is not actually distinguishable
     from noise at this sample size (10,000 lines / 4,606 regex-hit
-    lines). A larger synthetic sample to get real statistical power on
-    this question is tracked as a follow-up; see tests/README.md and
-    README.md's comparison table for the fuller, still-being-updated
-    history.
+    lines).
 
-    HONEST CURRENT CONCLUSION: field-gated matches or exceeds naive's
-    recall and precision, at throughput that is AT WORST statistically
-    indistinguishable from naive's on the lines where the two approaches
-    diverge (not confirmed faster, but not confirmed slower either, given
-    the measured noise floor). It is NOT a faster replacement for the
-    whole-line tiered strategy, which remains the only genuinely fast
-    option (~261-264 events/sec across runs) at tiered's own documented
-    recall cost -- but field-gated removes naive's remaining recall
-    weakness with no confirmed throughput downside, which is why
-    src/service.py and src/pipeline.py now call it as the default
-    instead of naive detect_all().
+    RESOLVED (as unresolvable at this precision), same day, via a 10x
+    (100,000-line) rerun plus a dedicated order-controlled A/B test
+    (validation/field_gate_throughput_ab_test.py). The 100K rerun's
+    regex-hit-subset gap came back smaller (1.24%), and its identical-
+    code control subset's noise floor barely shrank versus 10K (4.2% on
+    53,329 calls vs. 4.6% on 5,394) -- if that were ordinary sampling
+    noise it should have shrunk by roughly sqrt(10). That pointed at a
+    possible run-order confound (evaluate.py always profiles field-gated
+    before naive, in the same process), so the A/B script alternated
+    which condition ran first across 6 repetitions on a fixed 2,000-line
+    sample. Result: per-repetition swings of -23.7% to +15.2%, a 95%
+    confidence interval on the mean of [-23.7%, +5.5%] -- spanning zero
+    by a wide margin, not reliably containing either single-pass
+    estimate. Resolving a true ~1-2% effect against this much per-
+    measurement noise would take roughly 400 repetitions, impractical on
+    shared hardware and not worth it for an effect this size. The order-
+    effect check also ruled out simple monotonic warmup specifically:
+    field-gated got faster running 2nd, naive got SLOWER running 2nd --
+    opposite directions, so it's ordinary system noise, not a warmup
+    artifact. See tests/README.md and README.md's comparison table for
+    the full numbers.
+
+    HONEST FINAL CONCLUSION: field-gated matches or exceeds naive's
+    recall, and shows a real, larger-sample-confirmed precision edge
+    (0.651 vs. 0.629 at 100K lines) -- but its throughput is genuinely
+    STATISTICALLY INDISTINGUISHABLE from naive's on this hardware, not
+    confirmed faster and not confirmed slower. That's fine: the feature's
+    real justification is recall/precision, not a throughput edge that
+    was never reliably measurable to begin with. It is NOT a faster
+    replacement for the whole-line tiered strategy, which remains the
+    only genuinely fast option (~261-264 events/sec across runs) at
+    tiered's own documented recall cost -- but field-gated removes
+    naive's remaining recall weakness with no measured throughput
+    downside, which is why src/service.py and src/pipeline.py now call
+    it as the default instead of naive detect_all().
 
     A hit's [start, end) reported against the (shorter) candidate string
     is remapped back to the ORIGINAL text's coordinate space via
