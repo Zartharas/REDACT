@@ -265,19 +265,61 @@ def build_ner_candidate(text: str, log_type: str, regex_hits: list[dict]):
     artifact. See tests/README.md and README.md's comparison table for
     the full numbers.
 
-    HONEST FINAL CONCLUSION: field-gated matches or exceeds naive's
-    recall, and shows a real, larger-sample-confirmed precision edge
-    (0.651 vs. 0.629 at 100K lines) -- but its throughput is genuinely
-    STATISTICALLY INDISTINGUISHABLE from naive's on this hardware, not
-    confirmed faster and not confirmed slower. That's fine: the feature's
-    real justification is recall/precision, not a throughput edge that
-    was never reliably measurable to begin with. It is NOT a faster
-    replacement for the whole-line tiered strategy, which remains the
-    only genuinely fast option (~261-264 events/sec across runs) at
-    tiered's own documented recall cost -- but field-gated removes
-    naive's remaining recall weakness with no measured throughput
-    downside, which is why src/service.py and src/pipeline.py now call
-    it as the default instead of naive detect_all().
+    HONEST CONCLUSION (SYNTHETIC DATA ONLY, SEE CORRECTION BELOW):
+    field-gated matches or exceeds naive's recall, and shows a real,
+    larger-sample-confirmed precision edge (0.651 vs. 0.629 at 100K
+    lines) -- but its throughput is genuinely STATISTICALLY
+    INDISTINGUISHABLE from naive's on this hardware, not confirmed
+    faster and not confirmed slower. It is NOT a faster replacement for
+    the whole-line tiered strategy, which remains the only genuinely
+    fast option (~261-264 events/sec across runs) at tiered's own
+    documented recall cost.
+
+    CORRECTION, 2026-08-09, from real-data validation
+    (validation/real_data/inject_and_evaluate.py, Task #10) -- this
+    changes the recommendation above and should NOT be skipped when
+    reading this docstring: the precision-edge claim above was only ever
+    measured against this project's own 3 fixed synthetic syslog
+    templates. Run for real against real, unmodified Loghub OpenSSH/Linux
+    log text (with fields.py's syslog header-prefix gap simulated as
+    fixed, i.e. field-gating actually engaging rather than falling back),
+    the result FLIPPED: OpenSSH precision 0.974 -> 0.778 (FP 49 -> 523)
+    for +1 TP; Linux precision 0.920 -> 0.797 (FP 122 -> 357) for +0 TP.
+    Precision loss scaled directly with how often field-gating engaged;
+    recall gain was ~0 in both. Wherever field-gating actually excises
+    something on real, structurally diverse syslog text, it is
+    manufacturing new false positives, not finding new true positives --
+    the opposite of the synthetic result. Root cause not yet confirmed --
+    see validation/real_data/diagnose_field_gate_false_positives.py,
+    written to distinguish an accidental-new-adjacency effect (already
+    disclosed as a risk above) from a context-loss effect (removing the
+    excised span may reduce NER's confidence in classifying nearby
+    tokens) -- not yet run.
+
+    windows_event and cloudtrail have NOT been checked against any real
+    (non-synthetic) data at all -- Loghub's OpenSSH/Linux/Thunderbird
+    datasets are syslog-shaped, and no equivalent real dataset for those
+    two log types has been sourced yet. Whether the same regression
+    applies there is an open question, not confirmed absent. Both use
+    more rigidly delimited extraction (JSON quote/comma boundaries,
+    KV `=`/`;` boundaries) than syslog's free-text-heavy KV fallback, which
+    is a plausible reason the effect could be smaller there -- a
+    hypothesis, not evidence.
+
+    PRODUCTION IMPACT: src/service.py and src/pipeline.py call this
+    function as the default detection path for EVERY log_type, not just
+    syslog. Today's actual production exposure to the syslog regression
+    above is limited by an ACCIDENTAL safety net, not a designed one --
+    fields.py's syslog extractor can't see past the RFC3164 timestamp
+    prefix real syslog lines carry, so field-gating currently falls back
+    to naive-equivalent behavior on real syslog traffic under this
+    project's own logstash/redact-pipeline.conf (no header-stripping
+    filter exists there). That protection would silently disappear the
+    moment header-stripping is added without this being root-caused
+    first -- do not add syslog header-stripping to the Logstash pipeline
+    until then. windows_event/cloudtrail traffic is NOT protected by any
+    equivalent accidental fallback and DOES actually engage field-gating
+    today, with the real-data question above still open for those types.
 
     A hit's [start, end) reported against the (shorter) candidate string
     is remapped back to the ORIGINAL text's coordinate space via
