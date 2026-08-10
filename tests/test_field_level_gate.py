@@ -316,6 +316,69 @@ def test_profile_dict_covers_the_no_regex_hit_fallthrough_branch(monkeypatch):
     assert profile.get("ner_calls_skipped", 0) == 0
 
 
+def test_detect_all_field_gated_excises_regex_covered_field_before_ner(monkeypatch):
+    """Engineering upgrade, 2026-08-09: detect.detect_all_field_gated() is
+    the production-facing counterpart to run_evaluation(...,
+    use_field_gate=True) -- src/service.py and src/pipeline.py now call
+    this directly instead of detect.detect_all() (naive). Confirms the
+    ensemble-level function reaches scan_ner with the excised candidate
+    and correctly remaps offsets, the same claims tested against
+    _build_ner_candidate/_remap_hit directly above, but through the
+    actual function production code calls."""
+    calls = []
+
+    def fake_scan_ner(text, min_score=0.5):
+        calls.append(text)
+        if "Timothy Wong" in text:
+            start = text.index("Timothy Wong")
+            return [{"type": "PERSON", "start": start, "end": start + len("Timothy Wong"),
+                      "method": "ner", "score": 0.9}]
+        return []
+
+    monkeypatch.setattr(detect, "scan_ner", fake_scan_ner)
+
+    text = "TargetUserName=Timothy Wong TargetSSN=123-45-6789"
+    hits = detect.detect_all_field_gated(text, log_type="windows_event", use_flattened=False)
+
+    assert len(calls) == 1
+    assert "123-45-6789" not in calls[0]
+    assert "Timothy Wong" in calls[0]
+
+    person_hits = [h for h in hits if h["type"] == "PERSON"]
+    assert len(person_hits) == 1
+    assert text[person_hits[0]["start"]:person_hits[0]["end"]] == "Timothy Wong"
+    ssn_hits = [h for h in hits if h["type"] == "SSN"]
+    assert len(ssn_hits) == 1  # still caught by scan_regex, independent of the NER gate
+
+
+def test_detect_all_field_gated_falls_back_to_naive_when_log_type_missing(monkeypatch):
+    """No log_type (e.g. a caller that hasn't wired it through yet, like
+    logstash/redact-pipeline.conf before its own log_type-forwarding
+    change) must still run NER on the full text -- the same conservative,
+    recall-safe fallback build_ner_candidate already guarantees, exercised
+    here through the ensemble function itself."""
+    calls = []
+    monkeypatch.setattr(detect, "scan_ner", lambda text, min_score=0.5: calls.append(text) or [])
+
+    text = "TargetUserName=Timothy Wong TargetSSN=123-45-6789"
+    detect.detect_all_field_gated(text, log_type=None, use_flattened=False)
+
+    assert calls == [text], "missing log_type must fall back to running NER on the full text"
+
+
+def test_detect_all_field_gated_skips_ner_when_no_regex_hit(monkeypatch):
+    """A line with no regex hit at all takes the else-branch straight to
+    scan_ner(text) -- same behavior as naive for that line, confirmed
+    here at the ensemble level."""
+    calls = []
+    monkeypatch.setattr(detect, "scan_ner", lambda text, min_score=0.5: calls.append(text) or [])
+
+    text = "a free text line mentioning Timothy Wong, nothing regex-shaped"
+    detect.detect_all_field_gated(text, log_type="windows_event", use_flattened=False)
+
+    assert calls == [text]
+
+
 def test_profile_dict_naive_run_buckets_by_regex_hit_presence(monkeypatch):
     """Confirms the SAME profiling, run against a plain naive
     configuration (use_field_gate=False, use_entropy_gate=False), splits

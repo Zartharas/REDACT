@@ -12,7 +12,12 @@ call it, rather than mirroring it, removes that entire class of drift.
 Run with:
     python src/service.py
 Then POST to http://localhost:8080/anonymize with body:
-    {"log": "<raw log line>"}
+    {"log": "<raw log line>", "log_type": "windows_event"}
+"log_type" is optional ("windows_event" / "syslog" / "cloudtrail", matching
+fields.py's coverage) -- if present, detection uses the field-gated NER
+strategy's structured-field information; if absent, detection still runs
+correctly, just without that extra gating context for this request (see
+detect.detect_all_field_gated's docstring).
 """
 import sys
 import os
@@ -224,8 +229,32 @@ def anonymize_endpoint():
     text = body["log"]
     if not isinstance(text, str):
         return jsonify({"error": "'log' must be a string"}), 400
+    # Optional, added 2026-08-09 alongside the switch to field-gated NER
+    # below: "log_type" ("windows_event" / "syslog" / "cloudtrail") lets
+    # detect_all_field_gated() use fields.py's structured extraction to
+    # gate NER at the field level instead of the whole line. Deliberately
+    # optional and permissive (falls back to None, not a 400) -- a caller
+    # that doesn't send it (e.g. logstash/redact-pipeline.conf before its
+    # own log_type-forwarding change ships) still gets correct detection,
+    # just without the field-gating benefit for that request; see
+    # detect.detect_all_field_gated's own docstring for why that fallback
+    # is safe rather than a silent correctness regression.
+    log_type = body.get("log_type")
+    if log_type is not None and not isinstance(log_type, str):
+        return jsonify({"error": "'log_type' must be a string if present"}), 400
 
-    spans = detect.detect_all(text, use_ner=True)
+    # Engineering upgrade, 2026-08-09: switched from detect.detect_all()
+    # (naive -- NER on every line) to detect.detect_all_field_gated().
+    # Three measured iterations against the real model (see
+    # detect.build_ner_candidate's docstring and README.md's comparison
+    # table) found field-gated matches or exceeds naive's recall and
+    # precision, at throughput that is at worst statistically
+    # indistinguishable from naive's given the measured noise floor --
+    # never worse on any measured axis, and meaningfully better on PERSON
+    # recall than the whole-line "tiered" strategy this project also
+    # evaluated. See tests/README.md's field-gate section for the honest,
+    # not-yet-fully-resolved throughput comparison this claim rests on.
+    spans = detect.detect_all_field_gated(text, log_type=log_type)
     typed_spans = [s for s in spans if s["type"] != "HIGH_ENTROPY"]
     typed_spans = anonymize.dedup_spans(typed_spans)
 

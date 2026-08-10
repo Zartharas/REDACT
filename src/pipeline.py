@@ -41,8 +41,18 @@ def process_file(in_path: str, out_path: str, audit_out_path: str,
                 break
             entry = json.loads(line)
             text = entry["log"]
+            log_type = entry.get("log_type")
 
-            spans = detect.detect_all(text, use_ner=True)
+            # Engineering upgrade, 2026-08-09: switched from
+            # detect.detect_all() (naive) to detect.detect_all_field_gated(),
+            # same change and same reasoning as src/service.py's
+            # /anonymize endpoint -- see detect.build_ner_candidate's
+            # docstring and README.md's comparison table for the full
+            # three-iteration measurement history behind this default.
+            # log_type was already being read from each entry (used below
+            # for the output record) but never passed into detection --
+            # that's the one line this upgrade actually changes.
+            spans = detect.detect_all_field_gated(text, log_type=log_type)
             # entropy hits carry type HIGH_ENTROPY, which anonymize_by_policy
             # does not route anywhere (falls through untouched) -- entropy is
             # a review signal in this pipeline, not an auto-anonymization

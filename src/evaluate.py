@@ -18,7 +18,10 @@ from collections import defaultdict
 
 sys.path.insert(0, "src")
 import detect  # noqa: E402
-import fields  # noqa: E402
+# fields.py is no longer imported directly here -- detect.build_ner_candidate
+# (aliased below as _build_ner_candidate) imports it lazily itself, now that
+# the field-gating logic lives in detect.py rather than this file. See the
+# comment above that alias for the full move history.
 
 
 def overlaps(a: dict, b: dict) -> bool:
@@ -49,230 +52,18 @@ def load_dataset(path: str) -> list[dict]:
         return [json.loads(line) for line in f]
 
 
-def _build_ner_candidate(text: str, log_type: str, regex_hits: list[dict]):
-    """Field-level counterpart to the whole-line entropy gate below.
-
-    The whole-line gate (use_entropy_gate) skips NER for the entire line
-    the moment ANY regex hit exists anywhere in it -- cheap and fast, but
-    this is exactly the mechanism behind the documented PERSON recall
-    collapse (0.113 tiered vs. 0.359 naive, measured live 2026-08-09
-    against this project's current corpus -- see README.md's comparison
-    table and Known Limitations section): an SSN regex hit in one field
-    silently suppresses NER for a PERSON name sitting in a completely
-    different field on the same line.
-
-    VERSION HISTORY, kept rather than deleted, because the mistake this
-    corrects is itself informative: the original implementation of this
-    function (`_mask_regex_covered_fields`, replaced 2026-08-09 the same
-    day its numbers came back) MASKED regex-covered field spans by
-    replacing them with same-length '#' placeholders, keeping the
-    candidate text's total length unchanged. Measured against the real
-    spaCy model that day: the recall fix worked (PERSON recall 0.113 ->
-    0.356, nearly matching naive's 0.359, with better precision besides),
-    but the throughput claim ("preserves some of the original throughput
-    advantage") did NOT hold up -- field-gated measured ~100 events/sec,
-    SLOWER than naive's ~119. Root cause, diagnosed after the fact: same-
-    length masking doesn't reduce what spaCy actually has to tokenize and
-    tag -- the candidate string NER received was exactly as long as the
-    original line, so its cost was exactly naive's cost, plus this
-    function's own extract_fields()/masking overhead on top, for a line
-    that (correctly, for recall) still needed a real NER call almost
-    every time a PERSON was actually present.
-
-    This version fixes that by EXCISING regex-covered field spans instead
-    of masking them -- physically removing those characters and splicing
-    the surrounding text back together, so the candidate passed to NER is
-    actually SHORTER than the original line, not just internally altered.
-    Since NER cost scales with input length/token count, this is the
-    correct lever for a real throughput improvement, not a same-length
-    swap that only changes content.
-
-    RE-MEASURED against the real model, same day (2026-08-09), after
-    this rewrite: the recall prediction held almost exactly -- PERSON
-    recall 0.360 (vs. the masking version's 0.356), precision 0.658 (vs.
-    0.657), confirming excision and masking hide the identical
-    characters from NER, just structured differently. Throughput
-    improved substantially but the top-line numbers still looked like a
-    small loss: ~110 events/sec, cutting the shortfall from 16.1% slower
-    than naive down to 4.3% slower.
-
-    THE REMAINING 4.3% TURNED OUT TO BE A MEASUREMENT ARTIFACT, found by
-    fixing the profiling rather than optimizing further (still the same
-    day). A first profiling pass covered only this function's own
-    candidate path (the 4,606 of 10,000 lines with a regex hit); the
-    other 5,394 lines fall through to run_evaluation's plain
-    `scan_ner(text)` branch -- the exact same call naive makes for every
-    line -- which the profiling never timed. Over half the run's NER
-    cost was invisible to the comparison. Fixed: run_evaluation's
-    `profile` parameter now also times that fallthrough branch, bucketed
-    by whether the line had a regex hit, so the identical instrumentation
-    run against naive gives a true controlled comparison on the SAME
-    4,606-line subset the two strategies actually differ on. Result:
-    field-gated measured 11.34ms/line vs. naive's 11.55ms/line on that
-    subset -- field-gated is FASTER, by 1.8%. The shared 5,394-line
-    subset (provably identical code in both conditions -- neither one
-    treats a no-regex-hit line any differently) itself showed a 4.6%
-    run-to-run difference despite running the same code on the same
-    data, establishing that as the real noise floor on the test machine
-    and confirming the earlier "still 4.3% slower" reading was inside
-    that noise, not a real regression.
-
-    HONEST FINAL CONCLUSION: field-gated is a strictly better choice
-    than naive -- matching or exceeding naive's recall and precision, at
-    the same or better throughput on the lines where the two approaches
-    diverge. It is NOT a faster replacement for the whole-line tiered
-    strategy, which remains the only genuinely fast option among this
-    module's five conditions (~261-264 events/sec across runs), at
-    tiered's own documented recall cost -- but field-gated does remove
-    naive's own remaining weakness, with no real downside found after
-    three iterations of actually measuring instead of assuming.
-
-    A hit's [start, end) reported against
-    the (shorter) candidate string is remapped back to the ORIGINAL
-    text's coordinate space via `_remap_hit` below and the `segments`
-    this function returns, since callers (and the gold-span comparison in
-    run_evaluation) need offsets into the real line, not the candidate.
-
-    Returns one of three shapes:
-      - (candidate, segments): NER should run on `candidate` (shorter
-        than `text`, or equal to it if nothing was excised); `segments`
-        is a list of (candidate_start, original_start) pairs, sorted by
-        candidate_start, used by `_remap_hit` to translate a hit's
-        offsets back to `text`'s coordinate space. `segments` is `None`
-        specifically when candidate == text unchanged (nothing excised,
-        or fields.py didn't recognize this log_type/extracted nothing --
-        the conservative, recall-safe fallback), since no remapping is
-        needed in that case.
-      - (None, None): every recognized field on this line was already
-        regex-covered and nothing alphabetic remains outside those spans
-        -- the one case where skipping the NER call entirely is safe.
-
-    Known, disclosed limitation: field boundaries are located via
-    text.find(value), since fields.py returns values, not offsets. This
-    is correct except when a field's value string is not unique within
-    the line (e.g. the same short value coincidentally appears earlier
-    as a substring of something else) -- an edge case, not something
-    this implementation claims to have ruled out, and one a real
-    per-field extractor returning offsets directly would close properly.
-
-    A second, new disclosed limitation from excising rather than masking:
-    splicing two previously-non-adjacent chunks directly together could,
-    in principle, create an accidental new adjacency NER might
-    misinterpret (e.g. two excised spans separated by nothing at all).
-    In practice this is low-risk for the field shapes this project's
-    fields.py extracts: KV-style values are always bounded by a
-    delimiter (`=`, `;`, `,`, a space) that stays in the candidate on
-    both sides of an excision, and CloudTrail's flattened JSON string
-    values are always bounded by quote/punctuation characters for the
-    same reason -- but it is a real, structurally different risk than
-    same-length masking had, and is disclosed here rather than assumed
-    away.
-
-    The "safe to skip NER entirely" decision below only looks at
-    extracted FIELD VALUES, not the whole line -- field names (`SRC=`,
-    `PWD=`, the syslog tag prefix, KV separators) are structural, not
-    PII-bearing, and checking the whole line's alphabetic content for
-    the skip decision would make it almost never trigger, since field
-    names are alphabetic too and appear on nearly every structured line.
-    """
-    extracted = fields.extract_fields(log_type, text) if log_type else {}
-    if not extracted:
-        return text, None
-
-    # Engineering upgrade, 2026-08-09 (chasing the remaining 4.3%
-    # throughput gap the excision rewrite didn't close): this used to be
-    # a bare `text.find(value)` per field, restarting the scan from
-    # position 0 of the line EVERY time, for EVERY field -- O(len(text))
-    # work repeated once per extracted field, on every gated line.
-    # fields.py's own extractors emit values in left-to-right source
-    # order (the KV extractors iterate `_KV_KEY_RE.finditer(text)`
-    # matches in order; extract_fields_cloudtrail's walk() visits a JSON
-    # object's keys and a list's elements in their natural,
-    # already-left-to-right order), so a single forward-advancing search
-    # cursor covers the same ground once across all fields instead of
-    # once per field. `text.find(value, search_cursor)` falls back to a
-    # from-the-start search only if the forward search comes up empty
-    # (the value's true occurrence sits before the cursor -- the source-
-    # order assumption above doesn't strictly hold for every message
-    # shape), so correctness never regresses versus the old
-    # always-from-0 behavior in the worst case.
-    #
-    # This is measured and characterized here as a SPEED optimization,
-    # not a fix for the pre-existing "value isn't unique in the line"
-    # ambiguity this function's own docstring already discloses above.
-    # An earlier draft of this comment overclaimed the cursor also
-    # resolves that ambiguity in general; checked against a constructed
-    # duplicate-value example while writing this and found that's only
-    # true when an EARLIER-processed field has already advanced the
-    # cursor past a decoy occurrence -- if the very first field
-    # processed is the one with an earlier decoy, cursor and no-cursor
-    # search land on the identical (still ambiguous) result, since both
-    # start from position 0. Worth stating precisely rather than
-    # claiming a correctness win this change doesn't reliably deliver.
-    search_cursor = 0
-    excise_ranges = []
-    any_alpha_value_unmasked = False
-    for value in extracted.values():
-        if not value:
-            continue
-        idx = text.find(value, search_cursor)
-        if idx == -1:
-            idx = text.find(value)
-        if idx == -1:
-            continue
-        end = idx + len(value)
-        search_cursor = end
-        if any(h["start"] < end and idx < h["end"] for h in regex_hits):
-            excise_ranges.append((idx, end))
-        elif any(c.isalpha() for c in value):
-            any_alpha_value_unmasked = True
-
-    if not excise_ranges:
-        return text, None
-    if not any_alpha_value_unmasked:
-        return None, None
-
-    excise_ranges.sort()
-    merged = []
-    for s, e in excise_ranges:
-        if merged and s <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
-        else:
-            merged.append((s, e))
-
-    candidate_parts = []
-    segments = []  # (candidate_start, original_start) per kept chunk
-    cursor = 0
-    candidate_len = 0
-    for s, e in merged:
-        if cursor < s:
-            chunk = text[cursor:s]
-            segments.append((candidate_len, cursor))
-            candidate_parts.append(chunk)
-            candidate_len += len(chunk)
-        cursor = e
-    if cursor < len(text):
-        chunk = text[cursor:]
-        segments.append((candidate_len, cursor))
-        candidate_parts.append(chunk)
-
-    return "".join(candidate_parts), segments
-
-
-def _remap_hit(hit: dict, segments: list[tuple[int, int]]) -> dict:
-    """Translates a span reported against `_build_ner_candidate`'s
-    (shorter) candidate text back into the ORIGINAL text's coordinate
-    space, using `segments` (sorted (candidate_start, original_start)
-    pairs). Every character kept in the candidate came from exactly one
-    contiguous original chunk, so a hit's start position always falls
-    inside exactly one segment; find it and apply that segment's
-    constant offset to both start and end."""
-    import bisect
-    starts = [s[0] for s in segments]
-    i = bisect.bisect_right(starts, hit["start"]) - 1
-    candidate_start, original_start = segments[i]
-    offset = original_start - candidate_start
-    return {**hit, "start": hit["start"] + offset, "end": hit["end"] + offset}
+# _build_ner_candidate / _remap_hit used to be defined here directly.
+# Moved to detect.py on 2026-08-09 (build_ner_candidate / remap_hit) so
+# src/service.py and src/pipeline.py can call the field-gated detection
+# path in production without importing this research/evaluation script --
+# see detect.py's own comment above detect_all_field_gated() for the full
+# reasoning, and detect.build_ner_candidate's docstring for this
+# function's full version history (masking -> excision -> profiling-fix).
+# Aliased under the original names here so the rest of this file (and the
+# existing test suite, tests/test_field_level_gate.py) doesn't need to
+# change on top of the move.
+_build_ner_candidate = detect.build_ner_candidate
+_remap_hit = detect.remap_hit
 
 
 def run_evaluation(entries: list[dict], use_ner: bool, use_entropy_gate: bool = False,

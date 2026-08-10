@@ -38,17 +38,20 @@ def service_app(monkeypatch):
     import detect  # noqa: E402
     monkeypatch.setattr(detect, "_get_analyzer", lambda: None)
 
-    def fake_detect_all(text, use_ner=True):
+    def fake_detect_all_field_gated(text, log_type=None, use_flattened=True):
         # One deterministic EMAIL hit whenever the text contains '@', so
         # tests can assert on a known, predictable detection count instead
-        # of depending on the real NER model.
+        # of depending on the real NER model. Patched onto
+        # detect_all_field_gated (not detect_all, which service.py stopped
+        # calling 2026-08-09 -- see src/service.py's /anonymize endpoint)
+        # so this mock actually intercepts the call service.py makes.
         if "@" in text:
             idx = text.index("@")
             return [{"type": "EMAIL", "start": max(0, idx - 4), "end": idx + 4,
                       "method": "regex"}]
         return []
 
-    monkeypatch.setattr(detect, "detect_all", fake_detect_all)
+    monkeypatch.setattr(detect, "detect_all_field_gated", fake_detect_all_field_gated)
 
     import service  # noqa: E402
     service.app.testing = True

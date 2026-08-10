@@ -35,13 +35,15 @@ resolves correctly after it, because `TokenStore` reversibility is
 lookup-table-based, not key-based.
 
 **Covered** (`test_field_level_gate.py`, runs in CI on every push): the
-field-level NER gate added to `src/evaluate.py`
-(`_build_ner_candidate`, `_remap_hit`, `run_evaluation(...,
-use_field_gate=True)`) -- the engineering upgrade meant to close the
-documented PERSON recall gap between the whole-line "tiered" strategy
-(0.113) and "naive" (0.359). Three iterations, all same day
-(2026-08-09), each measured against the real model before moving to the
-next:
+field-level NER gate, originally added to `src/evaluate.py` and now
+living in `src/detect.py` (`build_ner_candidate`, `remap_hit`,
+`detect_all_field_gated()`, plus `evaluate.py`'s
+`run_evaluation(..., use_field_gate=True)` and its `_build_ner_candidate`/
+`_remap_hit` aliases onto the same functions) -- the engineering upgrade
+meant to close the documented PERSON recall gap between the whole-line
+"tiered" strategy (0.113) and "naive" (0.359). Three iterations, all same
+day (2026-08-09), each measured against the real model before moving to
+the next:
 
 1. First implementation (`_mask_regex_covered_fields`, now superseded):
    replaced regex-covered field spans with same-length `#` placeholders.
@@ -70,26 +72,47 @@ next:
    also times that fallthrough branch, bucketed by whether the line had
    a regex hit, so the SAME instrumentation run against naive gives a
    true controlled comparison on the identical subset of lines the two
-   strategies actually differ on. Result: **field-gated measured
-   11.34ms/line vs. naive's 11.55ms/line on that subset -- field-gated
-   is faster, by 1.8%.** The shared 5,394-line subset (provably
-   identical code in both conditions) itself showed a 4.6% run-to-run
-   difference, establishing the real noise floor and confirming the
-   earlier top-line gap was noise, not a regression.
+   strategies actually differ on. Result: field-gated measured
+   11.34ms/line vs. naive's 11.55ms/line on that subset -- a 1.8% gap.
+   The shared 5,394-line subset (provably identical code in both
+   conditions) itself showed a 4.6% run-to-run difference -- LARGER than
+   the 1.8% gap, meaning that gap is within noise, not a confirmed win.
+   Corrected the same day, on rereading these two numbers side by side:
+   the honest claim is field-gated's throughput is at worst
+   statistically indistinguishable from naive's on this subset, not
+   confirmed faster. A larger synthetic sample to get real statistical
+   power on this specific question is a tracked follow-up, not yet run.
+
+**Wired into production, 2026-08-09, same day this closed:** `build_ner_candidate`/
+`remap_hit` moved from `evaluate.py` to `src/detect.py` (which
+`evaluate.py` now imports rather than keeping a second copy of), and a
+new `detect.detect_all_field_gated()` lets `src/service.py` and
+`src/pipeline.py` call this strategy directly instead of the naive
+`detect.detect_all()` they'd both been stuck on since this feature was
+first built. `service.py`'s `/anonymize` endpoint now accepts an
+optional `log_type` request field for this purpose; a request that omits
+it still works correctly, just without the field-gating benefit for that
+one request (see `build_ner_candidate`'s documented fallback). New tests
+here (`test_detect_all_field_gated_*`) cover the ensemble-level function
+directly, and `tests/test_service_auth.py`/`test_metrics.py` were updated
+to monkeypatch `detect.detect_all_field_gated` instead of `detect.detect_all`,
+since that's what `service.py` actually calls now.
 
 This file's tests cover all three iterations' mechanics: candidates are
 measurably shorter when something is excised, offsets round-trip back
 to the exact original substring (including a hit sitting after an
 excised span), the profile dict gets populated correctly for both the
-field-gated candidate path and the shared fallthrough branch, and a
-naive run's profile buckets match field-gated's on which lines have a
-regex hit. Monkeypatches `detect.scan_ner` to a recording stub rather
-than the real spaCy/Presidio model (same reason as `test_service_auth.py`
-below: no model download possible in this environment), so what's
-verified here is the mechanics, not real recall/throughput numbers --
-those came from the user running `python src/evaluate.py` locally, three
-times, once per iteration. Full history and reasoning in README.md's
-comparison table and `_build_ner_candidate`'s own docstring.
+field-gated candidate path and the shared fallthrough branch, a naive
+run's profile buckets match field-gated's on which lines have a regex
+hit, and `detect_all_field_gated()` itself reaches the excised candidate,
+remaps offsets, and falls back correctly when `log_type` is missing.
+Monkeypatches `detect.scan_ner` to a recording stub rather than the real
+spaCy/Presidio model (same reason as `test_service_auth.py` below: no
+model download possible in this environment), so what's verified here is
+the mechanics, not real recall/throughput numbers -- those came from the
+user running `python src/evaluate.py` locally, three times, once per
+iteration. Full history and reasoning in README.md's comparison table
+and `detect.build_ner_candidate`'s own docstring.
 
 **Covered** (`test_vault_storage_provider.py`, runs in CI on every
 push): `VaultStorageProvider` and its CAS-based `_VaultLockContext`
