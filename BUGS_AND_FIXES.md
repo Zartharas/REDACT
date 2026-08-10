@@ -1475,16 +1475,26 @@ re-run after the fix: 54 passed, 2 skipped (up from the prior 53/2
 baseline by exactly the one new test added here) -- no regression to any
 other detection path.
 
-**Not yet done, disclosed rather than left implicit:** the cloudtrail
-condition of `inject_and_evaluate.py` has not yet been rerun against the
-real 2,000-line dataset with this fix in place to confirm the predicted
-precision improvement live (expected: FP should drop from ~4,627/4,562
-toward roughly 852-865, i.e. the FP count minus the 3,775 confirmed
-collision hits, since the fix targets exactly and only that collision
-shape) -- pending the user pulling this commit and rerunning it, the same
-root-cause-then-reconfirm workflow the `rhost=` dangling-key bug used
-earlier this session. windows_event's own small-sample FPs (6 out of 33)
-were not investigated further this round -- deprioritized in favor of
+**Re-confirmed against the live 2,000-line real dataset, same day.**
+Rerunning `inject_and_evaluate.py`'s cloudtrail condition: **naive
+precision 0.310 → 0.750 (FP 4627 → 692, TP/FN unchanged at 2079/379);
+field-gated precision 0.313 → 0.754 (FP 4562 → 678).** The drop is
+larger than the ~852-865 predicted from the diagnostic's own count alone
+(4627 − 3775 = 852) -- consistent with the diagnostic having measured
+only exact accountId-field-value matches per line, while the fix's
+`_AWS_ARN_ACCOUNT_ID_PREFIX_RE` branch also suppresses the same ID's
+second, separate occurrence embedded in the `arn` field on the same
+line, which the diagnostic's simpler count did not separately attribute.
+Recall is unchanged in both conditions (0.846), exactly as expected --
+the fix only removes false positives in a narrowly scoped context, it
+cannot affect true-positive detection anywhere. This is now, by a wide
+margin, the largest single false-positive class fixed on any real-data
+condition tested this project.
+
+The remaining 692/678 false positives on cloudtrail are NOT further
+investigated in this fix -- disclosed as a real, open gap, not implied
+to be resolved. windows_event's own small-sample FPs (6 out of 33) were
+also not investigated further this round -- deprioritized in favor of
 the much larger, clearer cloudtrail signal, and still an open item if
 windows_event's real-data sample is ever grown past its current n=33.
 
