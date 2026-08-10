@@ -115,3 +115,15 @@ def test_entropy_uuid_exclusion_regression():
         "0.0% after the UUID-shape exclusion fix -- see BUGS_AND_FIXES.md "
         "and validation/entropy_fair_test/README.md"
     )
+
+
+def test_aws_account_id_credit_card_exclusion():
+    """Bug 17 regression guard: real CloudTrail account IDs (always
+    exactly 12 digits) must not be reported as CREDIT_CARD via the arn
+    field or the accountId/recipientAccountId JSON keys, while bare
+    12-digit numbers (including Faker's own synthetic CREDIT_CARD_num
+    values) and any longer number near AWS-shaped text must still be
+    detected normally. See BUGS_AND_FIXES.md Bug 17."""
+    result = run_script("validation/aws_account_id_credit_card_exclusion_test.py", timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL CHECKS PASSED" in result.stdout

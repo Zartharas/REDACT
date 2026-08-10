@@ -1365,6 +1365,131 @@ conclusion.
 
 ---
 
+## 17. AWS account IDs colliding with the CREDIT_CARD regex -- a real, systematic false-positive source found only by testing against genuinely real cloud log data
+
+Found 2026-08-10, closing the last genuinely open real-data-validation
+gap (ROADMAP item 10/11's own honest disclosure that windows_event and
+cloudtrail had never been checked against real data, only synthetic).
+Sourced 33 real Microsoft-Windows-Security-Auditing records
+(`validation/real_data/datasets/WindowsEventSamples_raw.jsonl`) and 2,000
+real flaws.cloud CloudTrail events (Summit Route's public 2020 release,
+via `validation/real_data/prepare_cloudtrail_dataset.py`), extended
+`inject_and_evaluate.py` with `build_windows_event_corpus()` and
+`build_cloudtrail_corpus()`, and ran both through the same naive/
+field-gated ensemble already validated against OpenSSH/Linux/
+Thunderbird/OpenStack/Zookeeper.
+
+windows_event (n=33, too small to be statistically meaningful on its own,
+consistent with the already-documented flat-name NER weakness): naive
+P=0.333 R=0.429 (TP=3 FP=6 FN=4); field-gated identical numbers --
+field-gating engaged on all 33/33 lines but had zero effect on any single
+prediction.
+
+cloudtrail (n=2,000, a much larger and clearer signal): naive P=0.310
+R=0.846 (TP=2079 FP=4627 FN=379); field-gated nearly identical, P=0.313
+R=0.846 (TP=2079 FP=4562 FN=379). A precision collapse far worse than any
+other real-data condition tested this project (OpenSSH FP=49, Linux
+FP=122) -- and the fact that naive and field-gated came back almost
+identical already ruled out anything in field-gating's excision logic as
+the cause before this was even root-caused, pointing straight at the
+shared regex layer both strategies call.
+
+**Root cause, confirmed mechanically before anything was changed** (the
+same "confirm the magnitude before trusting a plausible-sounding theory"
+discipline Bug 9's fix required): wrote a dedicated, no-spaCy diagnostic,
+`validation/real_data/diagnose_cloudtrail_false_positives.py`, and ran it
+against the actual downloaded data rather than guessing. AWS account IDs
+are always exactly 12 digits -- the low end of `src/detect.py`'s
+`CREDIT_CARD` regex range, `\b\d{12,19}\b`. A real CloudTrail event's
+`userIdentity.accountId` field, AND the same 12-digit account ID embedded
+in the `arn` field (e.g. `arn:aws:iam::811596193553:user/Level6` --
+colons satisfy `\b` the same way whitespace does), each independently
+trigger a false `CREDIT_CARD` match. Confirmed live against all 2,000
+real lines: 4,399 total 12-19-digit matches, of which 3,775 (85.8% of all
+CREDIT_CARD-shaped matches; 81.6% of the naive run's total FP count of
+4,627) were an exact match of a real `accountId` value present on that
+same line. This is a genuine, structural collision between a real
+cloud-native identifier format and this project's regex, not a diffuse
+NER weakness -- the same "specific, mechanical, fixable cause" shape as
+the `rhost=` dangling-key bug found earlier this project, just in the
+regex layer instead of the field-extraction layer.
+
+**What was explicitly ruled out first:** narrowing `CREDIT_CARD`'s regex
+range from `\d{12,19}` to `\d{13,19}` would have "fixed" this in one
+line. Checked whether that was actually safe before doing it: grepped
+`src/generate_logs.py` and confirmed its `CREDIT_CARD_num` ground-truth
+slot is `fake.credit_card_number()` (line 32) -- this project's own
+synthetic-corpus generator, whose already-published CREDIT_CARD recall
+numbers this project has cited all session. Ran `fake.credit_card_number()`
+2,000 times with a fixed seed and inspected the digit-length distribution
+directly: `[12, 13, 14, 15, 16, 19]` -- Faker legitimately produces
+exactly-12-digit values for some card network formats. A blanket range
+narrowing would have silently regressed this project's own already-
+measured synthetic recall to fix a real-data problem -- exactly the kind
+of "fix one number, quietly break another" mistake this document's own
+review discipline exists to catch, so it was rejected.
+
+**Fix:** a narrow, context-aware exclusion in `scan_regex()`
+(`src/detect.py`), the same shape as the existing `_UUID_RE` exclusion in
+`scan_entropy()` and the manual lookback pattern `build_ner_candidate`
+already uses (Python's `re` module has no variable-length lookbehind, so
+this is a manual "search the text immediately before the match" check,
+not a true lookbehind assertion). A `CREDIT_CARD` match is suppressed
+ONLY when it is exactly 12 digits long AND is immediately preceded by
+either an AWS ARN's account-ID position (`arn:<partition>:<service>:
+<region>:`, matched via `_AWS_ARN_ACCOUNT_ID_PREFIX_RE`) or a
+`"accountId":`/`"recipientAccountId":` JSON key (`_AWS_ACCOUNT_ID_KEY_RE`).
+Both context shapes are structurally specific enough that a real credit
+card number could not coincidentally match either one. Critically, this
+leaves untouched: every 13-19 digit match (AWS account IDs are never any
+other length); any 12-digit match NOT in one of these two specific
+contexts, including Faker's own synthetic `CREDIT_CARD_num` values in the
+project's own synthetic corpus.
+
+**Verified, not just asserted to work:** `validation/aws_account_id_credit_card_exclusion_test.py`
+(new, wired into `tests/test_fast_validation.py` as
+`test_aws_account_id_credit_card_exclusion`) checks, with no
+Docker/spaCy/live data required: (1) the `accountId` JSON-key shape is
+suppressed, using the real account ID pulled verbatim from the diagnostic
+run's own confirmation; (2) the `arn`-field shape is suppressed, same
+real account ID; (3) `recipientAccountId` (the other real CloudTrail
+field name that carries a 12-digit account ID on some event types) is
+also suppressed; (4) a bare 12-digit number with no AWS context at all is
+still detected -- the direct regression guard for Faker's own synthetic
+values; (5) a 16-digit number sitting immediately next to `arn:aws` text
+is still detected -- AWS account IDs are never anything but exactly 12
+digits, so length alone should never be swallowed by this exclusion; (6)
+a 12-digit number following an unrelated JSON key (`transactionId`, not
+`accountId`/`recipientAccountId`, no `arn`) is still detected, guarding
+against the exclusion being loose enough to eat any quoted 12-digit value
+near any key. First run caught a real bug in the fix itself before it
+shipped: the initial `_AWS_ARN_ACCOUNT_ID_PREFIX_RE` mis-modeled the ARN
+format with one extra required colon (assumed
+`arn:aws:<service>:<region>::` when the actual format is
+`arn:<partition>:<service>:<region>:<account>`, i.e. one fewer colon than
+first assumed), which silently failed to match the real `arn:aws:iam::
+811596193553:user/Level6` shape and left check (2) failing. Fixed by
+correcting the prefix regex to `arn:aws[a-z0-9-]*:[^:]*:[^:]*:$`, matched
+against the real string, all 6 checks passing. Full pytest suite
+re-run after the fix: 54 passed, 2 skipped (up from the prior 53/2
+baseline by exactly the one new test added here) -- no regression to any
+other detection path.
+
+**Not yet done, disclosed rather than left implicit:** the cloudtrail
+condition of `inject_and_evaluate.py` has not yet been rerun against the
+real 2,000-line dataset with this fix in place to confirm the predicted
+precision improvement live (expected: FP should drop from ~4,627/4,562
+toward roughly 852-865, i.e. the FP count minus the 3,775 confirmed
+collision hits, since the fix targets exactly and only that collision
+shape) -- pending the user pulling this commit and rerunning it, the same
+root-cause-then-reconfirm workflow the `rhost=` dangling-key bug used
+earlier this session. windows_event's own small-sample FPs (6 out of 33)
+were not investigated further this round -- deprioritized in favor of
+the much larger, clearer cloudtrail signal, and still an open item if
+windows_event's real-data sample is ever grown past its current n=33.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same

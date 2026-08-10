@@ -20,11 +20,63 @@ REGEX_PATTERNS = {
     "MRN": re.compile(r"\bMRN-\d{7}\b"),
 }
 
+# Bug found via real-data validation, 2026-08-10 (task: extend real-data
+# validation to windows_event and cloudtrail): running the naive/field-
+# gated ensemble against 2,000 real flaws.cloud CloudTrail events measured
+# P=0.310 (FP=4627) -- a huge, systematic precision collapse not seen on
+# any of this project's other real-data conditions (OpenSSH FP=49, Linux
+# FP=122). Root-caused via a dedicated diagnostic
+# (validation/real_data/diagnose_cloudtrail_false_positives.py, no spaCy
+# needed since this is a pure regex-layer bug): AWS account IDs are
+# always exactly 12 digits -- the low end of CREDIT_CARD's \d{12,19}
+# range -- and appear TWICE in a typical CloudTrail event (once as
+# userIdentity.accountId, again embedded in the arn field, e.g.
+# "arn:aws:iam::811596193553:user/Level6" -- the colons on both sides of
+# the account ID satisfy \b same as whitespace would). Confirmed live:
+# 3,775 of the 4,627 false positives (81.6%) were exact matches of a real
+# accountId value appearing on the same line. This is a genuine
+# collision between a real cloud-native identifier format and this
+# project's CREDIT_CARD regex, not a diffuse NER weakness -- naive and
+# field-gated measured almost identically (FP 4627 vs 4562), which
+# already ruled out anything field-gating's excision logic could affect
+# before this was even root-caused.
+#
+# NOT FIXED by narrowing the regex to \d{13,19}: confirmed via
+# Faker.credit_card_number() (2,000 samples, seeded) that this project's
+# OWN synthetic corpus generator produces real, legitimate 12-digit
+# CREDIT_CARD values for some card network formats -- shrinking the
+# range would silently regress this project's own already-measured
+# synthetic-corpus CREDIT_CARD recall to fix a real-data problem, exactly
+# the kind of "fix one number, quietly break another" mistake this
+# project's own review discipline exists to catch. Fixed instead with a
+# narrow, context-aware exclusion (same shape as scan_entropy's UUID
+# exclusion below): a 12-digit match is excluded from CREDIT_CARD ONLY
+# when it's immediately preceded by an AWS ARN's account-ID position
+# (arn:<partition>:<service>:<region>:<12 digits>) or a JSON
+# accountId/recipientAccountId key -- both are structurally specific
+# enough that a real credit card number could not coincidentally match
+# either shape. 13-19 digit matches are never affected (AWS account IDs
+# are never that length), and a bare 12-digit number NOT in one of these
+# two specific contexts is still reported as CREDIT_CARD exactly as
+# before -- this does not touch the general case, only the exact
+# collision shape found live.
+_AWS_ARN_ACCOUNT_ID_PREFIX_RE = re.compile(r"arn:aws[a-z0-9-]*:[^:]*:[^:]*:$")
+_AWS_ACCOUNT_ID_KEY_RE = re.compile(r'"(?:recipientA|a)ccountId"\s*:\s*"$')
+
+
+def _is_aws_account_id_context(text: str, start: int) -> bool:
+    prefix = text[:start]
+    return bool(_AWS_ARN_ACCOUNT_ID_PREFIX_RE.search(prefix)
+                or _AWS_ACCOUNT_ID_KEY_RE.search(prefix))
+
 
 def scan_regex(text: str) -> list[dict]:
     hits = []
     for label, pattern in REGEX_PATTERNS.items():
         for m in pattern.finditer(text):
+            if (label == "CREDIT_CARD" and m.end() - m.start() == 12
+                    and _is_aws_account_id_context(text, m.start())):
+                continue
             hits.append({"type": label, "start": m.start(), "end": m.end(), "method": "regex"})
     return hits
 
