@@ -100,3 +100,39 @@ def rotate_pseudonymization_key(current_key_path: str, retired_keys_dir: str) ->
         "retired_key_path": retired_path,
         "new_key_length_bytes": len(new_key) // 2,
     }
+
+
+def rotate_token_key(current_key_path: str, retired_keys_dir: str) -> dict:
+    """Retires the current TOKEN_KEY (anonymize.py's TokenStore, used by
+    tokenize()/get_or_create_token()) and generates a new one, mirroring
+    rotate_pseudonymization_key's file-based approach above.
+
+    Added as an engineering upgrade: TOKEN_KEY previously had no rotation
+    mechanism at all, unlike PSEUDO_KEY -- a real gap, since a compromised
+    static key that's never rotated exposes every value ever tokenized
+    under it, indefinitely.
+
+    IMPORTANT semantic difference from rotate_pseudonymization_key, stated
+    explicitly so this isn't assumed to work the same way: pseudonymize()
+    is a pure one-way HMAC with no lookup table, so an old pseudonym is
+    ONLY ever valid under the key that produced it -- rotating the key
+    genuinely invalidates old pseudonyms' verifiability. tokenize(), by
+    contrast, is reversible via TokenStore's own forward/reverse dict
+    lookup (see TokenStore.resolve() in anonymize.py), NOT by recomputing
+    the HMAC from the key -- resolve()/detokenize() work identically
+    before and after this rotation, for every token ever minted, because
+    they were never key-dependent to begin with. What TOKEN_KEY actually
+    controls is the guessability resistance of a *newly minted* token for
+    someone who sees only the anonymized output without TokenStore access
+    (see get_or_create_token's own docstring in anonymize.py). Rotating it
+    here means: future first-time-seen values get tokenized under a fresh,
+    unguessable key; values already tokenized keep their existing token
+    (get_or_create_token's forward-map cache returns the same token for a
+    repeated original value regardless of which key is currently active,
+    preserving cross-event correlation for that value) and remain fully
+    resolvable either way. This is a real security improvement (limits how
+    long a single compromised key's guessability weakness applies to
+    NEW values) but it is not, and does not need to be, a
+    re-tokenization of existing data the way a pseudonymization-key
+    rotation implies for existing pseudonyms."""
+    return rotate_pseudonymization_key(current_key_path, retired_keys_dir)

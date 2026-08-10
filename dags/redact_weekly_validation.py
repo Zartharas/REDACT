@@ -65,4 +65,21 @@ with DAG(
         },
     )
 
-    sample_medium_confidence >> check_field_drift >> rotate_pseudonym_key
+    # Engineering upgrade: TOKEN_KEY had no rotation task at all before
+    # this, unlike PSEUDO_KEY above -- a real gap given TokenStore's
+    # tokenize() is meant to sit in production indefinitely. See
+    # rotate_token_key's own docstring in airflow_tasks.py for why this is
+    # safe to run on a schedule without needing to touch any already-
+    # minted token: resolution is lookup-table-based, not key-based, so
+    # rotating this key only affects the guessability resistance of
+    # future NEW tokens, not the resolvability of existing ones.
+    rotate_token_key = PythonOperator(
+        task_id="rotate_token_key",
+        python_callable=airflow_tasks.rotate_token_key,
+        op_kwargs={
+            "current_key_path": os.path.join(OUTPUT_DIR, "token_key.txt"),
+            "retired_keys_dir": os.path.join(OUTPUT_DIR, "retired_keys"),
+        },
+    )
+
+    sample_medium_confidence >> check_field_drift >> rotate_pseudonym_key >> rotate_token_key

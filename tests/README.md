@@ -27,6 +27,13 @@ check. All deterministic, no Docker, no spaCy, no network.
 Redis service container): the Redis `StorageProvider` correctness tests —
 skipped automatically if no Redis is reachable.
 
+**Covered** (`test_key_rotation.py`, runs in CI on every push): the new
+`rotate_token_key` task (`src/airflow_tasks.py`) -- key file retirement
+and regeneration, the first-run-no-prior-key case, and the claim that
+actually matters: a token minted before a `TOKEN_KEY` rotation still
+resolves correctly after it, because `TokenStore` reversibility is
+lookup-table-based, not key-based.
+
 **Covered** (`test_service_auth.py`, runs in CI on every push): the
 `X-Redact-Api-Key` auth check added to `src/service.py` -- `/health`
 stays open, `/anonymize` rejects a missing or wrong key with 401, and
