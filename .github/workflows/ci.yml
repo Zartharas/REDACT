@@ -1,0 +1,72 @@
+name: CI
+
+# Two jobs, split by what they need, so a missing external dependency
+# (Redis, network access to census.gov/ssa.gov) fails loudly and
+# specifically instead of one big job failing for an ambiguous reason.
+#
+# fast-tests: pure Python, deterministic, no external services -- runs on
+#   every push and PR, expected to finish in well under a minute.
+# redis-tests: needs a live Redis, supplied here as a GitHub Actions
+#   service container (no Docker Compose needed for this -- just the one
+#   service the Redis-backed StorageProvider tests require).
+#
+# Deliberately NOT included here: the Docker Compose stack tests
+# (validation/load_test/, the full docker-compose.yml stack) and anything
+# needing the en_core_web_lg spaCy model (validate.py, src/evaluate.py,
+# validation/baseline_presidio_default.py). Both are real, verified parts
+# of this project (see BUGS_AND_FIXES.md and ROADMAP.md for their
+# verification history) but need more than a standard GitHub-hosted
+# runner reasonably provides on every push -- Docker-in-Docker for a
+# multi-container stack, and a multi-hundred-MB model download. Running
+# those routinely is a real gap this workflow doesn't close; see
+# BUGS_AND_FIXES.md/ROADMAP.md's own stated scope limits for why that's
+# disclosed here rather than silently left out.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  fast-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Run fast validation suite
+        run: pytest tests/test_fast_validation.py -v
+
+  redis-tests:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-redis.txt
+          pip install pytest
+      - name: Run Redis-backed validation suite
+        env:
+          REDIS_URL: redis://localhost:6379/0
+        run: pytest tests/test_redis_validation.py -v
