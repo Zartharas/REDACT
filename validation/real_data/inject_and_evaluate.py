@@ -152,6 +152,240 @@ def build_user_field_corpus(name, pattern, inject_prob=0.5, seed=42):
     return entries, injected, flat_n, spaced_n
 
 
+# windows_event real-data validation, 2026-08-10 (ROADMAP item, "windows_event
+# and cloudtrail have NOT been checked against any real (non-synthetic) data
+# at all"). No Loghub dataset covers this -- Loghub's own "Windows" dataset
+# is CBS (Component-Based Servicing, i.e. Windows Update/servicing
+# subsystem) log text, an entirely different subsystem with no
+# EventID=/TargetUserName=-shaped fields at all; this project's own
+# inject_and_evaluate.py module docstring already excludes Loghub's Windows
+# dataset for exactly this reason ("none of them contains a field that
+# would plausibly carry a person's name... in production use"). A real
+# Windows SECURITY-channel dataset was sourced instead: 36 real
+# nxlog-exported Microsoft-Windows-Security-Auditing events (logon,
+# process creation, Kerberos ticket, file/registry/share access, group
+# membership, etc.), captured from a real (lab, not production) Windows
+# domain environment, from the public repo
+# github.com/d4rk-d4nph3/Windows-Event-Samples (WinEvents.log) --
+# real captured field VALUES (hostnames like DC01.corp.local/
+# ACC01.prod.corp.local, account names, IP addresses, EventIDs), not
+# fabricated. See datasets/WindowsEventSamples_raw.jsonl's own header for
+# exactly which fields were kept per record (large free-text fields --
+# Message, TaskContent, EventData, PrivilegeList, GroupMembership -- were
+# dropped when transcribing from the source to keep the file a manageable
+# size; every field VALUE that IS present is copied verbatim from the
+# real source, nothing invented).
+WINDOWS_EVENT_RAW_PATH = os.path.join('datasets', 'WindowsEventSamples_raw.jsonl')
+
+# Fields rendered into the flat "Key=Value Key2=Value2 ..." KV line shape
+# fields.py's extract_fields_windows_event() (-> _extract_kv_pairs) expects
+# -- this project's own synthetic windows_event corpus already uses this
+# exact shape (EventID=4624 TargetUserName=... SourceIP=...), and this is
+# also a standard, real-world SIEM-normalized representation of a Windows
+# Security event (this is genuinely how many production log pipelines
+# flatten EventLog/EVTX data for text-based ingestion), not an artificial
+# shape invented just to make this test pass. Ordered roughly by how a
+# real analyst would expect to scan a line: identity fields first, then
+# the network/object fields most likely to matter for detection.
+_WINEVENT_FIELD_ORDER = [
+    'EventID', 'Hostname', 'Channel', 'Category',
+    'SubjectUserName', 'SubjectDomainName',
+    'TargetUserName', 'TargetDomainName',
+    'AccountName', 'Domain',
+    'IpAddress', 'IpPort',
+    'ServiceName', 'ObjectName', 'ObjectType', 'ShareName',
+    'ProcessName', 'TaskName', 'RuleName', 'ServerName',
+]
+
+
+def _flatten_windows_event(obj: dict) -> str:
+    parts = []
+    for key in _WINEVENT_FIELD_ORDER:
+        val = obj.get(key)
+        if val is None or val == '':
+            continue
+        parts.append(f"{key}={val}")
+    return ' '.join(parts)
+
+
+def build_windows_event_corpus(inject_prob=0.7, seed=42):
+    """Mirrors build_user_field_corpus's injection methodology (same two
+    formats -- flat username vs. spaced full name, same Faker seed
+    convention) for consistency with the syslog datasets above, applied
+    to TargetUserName (falling back to SubjectUserName when TargetUserName
+    isn't present on a given real event -- both are genuine identity
+    fields in the Security-Auditing schema, see MS-EVEN6/Windows Security
+    Auditing documentation) instead of relying on the REAL account names
+    already in this data, which are overwhelmingly machine/service
+    accounts (DC01$, LOCAL SERVICE, SYSTEM) rather than human names --
+    exactly the same reason OpenSSH/Linux/Thunderbird's existing test
+    values needed replacing rather than reused as-is. IpAddress values
+    ARE used directly as real, unmodified ground truth (same as
+    OpenStack/Zookeeper below) wherever a record actually has one --
+    genuinely real IPs from the source dataset, no injection needed."""
+    random.seed(seed)
+    fake = Faker()
+    Faker.seed(seed)
+
+    entries, injected, flat_n, spaced_n = [], 0, 0, 0
+    with open(WINDOWS_EVENT_RAW_PATH, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            text = _flatten_windows_event(obj)
+            pii = []
+
+            for field in ('TargetUserName', 'SubjectUserName'):
+                val = obj.get(field)
+                if not val or val in ('-',) or val.endswith('$'):
+                    # '-' is Windows Security Auditing's own "not
+                    # applicable" placeholder (e.g. an anonymous/system
+                    # logon's SubjectUserName); a trailing '$' is a real
+                    # machine-account naming convention (DC01$), not a
+                    # human name -- neither is a plausible injection
+                    # target, matching EXCLUDE_VALUES's role above for
+                    # the syslog datasets.
+                    continue
+                if random.random() >= inject_prob:
+                    continue
+                key_eq = f"{field}="
+                idx = text.find(key_eq)
+                if idx == -1:
+                    continue
+                start = idx + len(key_eq)
+                # Values here never contain a space (real account names
+                # in this dataset are single tokens like "Administrator"
+                # or "LOCAL SERVICE" -- the latter DOES contain a space,
+                # already excluded above via the '-'/'$' check only
+                # catching the two placeholder shapes, not this one; a
+                # third check keeps this simple and correct: stop at the
+                # next " Key=" boundary or end of string, same tolerant
+                # rule _extract_kv_pairs itself uses).
+                next_field_m = re.search(r' [A-Za-z]+=', text[start:])
+                end = start + next_field_m.start() if next_field_m else len(text)
+                flat = random.random() < 0.5
+                value = fake.user_name() if flat else fake.name()
+                flat_n += flat
+                spaced_n += (not flat)
+                text = text[:start] + value + text[end:]
+                pii.append({'type': 'PERSON', 'start': start, 'end': start + len(value),
+                            'injected_value': value})
+                injected += 1
+                break  # inject into at most one identity field per line,
+                       # matching the syslog datasets' one-injection-per-line rate
+
+            ip_val = obj.get('IpAddress')
+            if ip_val and IP_RE.fullmatch(ip_val):
+                # Real, unmodified IP -- direct ground truth, same as
+                # build_ip_only_corpus below. Only exact dotted-quad
+                # matches (fullmatch, not search) are used, since some
+                # real records here have '::1' or '::ffff:192.168.2.108'
+                # (IPv6/IPv4-mapped forms) that this project's own IP
+                # regex (src/detect.py's REGEX_PATTERNS['IP'], dotted-
+                # quad only) was never designed to catch -- correctly
+                # excluded from ground truth rather than counted as a
+                # detector miss for a format it never claimed to support.
+                m = IP_RE.search(text[text.find('IpAddress='):])
+                if m:
+                    ip_start = text.find('IpAddress=') + len('IpAddress=')
+                    pii.append({'type': 'IP', 'start': ip_start,
+                                'end': ip_start + len(ip_val)})
+
+            entries.append({'log': text, 'pii': pii})
+
+    mismatches = sum(
+        1 for e in entries for p in e['pii']
+        if p['type'] == 'PERSON' and e['log'][p['start']:p['end']] != p['injected_value']
+    )
+    assert mismatches == 0, f"windows_event: {mismatches} offset integrity failures"
+    return entries, injected, flat_n, spaced_n
+
+
+# cloudtrail real-data validation. See validation/real_data/
+# prepare_cloudtrail_dataset.py for how CloudTrailFlaws_raw.jsonl gets
+# produced (must be run separately, on a machine with real internet
+# access -- not available in this project's sandbox) and for the
+# disclosed limitation this dataset carries: sourceIPAddress values were
+# anonymized (format-preserving substitution) by the dataset's own
+# publisher before release, so IP ground truth here is real-SHAPED but
+# not genuinely real -- only the PERSON-injection condition (into
+# userIdentity.userName, same methodology as build_windows_event_corpus)
+# tests against truly unmodified real data.
+CLOUDTRAIL_RAW_PATH = os.path.join('datasets', 'CloudTrailFlaws_raw.jsonl')
+
+
+def build_cloudtrail_corpus(inject_prob=0.7, seed=42):
+    random.seed(seed)
+    fake = Faker()
+    Faker.seed(seed)
+
+    entries, injected, flat_n, spaced_n = [], 0, 0, 0
+    with open(CLOUDTRAIL_RAW_PATH, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            # extract_fields_cloudtrail() flattens nested JSON into
+            # dotted paths itself (src/fields.py) -- unlike windows_event,
+            # no custom flattening is needed here; the real JSON record,
+            # unmodified in shape, IS the "log" text this project's own
+            # generate_logs.py CLOUDTRAIL_TEMPLATES already produces (a
+            # single compact JSON object per line, not
+            # {"Records": [...]}-wrapped).
+            text = json.dumps(obj)
+            pii = []
+
+            user_name = obj.get('userIdentity', {}).get('userName')
+            if user_name and random.random() < inject_prob:
+                # Real values here are legitimate game-account names
+                # (backup, Level6, flaws) or IAM role/session identifiers
+                # -- not human names -- same reasoning as
+                # build_windows_event_corpus's TargetUserName/
+                # SubjectUserName injection: replace with a synthetic
+                # identity rather than testing against a real value that
+                # was never PII-shaped to begin with.
+                key_eq = f'"userName": "{user_name}"'
+                idx = text.find(key_eq)
+                if idx != -1:
+                    start = idx + len('"userName": "')
+                    end = start + len(user_name)
+                    flat = random.random() < 0.5
+                    value = fake.user_name() if flat else fake.name()
+                    flat_n += flat
+                    spaced_n += (not flat)
+                    text = text[:start] + value + text[end:]
+                    pii.append({'type': 'PERSON', 'start': start, 'end': start + len(value),
+                                'injected_value': value})
+                    injected += 1
+
+            # sourceIPAddress: included as ground truth for regex-recall
+            # purposes (it IS a real, dotted-quad-shaped value the regex
+            # layer should catch), but see this function's own module-
+            # level comment above -- these values are publisher-
+            # anonymized, not genuinely real IPs, so this only tests
+            # "does the IP regex fire on a real-shaped value embedded in
+            # real JSON structure," not "does this work against a real
+            # adversary's real IP."
+            ip_val = obj.get('sourceIPAddress')
+            if ip_val and IP_RE.fullmatch(ip_val):
+                idx = text.find(f'"sourceIPAddress": "{ip_val}"')
+                if idx != -1:
+                    start = idx + len('"sourceIPAddress": "')
+                    pii.append({'type': 'IP', 'start': start, 'end': start + len(ip_val)})
+
+            entries.append({'log': text, 'pii': pii})
+
+    mismatches = sum(
+        1 for e in entries for p in e['pii']
+        if p['type'] == 'PERSON' and e['log'][p['start']:p['end']] != p['injected_value']
+    )
+    assert mismatches == 0, f"cloudtrail: {mismatches} offset integrity failures"
+    return entries, injected, flat_n, spaced_n
+
+
 def build_ip_only_corpus(name):
     path = os.path.join('datasets', f'{name}_2k.log')
     with open(path, encoding='utf-8', errors='replace') as f:
@@ -333,6 +567,40 @@ if __name__ == '__main__':
                   f"({engaged_stripped}/{total}) -- {name}'s header doesn't match "
                   f"the standard RFC3164 shape strip_syslog_header looks for, "
                   f"so stripping had no effect; not re-run as a separate condition")
+
+    if os.path.exists(WINDOWS_EVENT_RAW_PATH):
+        entries, injected, flat_n, spaced_n = build_windows_event_corpus()
+        print(f"windows_event: {len(entries)} lines, {injected} PERSON injected "
+              f"(flat={flat_n}, spaced={spaced_n}), "
+              f"{sum(1 for e in entries for p in e['pii'] if p['type']=='IP')} real IP spans")
+        evaluate(entries, "windows_event (naive)")
+        # No RFC3164-header-stripping condition here -- that's specific to
+        # syslog's own header shape (see strip_syslog_header's own
+        # docstring); windows_event's KV lines have no equivalent prefix
+        # to strip, so only the RAW condition applies.
+        engaged, total = field_gate_engagement(entries, 'windows_event', strip_header=False)
+        print(f"  field-gate engagement: {engaged}/{total} lines got real field "
+              f"structure ({engaged/total:.1%})")
+        evaluate(entries, "windows_event + field-gated", field_gate_log_type='windows_event')
+    else:
+        print(f"Skipping windows_event: {WINDOWS_EVENT_RAW_PATH} not found.")
+
+    if os.path.exists(CLOUDTRAIL_RAW_PATH):
+        entries, injected, flat_n, spaced_n = build_cloudtrail_corpus()
+        print(f"cloudtrail: {len(entries)} lines, {injected} PERSON injected "
+              f"(flat={flat_n}, spaced={spaced_n}), "
+              f"{sum(1 for e in entries for p in e['pii'] if p['type']=='IP')} "
+              f"IP spans (real-SHAPED, publisher-anonymized -- see "
+              f"build_cloudtrail_corpus's own docstring)")
+        evaluate(entries, "cloudtrail (naive)")
+        engaged, total = field_gate_engagement(entries, 'cloudtrail', strip_header=False)
+        print(f"  field-gate engagement: {engaged}/{total} lines got real field "
+              f"structure ({engaged/total:.1%})")
+        evaluate(entries, "cloudtrail + field-gated", field_gate_log_type='cloudtrail')
+    else:
+        print(f"Skipping cloudtrail: {CLOUDTRAIL_RAW_PATH} not found -- run "
+              f"prepare_cloudtrail_dataset.py first (needs real internet access, "
+              f"not available in this project's sandbox).")
 
     for name in IP_ONLY_DATASETS:
         entries = build_ip_only_corpus(name)
