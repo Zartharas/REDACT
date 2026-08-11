@@ -1,0 +1,8 @@
+# Separate from requirements.txt on purpose, same pattern as
+# requirements-redis.txt/requirements-vault.txt/requirements-airflow.txt:
+# src/fpe_provider.py is an EVALUATED, NOT YET INTEGRATED alternative to
+# TokenStore for digit-only PII fields (see that module's own docstring
+# and BUGS_AND_FIXES.md's "Engineering upgrade 5" for the full tradeoff
+# writeup). Not part of redact-service's default image -- install this
+# only where you're actually testing/using FPEDigitsProvider.
+ff3

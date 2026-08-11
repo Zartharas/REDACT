@@ -2611,6 +2611,83 @@ this as an explicit next step, not an implied-done one.
 
 ---
 
+## Engineering upgrade 5: FF3-1 format-preserving encryption, evaluated as an optional TokenStore alternative (2026-08-11)
+
+Last item from the external-review batch. The review proposed
+"Stateless AES-FFX Encryption" as a wholesale replacement for token
+mapping tables, framed as a pure win — no lookup table, no HA problem
+for it, authorized teams "decrypt it statelessly." Evaluated honestly
+rather than adopted on that framing: this is a real, useful technique
+with a real, serious cost the review's framing left out entirely.
+
+**What was built:** `src/fpe_provider.py`'s `FPEDigitsProvider`, using
+the `ff3` PyPI package (a real NIST SP 800-38G Revision 1 implementation)
+— **FF3-1 specifically, confirmed by reading the installed library's
+source directly**, not FF3, the original construction NIST deprecated
+after a 2017 published cryptanalytic attack. The library supports both;
+this module always uses a 56-bit tweak to select FF3-1's corrected code
+path (`calculate_tweak64_ff3_1`), never the legacy 64-bit tweak that
+would silently opt back into the weaker construction.
+
+**Deliberately scoped to digit-only fields, unlike the review's
+unscoped proposal:** format-preserving encryption requires a fixed
+alphabet/radix — there's no coherent "format-preserving" encryption of a
+PERSON value like "Timothy Wong," and the review never addressed this.
+`FPEDigitsProvider` only handles SSN/credit-card-shaped digit sequences
+(radix 10), with `encrypt_formatted()`/`decrypt_formatted()` wrapping the
+raw digit encryption to reinsert dashes/spaces at their original
+positions. PERSON/EMAIL stay on TokenStore's existing path, full stop.
+
+**Two real costs, disclosed plainly, that the review's "stateless"
+framing presented as pure upside:**
+1. **Smaller security margin than standard AES.** A 9-digit SSN has a
+   plaintext domain of 10^9 (~30 bits) — FF3-1 is the correct,
+   NIST-standardized construction for this problem, but its practical
+   brute-force resistance is bounded by the domain size itself, not by
+   the underlying AES key strength, unlike a non-format-preserving
+   encryption of the same value.
+2. **Key rotation is structurally worse than `TOKEN_KEY`'s.**
+   `rotate_token_key` (`dags/redact_weekly_validation.py`) is safe today
+   specifically because `TokenStore`'s resolution is lookup-table-based,
+   not key-based — every already-minted token stays resolvable after
+   rotation, only future tokens gain the new key's guessability
+   resistance. FPE cannot offer this: decryption IS the reverse of
+   encryption under the same key by construction, so rotating this
+   module's key makes every previously-encrypted value permanently
+   unrecoverable unless it's fully re-encrypted under the new key first
+   — a real reprocessing pass over historical data, not a background
+   task. This is a genuine structural downgrade, not a minor
+   inconvenience, and the review's "stateless" framing never mentioned
+   it.
+
+**Verified, not assumed:** `tests/test_fpe_provider.py` (9 tests) —
+round-trip correctness on SSN- and credit-card-shaped values with
+separators; confirmed the encrypted output preserves format/length and
+genuinely differs from the input (not an accidental no-op); **confirmed
+directly that two different keys produce different ciphertext for the
+same input, and that decrypting with the wrong key produces the wrong
+plaintext** (the concrete mechanism behind the rotation-danger claim
+above, not just an assertion about it); confirmed FF3-1's own minimum
+domain requirement (6+ digits for radix 10) is enforced, not silently
+worked around; confirmed `DEFAULT_TWEAK` is genuinely 56 bits, not the
+deprecated 64-bit legacy length. These tests check this module's own
+wrapper logic and the concrete rotation/key-dependency properties — they
+do not, and do not claim to, independently cryptanalyze FF3-1 itself;
+that's NIST's and the library's responsibility.
+
+Full suite: 82 passed (up from 73), 2 skipped, 0 failed.
+
+**Disclosed, not silently claimed integrated:** `ff3` is deliberately
+kept out of the default `requirements.txt` (a new
+`requirements-fpe.txt`, same pattern as `requirements-redis.txt`/
+`requirements-vault.txt`/`requirements-airflow.txt`) — this module is
+**not wired into `anonymize.py`'s live pseudonymization path** and is
+not part of `redact-service`'s default image. It exists as a standalone,
+evaluated, opt-in alternative with its real tradeoffs on the record, not
+an active part of the pipeline. See ROADMAP.md item 13.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same
