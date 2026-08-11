@@ -551,16 +551,57 @@ class RedisStorageProvider(StorageProvider):
     TokenStore already uses in memory -- this keeps load()/save() simple
     (HGETALL / one HSET per entry) rather than re-deriving one direction
     from the other on every load.
+
+    SENTINEL SUPPORT, added 2026-08-11 when docker-compose.yml's Redis
+    became a real master/2-replica/3-sentinel topology (ROADMAP item 12):
+    pass `sentinels=[("host", port), ...]` to connect via redis-py's
+    Sentinel client instead of a fixed `redis_url` -- see __init__'s own
+    comment for exactly what this does and doesn't change. NOT YET
+    verified against a live failover in this sandbox (no Docker daemon
+    here); the single- and multi-process results above were measured
+    against a plain single-instance Redis, before this parameter existed.
+    See lock_for_save()'s own updated comment for the specific,
+    disclosed correctness window this introduces around a failover
+    moment (unreplicated writes/locks on a failed master), not something
+    this class's own logic can close on its own.
     """
 
     def __init__(self, redis_url: str = "redis://localhost:6379/0",
-                 key_prefix: str = "redact:tokenstore"):
+                 key_prefix: str = "redact:tokenstore",
+                 sentinels: list[tuple[str, int]] | None = None,
+                 sentinel_service_name: str = "redact-master"):
         # Imported lazily so importing this module doesn't require the
         # redis package to be installed for callers who only use
         # FileStorageProvider (the default) -- same pattern detect.py uses
         # for presidio_analyzer.
         import redis  # noqa: E402
-        self._client = redis.from_url(redis_url, decode_responses=True)
+
+        # sentinels, added when docker-compose.yml's single-node `redis`
+        # became a real master/2-replica/3-sentinel topology (ROADMAP
+        # item 12's queue-side follow-up to the OpenSearch multi-node
+        # work): when given a list of (host, port) sentinel addresses,
+        # this class asks Sentinel for the CURRENT master on every new
+        # connection via redis-py's own Sentinel client, rather than
+        # connecting to a single fixed redis_url. That's what lets this
+        # provider keep working after Sentinel promotes a replica --
+        # redis_url is ignored entirely when sentinels is set, since
+        # there's no single fixed URL that stays correct across a
+        # failover. When sentinels is None (the default, and what every
+        # existing caller -- validation/redis_storage_provider_test.py,
+        # validation/multiprocess_redis_test.py, tests/test_redis_validation.py
+        # via CI's plain single-instance redis:7 service container --
+        # still uses), behavior is unchanged from before this parameter
+        # existed: a direct connection to redis_url, no Sentinel involved.
+        if sentinels:
+            from redis.sentinel import Sentinel  # noqa: E402
+            self._sentinel = Sentinel(sentinels, decode_responses=True)
+            self._sentinel_service_name = sentinel_service_name
+            self._client = self._sentinel.master_for(
+                sentinel_service_name, decode_responses=True
+            )
+        else:
+            self._sentinel = None
+            self._client = redis.from_url(redis_url, decode_responses=True)
         self._forward_key = f"{key_prefix}:forward"
         self._reverse_key = f"{key_prefix}:reverse"
         self._lock_key = f"{key_prefix}:save-lock"
@@ -582,14 +623,44 @@ class RedisStorageProvider(StorageProvider):
         # released out from under its new, legitimate holder).
         #
         # Deliberately NOT the full Redlock algorithm (which addresses
-        # correctness across multiple independent Redis nodes) --
-        # docker-compose.yml's own Redis is explicitly single-node,
-        # matching this project's stated single-node scope everywhere
-        # else (see validation/load_test/README.md). This lock is correct
-        # for that scope: a single-node Redis's own operations are
-        # inherently linearizable, so a single-node SET-NX lock has no
-        # split-brain risk the way a multi-node Redlock deployment would
-        # need to guard against.
+        # correctness across multiple independent Redis nodes). This
+        # lock's correctness argument was originally: a single-node
+        # Redis's own operations are inherently linearizable, so a
+        # single-node SET-NX lock has no split-brain risk the way a
+        # multi-node Redlock deployment would need to guard against.
+        #
+        # THAT ASSUMPTION CHANGED, disclosed rather than silently
+        # invalidated, when docker-compose.yml's Redis became a real
+        # master/2-replica/3-sentinel topology (ROADMAP item 12): this
+        # lock is still correct against any SINGLE master at a time --
+        # Redis's own single-instance linearizability guarantee doesn't
+        # change just because replicas exist -- but Redis's default
+        # asynchronous replication means a lock acquired on the master
+        # immediately before it fails is not guaranteed to have already
+        # replicated to whichever replica Sentinel promotes next. Two
+        # concrete, real failure windows this introduces, not eliminated
+        # by anything in this class: (1) a lock acquired on the old
+        # master a few milliseconds before failover can vanish entirely
+        # on the newly promoted master, letting a second process acquire
+        # what looks like a fresh lock while the first process's save()
+        # is still in flight against a connection that's about to error
+        # out; (2) the reverse -- a save() that completed and released
+        # its lock on the old master right before failure may not have
+        # replicated either, so those specific token entries can be lost
+        # the same way any unreplicated write to a failed master is lost,
+        # independent of locking correctness entirely. This is the
+        # standard, well-documented tradeoff of Sentinel's asynchronous
+        # replication (not something unique to this implementation, and
+        # not fixed by a smarter lock -- Redis's own semi-synchronous
+        # WAIT command narrows but does not eliminate this window, and
+        # isn't used here). Full Redlock, spanning multiple independent
+        # masters rather than one master with async replicas, is the
+        # documented next step if this narrow, failover-window race ever
+        # needs closing -- not implemented here, the same "disclosed gap,
+        # not silently accepted as fine" standard this project applies to
+        # BLPOP's own non-redelivery limitation (see logstash-queued's
+        # comment in docker-compose.yml) and the ordered-vs-load-balanced
+        # OpenSearch failover tradeoff in queue_consumer.py.
         return _RedisLockContext(self._client, self._lock_key)
 
     def load(self) -> tuple[dict[str, str], dict[str, str]]:

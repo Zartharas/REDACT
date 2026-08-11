@@ -58,6 +58,29 @@ import urllib.error
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+# REDIS_SENTINELS (plural), added when docker-compose.yml's single-node
+# `redis` service became a real master/2-replica/3-sentinel topology
+# (ROADMAP item 12's queue-side follow-up to the OpenSearch multi-node
+# work). If set (comma-separated host:port pairs), main() below connects
+# via redis-py's own Sentinel client, which asks Sentinel for the CURRENT
+# master on every new connection -- so if Sentinel promotes a replica
+# after redis-master fails, this consumer's next BLPOP retry picks up the
+# new master automatically, without needing REDIS_HOST changed or this
+# process restarted. Falls back to a direct REDIS_HOST/REDIS_PORT
+# connection (the old behavior, unchanged) if REDIS_SENTINELS is unset --
+# for anyone running this script against a plain single-instance Redis
+# outside docker-compose.yml's topology, same backward-compatibility
+# reasoning as RedisStorageProvider's own sentinels parameter
+# (src/anonymize.py).
+REDIS_SENTINELS = [
+    (host, int(port))
+    for host, port in (
+        h.strip().rsplit(":", 1)
+        for h in os.environ.get("REDIS_SENTINELS", "").split(",")
+        if h.strip()
+    )
+]
+REDIS_SENTINEL_MASTER_NAME = os.environ.get("REDIS_SENTINEL_MASTER_NAME", "redact-master")
 REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 QUEUE_KEY = os.environ.get("REDACT_QUEUE_KEY", "redact:raw-events")
@@ -236,11 +259,45 @@ def main():
                    # entrypoint needs the redis package, not every caller
                    # of src/detect.py or src/anonymize.py.
 
-    client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    print(f"queue_consumer: polling '{QUEUE_KEY}' on {REDIS_HOST}:{REDIS_PORT}", flush=True)
+    if REDIS_SENTINELS:
+        # Sentinel path -- see REDIS_SENTINELS' own module-level comment.
+        # master_for() returns a client that re-asks Sentinel for the
+        # current master on each new connection rather than caching one
+        # address forever, which is what lets this loop survive a
+        # failover without restarting: the CURRENT blpop() call in
+        # flight when the master dies will still error out (there's no
+        # way around that -- the TCP connection itself is gone), but the
+        # `except` below catches it, the loop continues, and the NEXT
+        # blpop() call re-resolves the master through Sentinel and picks
+        # up wherever the queue's new master's data ended up.
+        from redis.sentinel import Sentinel  # noqa: E402
+        sentinel = Sentinel(REDIS_SENTINELS, decode_responses=True)
+        client = sentinel.master_for(REDIS_SENTINEL_MASTER_NAME, decode_responses=True)
+        print(
+            f"queue_consumer: polling '{QUEUE_KEY}' via Sentinel "
+            f"{REDIS_SENTINELS} (master name: {REDIS_SENTINEL_MASTER_NAME})",
+            flush=True,
+        )
+    else:
+        client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+        print(f"queue_consumer: polling '{QUEUE_KEY}' on {REDIS_HOST}:{REDIS_PORT}", flush=True)
 
     while True:
-        item = client.blpop(QUEUE_KEY, timeout=BLPOP_TIMEOUT_SECONDS)
+        try:
+            item = client.blpop(QUEUE_KEY, timeout=BLPOP_TIMEOUT_SECONDS)
+        except redis.exceptions.ConnectionError as exc:
+            # Expected, not a bug, specifically during a Sentinel
+            # failover window: the connection this client's pool was
+            # already holding to the (now-dead) old master errors out
+            # before Sentinel has finished promoting a replica and this
+            # client's pool has picked up the new address. A short sleep
+            # avoids a tight error-log spin while that settles; the next
+            # loop iteration's blpop() call re-resolves the master via
+            # Sentinel automatically (see the comment above), no
+            # additional retry logic needed here.
+            print(f"queue_consumer: Redis connection error (retrying): {exc}", flush=True)
+            time.sleep(BLPOP_TIMEOUT_SECONDS)
+            continue
         if item is None:
             continue  # timeout, no event -- loop and block again
         _, raw = item

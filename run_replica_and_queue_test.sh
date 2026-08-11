@@ -168,7 +168,10 @@ python3 src/export_raw_logs.py --input "$CORPUS_PATH" --output-dir data/raw
 # for clarity/documentation, but --profile queued alone was proven live
 # not to be sufficient on its own).
 docker compose --profile queued up --build -d --scale queue-consumer=3 \
-  opensearch-node1 opensearch-node2 opensearch-node3 redis redact-service redact-lb logstash-queued queue-consumer
+  opensearch-node1 opensearch-node2 opensearch-node3 \
+  redis-master redis-replica-1 redis-replica-2 \
+  redis-sentinel-1 redis-sentinel-2 redis-sentinel-3 \
+  redact-service redact-lb logstash-queued queue-consumer
 # Note: no --scale on redact-service here -- Part B is specifically
 # testing the queue's own decoupling/distribution behavior (3 CONSUMERS
 # pulling from one Redis list), independent of Part A's redact-service
@@ -178,8 +181,14 @@ docker compose --profile queued up --build -d --scale queue-consumer=3 \
 
 echo "--- Waiting for services to report healthy ---"
 for i in $(seq 1 60); do
+  # redis-master, not "redis" -- the single-instance service was replaced
+  # with a real master/2-replica/3-sentinel topology. Checking
+  # redis-master's own healthcheck here (not a sentinel's) mirrors the
+  # OpenSearch check above: it confirms the specific node this run's
+  # queue-consumer will actually talk to via Sentinel discovery is up,
+  # not just that the topology exists.
   if docker compose ps opensearch-node1 | grep -q "healthy" && \
-     docker compose ps redis | grep -q "healthy" && \
+     docker compose ps redis-master | grep -q "healthy" && \
      docker compose ps redact-service | grep -q "healthy"; then
     echo "Core services healthy after approx $((i * 5))s."
     break
@@ -195,7 +204,7 @@ python3 validation/load_test/reconcile.py
 
 echo
 echo "--- Queue depth check (should be 0 or near-0 if consumers kept up) ---"
-docker compose exec -T redis redis-cli LLEN "${REDACT_QUEUE_KEY:-redact:raw-events}" || true
+docker compose exec -T redis-master redis-cli LLEN "${REDACT_QUEUE_KEY:-redact:raw-events}" || true
 
 echo
 echo "--- Leaving the stack running for manual inspection. ---"

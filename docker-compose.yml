@@ -265,19 +265,53 @@ services:
     networks:
       - redact-net
 
-  # Redis, 2026-08-10 (ROADMAP item 12): backs the queued ingestion path
-  # (redact:raw-events list, see logstash/redact-pipeline-queued.conf and
-  # src/queue_consumer.py). NOT currently wired up as redact-service's
-  # own TokenStore backend -- RedisStorageProvider (src/anonymize.py) is
-  # fully implemented and verified against a live Redis instance for
-  # both single- and multi-process safety (Bug 14/ROADMAP item 6), but
+  # Redis, originally added 2026-08-10 (ROADMAP item 12): backs the
+  # queued ingestion path (redact:raw-events list, see
+  # logstash/redact-pipeline-queued.conf and src/queue_consumer.py). NOT
+  # currently wired up as redact-service's own TokenStore backend by
+  # default -- RedisStorageProvider (src/anonymize.py) is fully
+  # implemented and verified against a live Redis instance for both
+  # single- and multi-process safety (Bug 14/ROADMAP item 6), but
   # src/service.py has no env-var-driven way to select it yet; it always
   # uses FileStorageProvider today (see Dockerfile's own comment on this
-  # same gap, found while wiring up this queue). Not started by
-  # default (see the "queued" profile below) since the synchronous
-  # pipeline this stack has always used doesn't need it.
-  redis:
+  # same gap, found while wiring up this queue).
+  #
+  # CORRECTION to a prior version of this comment, found while touching
+  # this block again 2026-08-11: it used to say Redis is "not started by
+  # default." That was wrong, caught the same way Bug 19 caught the
+  # analogous `logstash` mistake -- neither the old single `redis`
+  # service nor any of the services below have a `profiles:` key, and
+  # Compose profile semantics (see Bug 19's own writeup) mean a service
+  # with NO profiles key starts on every `docker compose up`, including
+  # a plain invocation with no `--profile queued` flag. The live
+  # `run_replica_and_queue_test.sh` runs this project has actually done
+  # confirm this directly -- Part A's plain `docker compose up --scale
+  # redact-service=3` (no `--profile` flag at all) started
+  # `redact-redis-1` right alongside it. Harmless in practice (an idle
+  # Redis costs little), but a stale comment claiming otherwise is still
+  # a stale comment, and this project doesn't leave those once found.
+  #
+  # 2026-08-11: replaced the single-node `redis` service with a real
+  # master/2-replica/3-sentinel topology -- the same "explicitly out of
+  # reach" gap ROADMAP item 12 disclosed for a real multi-broker message
+  # cluster, closed here for the actual message-queue technology this
+  # project uses (a plain Redis list) rather than for Kafka, which this
+  # project deliberately never adopted (see the original queue-design
+  # comment on `logstash-queued` below for why: the official
+  # `logstash-output-redis` plugin doesn't support Streams/XADD, and an
+  # unverified third-party plugin was rejected as too risky given this
+  # project's own Bug 16). `redis-cli`'s single-node `SET NX PX` lock
+  # pattern (`RedisStorageProvider.lock_for_save()`, `src/anonymize.py`)
+  # was always deliberately scoped to single-node linearizability rather
+  # than full Redlock, on the stated grounds that this project's Redis
+  # was single-node -- that assumption changes with this topology, see
+  # the DISCLOSED, REAL LIMITATION in that class's own updated docstring
+  # for exactly what does and doesn't still hold once a replica can be
+  # promoted to master mid-run.
+  redis-master:
     image: redis:7-alpine
+    container_name: redact-redis-master
+    command: ["redis-server", "--appendonly", "yes"]
     networks:
       - redact-net
     healthcheck:
@@ -285,6 +319,107 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  redis-replica-1:
+    image: redis:7-alpine
+    container_name: redact-redis-replica-1
+    command: ["redis-server", "--replicaof", "redis-master", "6379", "--appendonly", "yes"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - redact-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-replica-2:
+    image: redis:7-alpine
+    container_name: redact-redis-replica-2
+    command: ["redis-server", "--replicaof", "redis-master", "6379", "--appendonly", "yes"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      - redact-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 3 Sentinels, quorum 2 (see redis/sentinel.conf's own comment for why
+  # a shared read-only template copied into each container's own
+  # writable path, rather than one host file mounted read-write into all
+  # three). Depends on all 3 data nodes being healthy first so Sentinel's
+  # very first `INFO` probe of each doesn't race container startup.
+  redis-sentinel-1:
+    image: redis:7-alpine
+    container_name: redact-redis-sentinel-1
+    volumes:
+      - ./redis/sentinel.conf:/etc/redis/sentinel.conf.template:ro
+    command: ["sh", "-c", "cp /etc/redis/sentinel.conf.template /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_healthy
+      redis-replica-2:
+        condition: service_healthy
+    networks:
+      - redact-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  redis-sentinel-2:
+    image: redis:7-alpine
+    container_name: redact-redis-sentinel-2
+    volumes:
+      - ./redis/sentinel.conf:/etc/redis/sentinel.conf.template:ro
+    command: ["sh", "-c", "cp /etc/redis/sentinel.conf.template /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_healthy
+      redis-replica-2:
+        condition: service_healthy
+    networks:
+      - redact-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  redis-sentinel-3:
+    image: redis:7-alpine
+    container_name: redact-redis-sentinel-3
+    volumes:
+      - ./redis/sentinel.conf:/etc/redis/sentinel.conf.template:ro
+    command: ["sh", "-c", "cp /etc/redis/sentinel.conf.template /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_healthy
+      redis-replica-2:
+        condition: service_healthy
+    networks:
+      - redact-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   # Queue-decoupled ingestion path, 2026-08-10 (ROADMAP item 12) -- an
   # ALTERNATIVE to the synchronous logstash service below, not a
@@ -339,10 +474,30 @@ services:
       context: ./logstash
       dockerfile: Dockerfile
     depends_on:
-      redis:
+      redis-master:
         condition: service_healthy
     environment:
-      - REDIS_HOST=redis
+      # DISCLOSED, REAL LIMITATION -- not sentinel-aware, unlike
+      # queue-consumer below: the official logstash-output-redis plugin's
+      # `host` config takes a fixed hostname/IP (or a list, for
+      # round-robining across independent shards -- not the same thing
+      # as Sentinel-style master failover), with no built-in way to ask
+      # Sentinel "who's the current master" the way redis-py's Sentinel
+      # client does. Pointed directly at redis-master, matching the
+      # topology's naming, but this means: if redis-master genuinely
+      # fails and Sentinel promotes a replica, THIS producer keeps trying
+      # the now-dead old master's hostname and will not automatically
+      # start writing to the new one -- Logstash's own reconnect/retry
+      # logic will just keep failing against a host that no longer
+      # accepts writes, until either redis-master's container is manually
+      # restarted (as a replica of the new master, not automatically) or
+      # this env var is changed and the container restarted. Same
+      # "verified official plugin, disclosed gap" tradeoff this project
+      # already made once for BLPOP-vs-Streams (see this service's own
+      # header comment) rather than reaching for an unverified
+      # Sentinel-aware fork. queue-consumer below, using the Python
+      # `redis` client directly, does not have this limitation.
+      - REDIS_HOST=redis-master
       - REDACT_QUEUE_KEY=${REDACT_QUEUE_KEY:-redact:raw-events}
     volumes:
       - ./data/raw:/var/log/security:ro
@@ -357,14 +512,32 @@ services:
       dockerfile: Dockerfile
     command: ["python3", "src/queue_consumer.py"]
     depends_on:
-      redis:
+      redis-sentinel-1:
+        condition: service_healthy
+      redis-sentinel-2:
+        condition: service_healthy
+      redis-sentinel-3:
         condition: service_healthy
       redact-lb:
         condition: service_started
       opensearch-node1:
         condition: service_healthy
     environment:
-      - REDIS_HOST=redis
+      # REDIS_SENTINELS (plural), not REDIS_HOST/REDIS_PORT -- see
+      # src/queue_consumer.py's own comment on why the Sentinel-aware
+      # path is preferred here now that Redis is a real
+      # master/replica/sentinel topology: redis-py's Sentinel client asks
+      # any of these three "who's the current master" on every
+      # connection attempt, so if redis-master genuinely fails and
+      # Sentinel promotes a replica, this consumer picks up the new
+      # master automatically on its next BLPOP retry -- unlike
+      # logstash-queued above, which has no equivalent capability in the
+      # official plugin it uses. REDIS_HOST/REDIS_PORT are still read as
+      # a fallback if REDIS_SENTINELS is unset, for anyone running this
+      # script against a plain single-instance Redis outside this compose
+      # file's topology.
+      - REDIS_SENTINELS=redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379
+      - REDIS_SENTINEL_MASTER_NAME=${REDIS_SENTINEL_MASTER_NAME:-redact-master}
       - REDACT_QUEUE_KEY=${REDACT_QUEUE_KEY:-redact:raw-events}
       - REDACT_SERVICE_URL=http://redact-lb:8080/anonymize
       - REDACT_SERVICE_API_KEY=${REDACT_SERVICE_API_KEY:?set a real key in .env, do not use a default}

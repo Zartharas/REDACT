@@ -1869,6 +1869,110 @@ real cluster" gap, not building out full chaos-engineering coverage.
 
 ---
 
+## 22. Redis became a real master/2-replica/3-sentinel topology -- two disclosed client-side gaps, not yet tested against a live failover
+
+**Impact:** N/A (feature closure, not a defect in previously-shipped
+behavior). **Status:** Implemented and syntax/logic-checked; not yet
+confirmed against a live failover (no Docker daemon in this sandbox).
+
+The user asked to work through ROADMAP.md's remaining "explicitly out of
+reach" items after the OpenSearch multi-node closure (Bug 21). Of the
+three named there -- a real Kafka cluster, a real cloud load balancer,
+and terabytes/day volume -- the user confirmed (via direct question) they
+don't currently have a cloud account set up, so the cloud-dependent two
+were deferred rather than started (account/billing setup is its own
+multi-session effort, not something to begin mid-task on someone else's
+behalf). The Kafka item was re-examined instead of attempted as
+originally scoped: this project never actually adopted Kafka (see
+`logstash-queued`'s own comment in `docker-compose.yml` -- the official
+`logstash-output-redis` plugin doesn't support Streams/XADD, and an
+unverified third-party plugin was rejected given this project's own Bug
+16), so "a real Kafka cluster" was a hypothetical comparison point, not
+a real gap in the technology this project ships. What actually needed
+closing was HA for the message-queue backend this project DOES use: a
+single-node Redis.
+
+**What changed:** `docker-compose.yml`'s single-node `redis` service is
+now `redis-master` + `redis-replica-1`/`redis-replica-2` (async
+replication, `--appendonly yes`) + `redis-sentinel-1/2/3` (quorum 2,
+`resolve-hostnames`/`announce-hostnames yes` so Sentinel tracks Compose's
+stable service hostnames rather than container IPs -- see
+`redis/sentinel.conf`'s own comment for why each of the 3 sentinel
+containers copies a shared read-only template into its own writable path
+rather than three processes sharing one host-mounted config file).
+`RedisStorageProvider` (`src/anonymize.py`) gained optional
+`sentinels`/`sentinel_service_name` constructor parameters using
+redis-py's own `Sentinel` client; `src/queue_consumer.py` gained an
+equivalent `REDIS_SENTINELS`/`REDIS_SENTINEL_MASTER_NAME` env-var-driven
+path. Both fall back to their prior fixed-host connection behavior when
+Sentinel isn't configured, so neither
+`validation/redis_storage_provider_test.py`,
+`validation/multiprocess_redis_test.py`, nor CI's `redis-tests` job
+(all of which connect to a plain single-instance `redis:7` service
+container) needed any changes -- confirmed by re-running the full local
+suite unmodified (54 passed / 2 skipped) after these edits.
+
+**Two disclosed, real limitations found while implementing this, not
+discovered by accident and not glossed over:**
+
+1. **`logstash-queued`'s producer side has no Sentinel awareness.** The
+   official `logstash-output-redis` plugin's `host` config takes a fixed
+   hostname (or a list, for round-robining across independent shards --
+   not the same mechanism as Sentinel-style master discovery), with no
+   built-in way to ask Sentinel "who's the current master." Pointed at
+   `redis-master` directly, matching the topology's naming, but if
+   `redis-master` genuinely fails and Sentinel promotes a replica, this
+   producer keeps retrying the now-dead hostname rather than picking up
+   the new master -- Logstash's own reconnect/retry logic just keeps
+   failing against a host that no longer accepts writes. `queue_consumer.py`
+   on the other side of this same queue does not have this limitation,
+   since it uses the Python `redis` client's own Sentinel support
+   directly rather than a Logstash output plugin.
+
+2. **A real correctness window around the failover moment itself, in
+   `RedisStorageProvider.lock_for_save()`.** This lock's original
+   correctness argument (see its own comment, `src/anonymize.py`) relied
+   on single-node Redis's inherent linearizability -- true regardless of
+   this change, for any SINGLE master at a time. What changes: Redis's
+   default asynchronous replication means a lock (or a completed,
+   already-released save) on the master immediately before it fails is
+   not guaranteed to have already reached whichever replica Sentinel
+   promotes next. Two concrete failure windows follow from this, neither
+   fixed by anything in this class: a lock that vanishes on the newly
+   promoted master while the original holder's save() is still in
+   flight (letting a second process acquire what looks like a fresh
+   lock), and unreplicated writes from immediately before the failure
+   being lost the same way any unreplicated write to a failed master is
+   lost. This is the standard, well-documented tradeoff of Sentinel's
+   asynchronous replication model, not something unique to this
+   implementation, and not something a smarter lock alone fixes -- full
+   Redlock (spanning multiple independent masters, not one master with
+   async replicas) is the documented next step if this specific race
+   ever needs closing. Not implemented here; disclosed instead, the same
+   standard this project already applied to BLPOP's own non-redelivery
+   gap and the ordered-vs-load-balanced OpenSearch failover tradeoff in
+   Bug 21.
+
+**Not yet verified against a live failover in this sandbox** -- no
+Docker daemon here, same disclosure as every other Docker Compose claim
+in this project until it's actually been run. `docker-compose.yml`
+parses as valid YAML, `src/anonymize.py` and `src/queue_consumer.py`
+both compile clean, the `REDIS_SENTINELS` env-var parsing logic was
+checked directly (`python3 -c "..."`, confirming both the populated and
+empty-string cases produce the expected `[(host, port), ...]` list or
+`[]`), and the full local test suite still passes unmodified. None of
+that substitutes for actually bringing the topology up, killing
+`redis-master` mid-run, and confirming Sentinel promotes a replica while
+the Python consumer/storage-provider paths keep working through it (and
+that the Logstash producer's disclosed limitation reproduces exactly as
+predicted, not some different failure mode that would mean this writeup
+is wrong about the mechanism). Handed off to the user as the next live
+test, following the same "implemented and reasoned about here,
+confirmed there" pattern every other Docker-dependent claim in this
+document has been held to.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same
