@@ -1,0 +1,9 @@
+# Separate from requirements.txt on purpose, same pattern as
+# requirements-redis.txt/requirements-vault.txt/requirements-airflow.txt/
+# requirements-fpe.txt: src/queue_consumer.py's Kafka consumer path
+# (KAFKA_BROKERS) is an opt-in alternative to the default Redis/Sentinel
+# path -- most deployments won't set KAFKA_BROKERS, so most deployments
+# shouldn't need this installed. Install this only where you're actually
+# running queue_consumer.py against a Kafka-compatible broker (a real
+# MSK cluster, or floci's MSK emulation -- see run_floci_kafka_test.sh).
+kafka-python

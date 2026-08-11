@@ -572,6 +572,70 @@ services:
     # guarantee specifically, only for the crash-redelivery guarantee
     # disclosed above, which BLPOP genuinely does not provide.
 
+  # Kafka-shaped alternative to logstash-queued/queue-consumer above,
+  # added 2026-08-11 (ROADMAP item 13) -- see
+  # logstash/redact-pipeline-kafka.conf and src/queue_consumer.py's own
+  # "Kafka alternative" docstring section for the full reasoning (a real
+  # consumer-group offset-commit model closes the crash-redelivery gap
+  # BLPOP genuinely has, and the official logstash-output-kafka plugin
+  # has real broker-discovery/leader-election awareness the Redis output
+  # plugin doesn't).
+  #
+  # KAFKA_BROKERS is intentionally NOT given a hardcoded default the way
+  # REDIS_HOST is above -- unlike Redis, this project has no
+  # self-hosted Kafka-compatible broker of its own in this compose file.
+  # run_floci_kafka_test.sh provisions one via floci's MSK emulation and
+  # exports KAFKA_BROKERS with the resulting broker address before
+  # bringing these two services up. Point it at a real MSK/Kafka cluster
+  # the same way for a genuine production deployment.
+  #
+  # profiles: ["kafka-queued"] -- opt-in, same pattern as "queued" above,
+  # and mutually exclusive with it and with the default profile against
+  # the same ./data/raw files (same double-processing warning as
+  # logstash-queued's own header comment).
+  #
+  # NOT run live in this sandbox (no Docker daemon, no floci, no Kafka
+  # broker here) -- syntax-checked only.
+  logstash-kafka:
+    build:
+      context: ./logstash
+      dockerfile: Dockerfile
+    environment:
+      - KAFKA_BROKERS=${KAFKA_BROKERS:?set to a real broker address, e.g. via run_floci_kafka_test.sh}
+      - KAFKA_TOPIC=${KAFKA_TOPIC:-redact-raw-events}
+    volumes:
+      - ./data/raw:/var/log/security:ro
+      - ./logstash/redact-pipeline-kafka.conf:/usr/share/logstash/pipeline/redact-pipeline.conf:ro
+    networks:
+      - redact-net
+    profiles: ["kafka-queued"]
+
+  queue-consumer-kafka:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python3", "src/queue_consumer.py"]
+    depends_on:
+      redact-lb:
+        condition: service_started
+      opensearch-node1:
+        condition: service_healthy
+    environment:
+      - KAFKA_BROKERS=${KAFKA_BROKERS:?set to a real broker address, e.g. via run_floci_kafka_test.sh}
+      - KAFKA_TOPIC=${KAFKA_TOPIC:-redact-raw-events}
+      - KAFKA_GROUP_ID=${KAFKA_GROUP_ID:-redact-queue-consumer}
+      - REDACT_SERVICE_URL=http://redact-lb:8080/anonymize
+      - REDACT_SERVICE_API_KEY=${REDACT_SERVICE_API_KEY:?set a real key in .env, do not use a default}
+      - OPENSEARCH_HOSTS=http://opensearch-node1:9200,http://opensearch-node2:9200,http://opensearch-node3:9200
+    networks:
+      - redact-net
+    profiles: ["kafka-queued"]
+    # Scale with: docker compose --profile kafka-queued up --scale queue-consumer-kafka=N
+    # A real Kafka consumer group -- multiple replicas sharing
+    # KAFKA_GROUP_ID correctly load-balance partitions AND get the
+    # crash-redelivery guarantee BLPOP's per-client-atomic-pop above does
+    # not provide.
+
   logstash:
     build:
       context: ./logstash

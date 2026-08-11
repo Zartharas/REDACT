@@ -38,6 +38,26 @@ RUN bin/logstash-plugin install logstash-output-opensearch
 # services share.
 RUN bin/logstash-plugin install logstash-output-redis
 
+# Added 2026-08-11 (ROADMAP item 13, the Kafka-shaped alternative queue
+# path): logstash-output-kafka, used by redact-pipeline-kafka.conf's
+# `kafka` output block. UNLIKE logstash-output-redis and
+# logstash-output-opensearch above, logstash-integration-kafka (which
+# bundles both the Kafka input and output plugins) is widely documented
+# as one of Logstash's DEFAULT bundled plugins in the standard (non-OSS)
+# image, not a third-party add-on -- but that has NOT been independently
+# confirmed against a live logstash:8.15.0 container in this sandbox (no
+# Docker daemon here), unlike the redis/opensearch plugin gaps above,
+# which WERE confirmed via each plugin's own official documentation.
+# Running the install command explicitly here is deliberately safe either
+# way: if the plugin is already bundled, `logstash-plugin install`
+# against an already-present plugin is idempotent (updates/no-ops rather
+# than erroring), so this line costs nothing if the "bundled by default"
+# understanding turns out to be right, and closes the gap outright if it
+# turns out to be wrong. Only used by the "kafka-queued" Compose
+# profile's logstash-kafka service -- same shared-image reasoning as the
+# redis plugin above.
+RUN bin/logstash-plugin install logstash-integration-kafka
+
 RUN rm -f /usr/share/logstash/pipeline/logstash.conf
 
 COPY redact-pipeline.conf /usr/share/logstash/pipeline/redact-pipeline.conf

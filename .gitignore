@@ -47,6 +47,12 @@ data/replica_queue_test_corpus_*.jsonl
 # leaving it for later).
 data/redis_failover_test_corpus_*.jsonl
 
+# Generated corpus for run_floci_kafka_test.sh (ROADMAP item 13) -- same
+# fixed-seed regeneration pattern as the other run_*_test.sh corpora
+# above. Added proactively this time, not found missing after the fact
+# (see Bug 22/23/24's own corpus-gitignore-gap history above).
+data/kafka_queue_test_corpus_*.jsonl
+
 # CloudTrailFlaws_raw.jsonl (validation/real_data/prepare_cloudtrail_dataset.py)
 # -- regenerable from the public flaws.cloud release, same pattern as the
 # Loghub *.log files above (already covered by *.log; this one is .jsonl

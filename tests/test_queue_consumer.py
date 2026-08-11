@@ -8,6 +8,7 @@ index + one audit doc per audit_event, each with a fresh random UUID
 never equal to the parent doc's ID or to each other; failure -> quarantine
 index, original (un-anonymized) text preserved, never silently dropped.
 """
+import json
 import os
 import sys
 import uuid
@@ -138,3 +139,132 @@ def test_service_error_field_in_response_also_quarantines():
 
     assert len(calls) == 1
     assert calls[0][0].startswith("security-logs-quarantine-")
+
+
+# --------------------------------------------------------------------------
+# Kafka consumer path (KAFKA_BROKERS, added 2026-08-11, ROADMAP item 13).
+# No live Kafka broker in this sandbox -- these mock the `kafka` library's
+# KafkaConsumer class itself (patched at its source, `kafka.KafkaConsumer`,
+# since queue_consumer.py imports it lazily inside _run_kafka_consumer)
+# rather than needing a real broker. What's checked: the actual redelivery
+# guarantee this path exists for -- commit() is called after a successful
+# process_event() and NOT called after a failed one, which is the entire
+# mechanism that makes "Kafka instead of Redis" a real improvement, not
+# just a different transport with the same at-most-once failure mode.
+
+class _FakeKafkaMessage:
+    def __init__(self, value: str):
+        self.value = value
+
+
+class _StopTestLoop(Exception):
+    """Raised by the fake consumer's __iter__ on its second call, so the
+    test can end queue_consumer's deliberately-infinite `while True` loop
+    without actually running forever -- distinct from StopIteration (which
+    _run_kafka_consumer already handles as a legitimate idle-timeout
+    signal) and from kafka.errors.KafkaError (handled as a retry signal),
+    so this test-only exception propagates straight out uncaught, exactly
+    where the test wants to stop and assert."""
+
+
+class _FakeKafkaConsumer:
+    """Yields `messages` on its first iteration, then raises _StopTestLoop
+    on any subsequent iteration attempt -- see _StopTestLoop's own
+    docstring for why."""
+
+    def __init__(self, *args, **kwargs):
+        self.messages = kwargs.pop("_test_messages", [])
+        self.commit_call_count = 0
+        self._iterations = 0
+
+    def __iter__(self):
+        self._iterations += 1
+        if self._iterations > 1:
+            raise _StopTestLoop()
+        return iter(self.messages)
+
+    def commit(self):
+        self.commit_call_count += 1
+
+
+def test_main_dispatches_to_kafka_when_brokers_configured():
+    """KAFKA_BROKERS set -> main() must call the Kafka path, not touch the
+    Redis/Sentinel path at all."""
+    called = {"kafka": False}
+
+    def fake_kafka_consumer():
+        called["kafka"] = True
+
+    with patch.object(queue_consumer, "KAFKA_BROKERS", ["broker1:9092"]), \
+         patch.object(queue_consumer, "_run_kafka_consumer", side_effect=fake_kafka_consumer):
+        queue_consumer.main()
+
+    assert called["kafka"] is True
+
+
+def test_kafka_consumer_commits_after_successful_processing():
+    fake_consumer_instance = _FakeKafkaConsumer(
+        _test_messages=[_FakeKafkaMessage(json.dumps(
+            {"message": "user jsmith logged in", "log_type": "syslog"}
+        ))]
+    )
+
+    def fake_kafka_consumer_factory(*args, **kwargs):
+        return fake_consumer_instance
+
+    with patch.object(queue_consumer, "KAFKA_BROKERS", ["broker1:9092"]), \
+         patch("kafka.KafkaConsumer", side_effect=fake_kafka_consumer_factory), \
+         patch.object(queue_consumer, "process_event", return_value=None) as mock_process:
+        with pytest.raises(_StopTestLoop):
+            queue_consumer._run_kafka_consumer()
+
+    mock_process.assert_called_once()
+    assert fake_consumer_instance.commit_call_count == 1
+
+
+def test_kafka_consumer_does_not_commit_after_failed_processing():
+    """The actual redelivery-guarantee mechanism, confirmed directly: a
+    message whose process_event() call raises must NOT be committed, so
+    Kafka redelivers it to the next consumer in the group rather than
+    this path silently losing it the way the Redis BLPOP path's docstring
+    discloses it can."""
+    fake_consumer_instance = _FakeKafkaConsumer(
+        _test_messages=[_FakeKafkaMessage(json.dumps(
+            {"message": "user jsmith logged in", "log_type": "syslog"}
+        ))]
+    )
+
+    def fake_kafka_consumer_factory(*args, **kwargs):
+        return fake_consumer_instance
+
+    with patch.object(queue_consumer, "KAFKA_BROKERS", ["broker1:9092"]), \
+         patch("kafka.KafkaConsumer", side_effect=fake_kafka_consumer_factory), \
+         patch.object(queue_consumer, "process_event",
+                       side_effect=ConnectionError("OpenSearch unreachable")):
+        with pytest.raises(_StopTestLoop):
+            queue_consumer._run_kafka_consumer()
+
+    assert fake_consumer_instance.commit_call_count == 0
+
+
+def test_kafka_consumer_commits_unparseable_messages_to_avoid_permanent_block():
+    """A malformed message that will never successfully parse must still
+    be committed -- otherwise it would permanently block that partition's
+    redelivery on every restart, a worse outcome than dropping the one
+    unparseable message (matches the Redis path's own
+    dropped-unparseable-item behavior in the main while-loop above)."""
+    fake_consumer_instance = _FakeKafkaConsumer(
+        _test_messages=[_FakeKafkaMessage("not valid json{{{")]
+    )
+
+    def fake_kafka_consumer_factory(*args, **kwargs):
+        return fake_consumer_instance
+
+    with patch.object(queue_consumer, "KAFKA_BROKERS", ["broker1:9092"]), \
+         patch("kafka.KafkaConsumer", side_effect=fake_kafka_consumer_factory), \
+         patch.object(queue_consumer, "process_event") as mock_process:
+        with pytest.raises(_StopTestLoop):
+            queue_consumer._run_kafka_consumer()
+
+    mock_process.assert_not_called()
+    assert fake_consumer_instance.commit_call_count == 1

@@ -47,6 +47,39 @@ UNVERIFIED against a live Redis/OpenSearch/redact-service stack in this
 sandbox (no Docker daemon here) -- needs the user's machine, same
 disclosure as every other Docker Compose component in this project until
 it's actually been run.
+
+--- Kafka alternative, added 2026-08-11 (ROADMAP item 13) ---
+The disclosed Redis-list limitation above (BLPOP has no XPENDING/XCLAIM-
+style redelivery -- a crash mid-process loses that one event) is exactly
+the class of problem a real Kafka consumer group's offset-commit model
+avoids: an event isn't considered "done" until this process explicitly
+commits its offset, so a crash between poll and commit means the next
+consumer in the group re-reads that message rather than silently losing
+it. `main()` now checks `KAFKA_BROKERS` first; if set, runs a Kafka
+consumer-group loop (`_run_kafka_consumer` below) instead of the
+Redis/Sentinel path, calling the exact same `process_event()` either
+way -- no duplicated business logic between the two transports, only the
+poll/ack mechanism differs.
+
+Uses `kafka-python` (pure-Python client, no C-extension build step,
+unlike `confluent-kafka`'s librdkafka dependency) with
+`enable_auto_commit=False` and an explicit `consumer.commit()` AFTER
+`process_event()` succeeds -- this is what actually gives the
+at-least-once redelivery guarantee the Redis path can't offer: if
+`process_event()` raises or the process dies before the commit call, the
+message's offset is never advanced, and Kafka redelivers it to the next
+consumer that joins the group. (`process_event()` itself already fails
+closed into quarantine on a redact-service error -- see its own
+docstring -- so a raised exception here means something more severe,
+like OpenSearch being fully unreachable, not a routine detection error.)
+
+DISCLOSED, NOT YET LIVE-CONFIRMED: this needs a real Kafka-compatible
+broker to test against, which this sandbox doesn't have (no Docker
+daemon). `run_floci_kafka_test.sh` (repo root) provisions one via
+floci's MSK emulation (a genuine Redpanda broker -- "Real Docker" per
+floci's own service table, unlike the ELB v2 uncertainty flagged in
+BUGS_AND_FIXES.md's "Engineering upgrade 6") and runs a full corpus
+through this path -- written, syntax-checked, handed off, not yet run.
 """
 import sys
 import os
@@ -109,6 +142,15 @@ OPENSEARCH_HOSTS = [
     if h.strip()
 ]
 BLPOP_TIMEOUT_SECONDS = int(os.environ.get("REDACT_CONSUMER_BLPOP_TIMEOUT", "5"))
+
+# Kafka alternative transport -- see this module's own docstring
+# ("Kafka alternative, added 2026-08-11") for the redelivery-guarantee
+# reasoning. Unset by default, so existing Redis/Sentinel-based
+# deployments are completely unaffected -- same backward-compatible,
+# opt-in pattern as REDIS_SENTINELS above.
+KAFKA_BROKERS = [b.strip() for b in os.environ.get("KAFKA_BROKERS", "").split(",") if b.strip()]
+KAFKA_TOPIC = os.environ.get("KAFKA_TOPIC", "redact-raw-events")
+KAFKA_GROUP_ID = os.environ.get("KAFKA_GROUP_ID", "redact-queue-consumer")
 
 
 def call_redact_service(text: str, log_type: str | None) -> dict:
@@ -253,7 +295,75 @@ def process_event(raw_event: dict) -> None:
         )
 
 
+def _run_kafka_consumer():
+    """Consumer-group loop over KAFKA_BROKERS/KAFKA_TOPIC. Manual offset
+    commit AFTER process_event() succeeds -- see this module's own
+    docstring for why that ordering is the entire point (it's what turns
+    "Kafka instead of Redis" into an actual redelivery-guarantee
+    improvement, not just a different transport with the same failure
+    mode)."""
+    from kafka import KafkaConsumer  # noqa: E402 -- lazy import, same
+                                       # pattern as the redis import
+                                       # below: only this code path needs
+                                       # kafka-python installed.
+    from kafka.errors import KafkaError  # noqa: E402
+
+    consumer = KafkaConsumer(
+        KAFKA_TOPIC,
+        bootstrap_servers=KAFKA_BROKERS,
+        group_id=KAFKA_GROUP_ID,
+        enable_auto_commit=False,
+        auto_offset_reset="earliest",
+        value_deserializer=lambda v: v.decode("utf-8"),
+        consumer_timeout_ms=BLPOP_TIMEOUT_SECONDS * 1000,
+    )
+    print(
+        f"queue_consumer: polling topic '{KAFKA_TOPIC}' via Kafka brokers "
+        f"{KAFKA_BROKERS} (group: {KAFKA_GROUP_ID})",
+        flush=True,
+    )
+
+    while True:
+        try:
+            # consumer_timeout_ms above makes this loop over whatever's
+            # available and then raise StopIteration when idle, mirroring
+            # BLPOP's own timeout-then-loop-again behavior in the Redis
+            # path rather than blocking forever.
+            for message in consumer:
+                try:
+                    event = json.loads(message.value)
+                except json.JSONDecodeError as exc:
+                    print(f"queue_consumer: dropped unparseable queue item: {exc}", flush=True)
+                    consumer.commit()  # still commit -- a permanently
+                                        # unparseable message would
+                                        # otherwise block the partition
+                                        # forever on redelivery.
+                    continue
+                try:
+                    process_event(event)
+                except Exception as exc:  # noqa: BLE001 -- see module-level
+                    # while-loop's identical broad catch for the Redis path;
+                    # same reasoning applies here. Deliberately does NOT
+                    # commit on this path -- see docstring: an uncommitted
+                    # offset is what makes this message eligible for
+                    # redelivery to the next consumer in the group.
+                    print(f"queue_consumer: error processing event, not committed "
+                          f"(will be redelivered): {exc}", flush=True)
+                    continue
+                consumer.commit()
+        except StopIteration:
+            continue  # idle timeout, no messages -- loop and poll again
+        except KafkaError as exc:
+            print(f"queue_consumer: Kafka error (retrying): {exc}", flush=True)
+            time.sleep(BLPOP_TIMEOUT_SECONDS)
+            continue
+
+
 def main():
+    if KAFKA_BROKERS:
+        _run_kafka_consumer()
+        return
+
     import redis  # noqa: E402 -- lazy import, same pattern as
                    # anonymize.py's RedisStorageProvider: only this
                    # entrypoint needs the redis package, not every caller

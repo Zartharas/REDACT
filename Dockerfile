@@ -22,8 +22,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
-COPY requirements.txt requirements-redis.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-redis.txt \
+COPY requirements.txt requirements-redis.txt requirements-kafka.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-redis.txt -r requirements-kafka.txt \
     && python -m spacy download en_core_web_lg
 # requirements-redis.txt added to the base install, 2026-08-10 (ROADMAP
 # item 12): this same image now also runs src/queue_consumer.py
@@ -46,6 +46,23 @@ RUN pip install --no-cache-dir -r requirements.txt -r requirements-redis.txt \
 # queue_consumer.py only. Wiring an actual env-var switch into
 # service.py is a separate, real, not-yet-done task, not implied by
 # anything in this Dockerfile change.
+#
+# requirements-kafka.txt added to the base install too, 2026-08-11
+# (ROADMAP item 13), same exact reasoning as requirements-redis.txt
+# immediately above: this same shared image now also runs
+# queue_consumer.py's Kafka consumer-group code path
+# (docker-compose.yml's queue-consumer-kafka service), which needs
+# kafka-python unconditionally when KAFKA_BROKERS is set -- not "only
+# where you're actually using Kafka" the way requirements-kafka.txt's own
+# header comment frames it for someone installing it standalone outside
+# this Dockerfile. Real, disclosed cost: every redact-service/
+# queue-consumer image now carries kafka-python's dependency weight even
+# when KAFKA_BROKERS is never set and that code path never runs --
+# accepted here for the same reason accepted for redis: one shared image
+# for every src/*.py entrypoint is simpler to build/maintain/scan
+# (Trivy's container-scan CI job, Bug 20's supply-chain finding) than
+# fragmenting this project into a growing number of near-duplicate
+# per-transport images.
 
 FROM python:3.12-slim
 
