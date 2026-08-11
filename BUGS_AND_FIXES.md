@@ -2089,6 +2089,93 @@ what this entry was scoped to.
 
 ---
 
+## 24. queue_consumer.py crashed outright under a live Sentinel failover -- caught the wrong exception type, verified against real production traffic, not assumed from the library docs
+
+**Impact:** High under the exact scenario this feature exists for --
+every `queue-consumer` replica crashed and stayed dead, permanently
+stranding whatever was already queued (47,694 of ~47,808 remaining
+events in this test) until manually restarted. Zero impact on the
+synchronous (non-queued) pipeline, which doesn't touch this code path
+at all. **Status:** Verified fixed via direct interpreter-level
+confirmation of the root cause; a fresh live re-run of this exact test
+is the next step, same standard as every other Docker-dependent fix in
+this document.
+
+**Found by the user's `run_redis_failover_test.sh` run -- the follow-up
+test explicitly written after Bug 23 to check whether
+`queue_consumer.py`'s Sentinel reconnect logic actually holds up under
+real BLPOP traffic, not just when idle.** It didn't. The run's own
+"predicted vs. genuine problem" summary (baked into that script after
+Bug 23, on the theory that a partial reconciliation total needed
+context to interpret correctly) called this exactly: queue depth stuck
+at 47,694 and never draining, reconciliation frozen at 12,306 for the
+full 3-minute post-kill poll window, and all three `queue-consumer-N`
+containers' logs showing a full, uncaught Python traceback ending in
+`redis.exceptions.TimeoutError: Timeout connecting to server` -- not the
+"Redis connection/timeout error (retrying)" message this script's own
+`except` clause should have printed if it had actually caught anything.
+
+**Root cause, confirmed directly rather than assumed from the redis-py
+docs:**
+
+```
+>>> import redis.exceptions as e
+>>> issubclass(e.TimeoutError, e.ConnectionError)
+False
+>>> e.ConnectionError.__mro__
+(ConnectionError, RedisError, Exception, BaseException, object)
+>>> e.TimeoutError.__mro__
+(TimeoutError, RedisError, Exception, BaseException, object)
+```
+
+`main()`'s retry loop (added alongside Bug 22's Sentinel support) only
+caught `redis.exceptions.ConnectionError`. `TimeoutError` is a SIBLING
+of `ConnectionError` in this library's exception hierarchy -- both
+inherit directly from `RedisError`, neither from the other -- so a
+timeout connecting to the just-promoted (correctly reachable) new
+master was never caught by that clause. It propagated all the way out
+of `main()` uncaught, which is exactly what killed every
+`queue-consumer` replica outright rather than letting the retry logic
+do its job. Sentinel's own promotion had already completed correctly
+and fast (confirmed independently, Bug 23's own log evidence) -- this
+was purely a gap in this script's exception handling, not a Sentinel or
+Redis-side failure. Worth naming plainly: this is the exact class of
+mistake that "verified against the library's stated behavior" doesn't
+catch -- both exceptions are individually well-documented, but their
+NOT sharing an inheritance relationship is the kind of specific detail
+that's easy to get wrong writing the `except` clause from general
+familiarity with the library rather than actually checking.
+
+**Fix:** `except (redis.exceptions.ConnectionError,
+redis.exceptions.TimeoutError) as exc:` -- both exception types now
+caught explicitly, not relying on an inheritance relationship that
+doesn't exist. Also added explicit `socket_connect_timeout=5,
+socket_timeout=10` to both the `Sentinel(...)` client and
+`master_for(...)` call: without a bound, a connection attempt to a
+still-unreachable address can hang for a long time at the OS/TCP level
+(Linux's default connect-timeout backoff can run well past a minute)
+before redis-py raises anything at all for the `except` clause to
+catch -- a related, disclosed hardening found worth doing at the same
+time, not a separate confirmed bug on its own (the live test's timeline
+didn't isolate exactly how much of the delay before the crash was this
+specific cause versus other factors, so this is stated as a reasonable
+precaution rather than a second confirmed root cause).
+
+**Verification status, stated precisely:** the exception-hierarchy root
+cause is confirmed with certainty -- checked directly against the
+installed `redis` package's actual class hierarchy in this sandbox, not
+assumed from documentation or memory, and it exactly explains the live
+symptom (an uncaught traceback matching the exact exception type this
+check confirms was never caught). The fix itself (`py_compile` clean,
+full local test suite still passing 54/2 unmodified, since
+`tests/test_queue_consumer.py` patches `index_document()` at the
+function boundary and never exercises `main()`'s retry loop directly)
+has not yet been re-run against a live repeat of the exact failover
+scenario that found it -- that's the next step, handed back to the
+user, same standard as every other fix in this document.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same

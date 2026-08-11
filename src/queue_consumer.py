@@ -270,9 +270,27 @@ def main():
         # `except` below catches it, the loop continues, and the NEXT
         # blpop() call re-resolves the master through Sentinel and picks
         # up wherever the queue's new master's data ended up.
+        #
+        # socket_connect_timeout/socket_timeout, added 2026-08-11 (Bug
+        # 24, BUGS_AND_FIXES.md): without an explicit bound, a connection
+        # attempt to a dead master can hang for a long time at the OS/TCP
+        # level (Linux's default connect-timeout backoff can run well
+        # past a minute) before redis-py ever raises anything for the
+        # `except` below to catch -- found live, not assumed, during
+        # this exact failover test: consumers sat stalled for noticeably
+        # longer than BLPOP_TIMEOUT_SECONDS before the (then-uncaught)
+        # TimeoutError finally surfaced. A short, explicit timeout means
+        # each failed attempt fails fast and predictably instead of
+        # depending on OS defaults.
         from redis.sentinel import Sentinel  # noqa: E402
-        sentinel = Sentinel(REDIS_SENTINELS, decode_responses=True)
-        client = sentinel.master_for(REDIS_SENTINEL_MASTER_NAME, decode_responses=True)
+        sentinel = Sentinel(
+            REDIS_SENTINELS, decode_responses=True,
+            socket_connect_timeout=5, socket_timeout=10,
+        )
+        client = sentinel.master_for(
+            REDIS_SENTINEL_MASTER_NAME, decode_responses=True,
+            socket_connect_timeout=5, socket_timeout=10,
+        )
         print(
             f"queue_consumer: polling '{QUEUE_KEY}' via Sentinel "
             f"{REDIS_SENTINELS} (master name: {REDIS_SENTINEL_MASTER_NAME})",
@@ -285,7 +303,7 @@ def main():
     while True:
         try:
             item = client.blpop(QUEUE_KEY, timeout=BLPOP_TIMEOUT_SECONDS)
-        except redis.exceptions.ConnectionError as exc:
+        except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as exc:
             # Expected, not a bug, specifically during a Sentinel
             # failover window: the connection this client's pool was
             # already holding to the (now-dead) old master errors out
@@ -295,7 +313,28 @@ def main():
             # loop iteration's blpop() call re-resolves the master via
             # Sentinel automatically (see the comment above), no
             # additional retry logic needed here.
-            print(f"queue_consumer: Redis connection error (retrying): {exc}", flush=True)
+            #
+            # CORRECTED 2026-08-11 (Bug 24, BUGS_AND_FIXES.md), found by
+            # actually running this failover under live traffic, not by
+            # inspection: this originally caught ONLY ConnectionError.
+            # redis.exceptions.TimeoutError is NOT a subclass of
+            # ConnectionError in this library -- both inherit directly
+            # from RedisError as siblings (confirmed via
+            # `issubclass(redis.exceptions.TimeoutError,
+            # redis.exceptions.ConnectionError)` -> False, not assumed
+            # from memory). The actual failure this project's own live
+            # test hit when redis-master was killed under real BLPOP
+            # traffic was exactly a TimeoutError connecting to the
+            # (briefly unreachable, later correctly promoted) new
+            # master -- which the original except clause let propagate
+            # uncaught, crashing all 3 queue-consumer replicas outright
+            # and leaving 47,694 already-queued events permanently
+            # un-drained until the containers were manually restarted.
+            # Sentinel's own promotion (confirmed separately, Bug 23)
+            # had completed correctly and fast; this was purely a gap in
+            # this script's own exception handling, not a Sentinel or
+            # Redis-side failure.
+            print(f"queue_consumer: Redis connection/timeout error (retrying): {exc}", flush=True)
             time.sleep(BLPOP_TIMEOUT_SECONDS)
             continue
         if item is None:

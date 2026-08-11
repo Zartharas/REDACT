@@ -40,6 +40,13 @@ data/synthetic_logs_100k.jsonl
 # same fixed-seed regeneration pattern as the load-test corpora above.
 data/replica_queue_test_corpus_*.jsonl
 
+# Generated corpus for run_redis_failover_test.sh (Bug 22/23/24) -- same
+# fixed-seed regeneration pattern. Missed when that script was first
+# added (found here, fixed the same way every other stale/missing bit of
+# housekeeping in this project gets caught -- by noticing it, not by
+# leaving it for later).
+data/redis_failover_test_corpus_*.jsonl
+
 # CloudTrailFlaws_raw.jsonl (validation/real_data/prepare_cloudtrail_dataset.py)
 # -- regenerable from the public flaws.cloud release, same pattern as the
 # Loghub *.log files above (already covered by *.log; this one is .jsonl
