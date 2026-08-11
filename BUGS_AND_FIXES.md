@@ -1689,6 +1689,186 @@ adjacent to via a broken pin, not a response to an actual breach here.
 
 ---
 
+## 21. OpenSearch became a real 3-node cluster (ROADMAP item 12's last open piece) -- and a stray `git push` was found sitting inside a test harness along the way
+
+**Impact:** N/A (feature closure, not a defect in previously-shipped
+behavior). **Status:** Verified fixed, 2026-08-11 -- cluster formation
+and full pipeline reconciliation both confirmed live (see addenda
+below). ROADMAP item 12 is now closed on all three pieces (multi-replica
+`redact-service`, queue-decoupled ingestion, and multi-node OpenSearch).
+
+Closes the one item ROADMAP.md's item 12 had continued to list as
+"explicitly out of reach" even after the multi-replica/queue-decoupling
+work in Bugs 18-19 was confirmed live: `docker-compose.yml`'s single-node
+`opensearch` service is now a real 3-node cluster,
+`opensearch-node1`/`opensearch-node2`/`opensearch-node3`, using
+OpenSearch's current cluster-formation settings (`cluster.name`,
+`node.name`, `discovery.seed_hosts`,
+`cluster.initial_cluster_manager_nodes` -- verified against OpenSearch's
+own current documentation, not assumed from Elasticsearch's differently
+named legacy settings). 3 nodes, not the 2 shown in OpenSearch's own
+official multi-node example
+(`raw.githubusercontent.com/opensearch-project/documentation-website/main/assets/examples/docker-compose.yml`,
+fetched 2026-08-11): a 2-node cluster can't demonstrate a real
+cluster-manager election under a node failure, since two participants
+can't break a 1-1 tie without a third voting member.
+
+**Deliberate deviation from OpenSearch's own official example, disclosed
+rather than silently matched:** that example enables the security plugin
+with self-signed certs and a default admin password. This project kept
+`DISABLE_SECURITY_PLUGIN=true` on every node instead, for consistency
+with the single-node service it replaces and to avoid reintroducing a
+self-signed-cert trust problem for Logstash's and `queue_consumer.py`'s
+plain-HTTP clients -- both of which this project has deliberately avoided
+everywhere else. Same demo-scope caveat as before applies (see that
+flag's own comment in `docker-compose.yml`): not for real PII-bearing
+data.
+
+**Downstream changes needed to actually use the cluster, not just stand
+it up:**
+- `logstash/redact-pipeline.conf`'s three `opensearch` output blocks
+  (quarantine, audit-trail, anonymized) now list all three node hosts
+  directly (`hosts => ["http://opensearch-node1:9200", ...]`) instead of
+  interpolating a single `OPENSEARCH_HOST` env var -- the
+  `opensearch-output` plugin distributes/fails over across a hosts list
+  itself, so this gives the pipeline real resilience to one node's
+  failure, not just resilience at the storage layer while the client
+  stays a single point of failure pointed at one node.
+- **Found and fixed as a side effect of touching this code:** the old
+  single-value default in those three blocks was `"https://opensearch:9200"`
+  (https) even though `docker-compose.yml`'s `OPENSEARCH_HOST` always set
+  `http` explicitly, so that default fallback value had never actually
+  been exercised -- a latent, harmless inconsistency, but a stale default
+  is still a stale default, and this project doesn't leave those in place
+  once found (see Bugs 7 and 16 for others caught the same way).
+- `src/queue_consumer.py`'s `index_document()` (the queued path's direct
+  HTTP-PUT writer) now takes a comma-separated `OPENSEARCH_HOSTS` list and
+  tries each host in order, moving on only on a connection-level failure
+  (a node down or unreachable), not on an OpenSearch-level error response
+  every node would return identically. Disclosed, real limitation of this
+  specific fix: it's ordered failover, not load distribution -- every
+  healthy write goes to `opensearch-node1` by default, so that node
+  carries disproportionate write traffic day to day. A hash-based
+  round-robin would spread load more evenly but would also make "which
+  node took this write" non-deterministic when debugging a failed run --
+  judged not worth that tradeoff while this path is still unverified
+  against live infrastructure. Revisit if node1 specifically becomes a
+  throughput bottleneck under real load.
+- Node1's healthcheck was strengthened from "is OpenSearch responding" to
+  `grep -q '"number_of_nodes":3'` against `/_cluster/health` -- catches
+  the specific failure mode this item exists to guard against (node1
+  comes up fine standalone but never actually forms a cluster with
+  node2/node3, e.g. from a bad `discovery.seed_hosts` value or a Docker
+  network issue), which a plain "node1 is responding" check would miss
+  entirely. `logstash` and `queue-consumer`'s `depends_on` blocks now gate
+  on `opensearch-node1: condition: service_healthy` specifically, so the
+  rest of the stack won't start ingesting against a cluster that isn't
+  really a cluster yet.
+- `run_replica_and_queue_test.sh` and `validation/load_test/run_load_test.sh`
+  both polled `docker compose ps opensearch | grep -q "healthy"` to detect
+  startup -- that service name no longer exists. Both updated to poll
+  `opensearch-node1` instead, matching the stronger 3-node healthcheck
+  above. `docker compose ps opensearch` would otherwise have exited
+  non-zero on every poll, and `run_replica_and_queue_test.sh` runs under
+  `set -euo pipefail`, so this would have killed the script silently on
+  its very first healthcheck loop -- the same class of `set -e`-plus-
+  unanchored-check failure mode Bug 18's addendum already found once in
+  this same script.
+
+**Unrelated, but found while reading through this script line by line to
+make the above fix:** `run_replica_and_queue_test.sh` had a bare
+`git push origin main` sitting right after `set -euo pipefail`, before
+anything else runs. Nothing in the script's own header comment describes
+or explains it, and a load-testing harness has no legitimate reason to
+push the repo's current state to `origin/main` as a side effect of
+running a local Docker Compose test -- worst case, it could push a
+work-in-progress commit that happened to be checked out locally at
+whatever moment someone ran this script. Removed. Flagged here rather
+than silently dropped, in case it was intentional and this write-up is
+the first place anyone notices it's gone.
+
+**Not yet verified against a live 3-node run in this sandbox** -- no
+Docker daemon here, same disclosure as every other Docker Compose claim
+in this project until it's actually been run. `docker-compose.yml`
+parses as valid YAML (`python3 -c "import yaml; yaml.safe_load(open('docker-compose.yml'))"`),
+`src/queue_consumer.py` compiles clean and its own unit tests
+(`tests/test_queue_consumer.py`, which patch `index_document()` at the
+function boundary rather than depending on its internal host-list logic)
+still pass unmodified, and both edited shell scripts pass `bash -n`.
+None of that substitutes for actually bringing the cluster up and
+confirming `number_of_nodes:3`, a clean reconciliation run through it,
+and (ideally) killing one node mid-run to confirm the cluster survives
+losing a member -- the specific behavior this item exists to demonstrate,
+not just the config that should produce it.
+
+**First live run, 2026-08-11 (the user's machine) -- cluster formation
+confirmed, one real environmental gotcha found and fixed along the way.**
+`docker compose up --build -d` initially failed with `Error response from
+the daemon: ... Bind for 0.0.0.0:9200 failed: port is already allocated`,
+and the first successful-looking `_cluster/health` poll came back
+`"number_of_nodes": 1`, not 3. Root cause, confirmed from the run's own
+output: `docker compose down -v` (without `--remove-orphans`) only stops
+containers for services still *defined* in the current compose file --
+since the single-node `opensearch` service no longer exists under that
+name, the container from the *previous* version of this file
+(`redact-opensearch`) was left running as an orphan, still bound to host
+port 9200. The new `opensearch-node1` couldn't bind that same port, so it
+never started -- but the old orphan container answered `_cluster/health`
+requests on port 9200 in its place, reporting itself as a healthy
+single-node cluster, which is exactly the misleading "looks like it
+worked, actually didn't" shape this document exists to catch. **Not a bug
+in the new 3-node config itself** -- a Compose lifecycle gotcha specific
+to renaming a service across a `docker compose down`/`up` cycle, not
+something `docker-compose.yml`'s own contents could have prevented.
+Fixed by running `docker compose down -v --remove-orphans` (plus an
+explicit `docker rm -f redact-opensearch` and `docker network prune -f`
+as a belt-and-suspenders cleanup) before the next `up`. **Confirmed
+clean after that fix:** `_cluster/health` returned `"cluster_name":
+"redact-cluster"`, `"status": "green"`, `"number_of_nodes": 3`,
+`"number_of_data_nodes": 3`, `"active_shards_percent_as_number": 100.0`
+-- a green status specifically requires every node to see every other
+node and every shard to have its replicas assigned, so this is a real,
+positive confirmation of 3-node cluster formation, not just three
+containers that happen to be running side by side. Full pipeline
+reconciliation against this cluster (`run_replica_and_queue_test.sh`)
+was kicked off immediately after and is expected to close this item
+completely, matching the standard Bugs 18/19 were held to before ROADMAP
+item 12's other two pieces were called done.
+
+**Full pipeline confirmed against the live 3-node cluster, same session,
+2026-08-11 -- both parts PASS clean, this item closed completely.**
+`run_replica_and_queue_test.sh` run against the now-healthy 3-node
+cluster (no orphan-container interference this time). **Part A**
+(multi-replica `redact-service` behind `redact-lb`): all 3 replicas +
+`opensearch-node1` reported healthy in ~5s, `RECONCILIATION: PASS`
+exactly 20,000/20,000, per-replica gunicorn request distribution
+6,683/6,703/6,730 -- genuinely even, consistent with the two prior
+single-node-OpenSearch runs' own distribution numbers (6,658/6,711/6,745
+and 6,653/6,803/6,652), confirming the load-balancing behavior itself is
+unaffected by the storage layer underneath it, as expected since they're
+independent concerns. **Part B** (queue-decoupled ingestion,
+`logstash-queued` -> Redis list -> 3x `queue-consumer` ->
+`OPENSEARCH_HOSTS` failover list -> OpenSearch): `RECONCILIATION: PASS`
+exactly 20,000/20,000, queue depth 0 at the end -- direct confirmation
+that `queue_consumer.py`'s new `OPENSEARCH_HOSTS` failover list (this
+item's replacement for the old single-value `OPENSEARCH_HOST`) writes
+correctly against the 3-node cluster, not just that the config parses.
+Both parts' `redact-audit-trail-*` count landed at 17,819 -- identical
+between Part A and Part B, as expected from the same seeded corpus and
+deterministic fan-out logic, and consistent with this project's
+established pattern of that count varying by corpus content/dirty-ratio
+rather than by which infrastructure path produced it. **What this run
+does not cover, stated plainly rather than implied:** it did not include
+killing a node mid-run to confirm the cluster tolerates losing a member
+-- both parts ran against all 3 nodes healthy throughout. That remains
+the one piece of this item's original scope ("does the cluster actually
+survive losing a node, not just start with 3") not yet exercised; a
+reasonable follow-up test, not required to call the feature itself
+closed, since ROADMAP item 12's own stated goal was closing the "not a
+real cluster" gap, not building out full chaos-engineering coverage.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same

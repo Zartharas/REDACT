@@ -11,21 +11,29 @@ single-machine test can actually establish.
 ## What this test can and can't tell you
 
 **Can:** the throughput ceiling of the exact stack this project ships
-(`docker-compose.yml`, unmodified — single-node OpenSearch,
-`redact-service` under gunicorn with `--workers $(nproc)`, Logstash with
-`pipeline.workers => 8`) on one machine, and whether anything breaks
-(timeouts, dropped events, memory exhaustion, the class of bug documented
-in `BUGS_AND_FIXES.md`) before that ceiling is reached.
+(`docker-compose.yml`, unmodified — a 3-node OpenSearch cluster as of
+2026-08-11, `redact-service` under gunicorn with `GUNICORN_WORKERS`
+replicas behind `redact-lb`, Logstash with `pipeline.workers => 8`) on one
+machine, and whether anything breaks (timeouts, dropped events, memory
+exhaustion, the class of bug documented in `BUGS_AND_FIXES.md`) before
+that ceiling is reached.
 
-**Can't:** anything about a real production deployment — a multi-data-node
-OpenSearch cluster, multiple `redact-service` replicas behind a load
-balancer, sustained terabytes/day ingestion, or network-partition/failover
-behavior. That needs real infrastructure (cloud VMs, an actual
-multi-node OpenSearch cluster) that isn't available in this project's
-development environment. Stating a "runs at scale" claim on the strength
-of this test alone would repeat the same shape of problem this project's
-own `BUGS_AND_FIXES.md` exists to catch: a plausible-sounding number that
-doesn't actually support the claim being made with it.
+**Can't:** anything about a real production deployment — a real
+multi-data-center OpenSearch topology, sustained terabytes/day ingestion,
+or actual network-partition/failover behavior under production traffic.
+`docker-compose.yml` now runs a genuine 3-node OpenSearch cluster (see
+that file's own comments on why 3, not the 2 shown in OpenSearch's
+official example) and multiple `redact-service` replicas behind an nginx
+load balancer, both on one Docker host — real clustering/load-balancing
+behavior, not a mock, but still one machine's worth of CPU/memory/network
+shared across every container, not physically separate infrastructure.
+This test script has not yet been re-run against the 3-node topology
+specifically (added after this README was last updated) — the throughput
+numbers below predate that change and were measured against the
+single-node OpenSearch config. Stating a "runs at scale" claim on the
+strength of this test alone would repeat the same shape of problem this
+project's own `BUGS_AND_FIXES.md` exists to catch: a plausible-sounding
+number that doesn't actually support the claim being made with it.
 
 ## Usage
 
@@ -87,11 +95,15 @@ python3 validation/load_test/reconcile.py
   during steady-state ingestion at higher volume would be a new finding,
   not a repeat of Bug 3.
 - **Memory growth over the run** in the `docker_stats` log, especially for
-  `redact-opensearch` (single-node, `-Xms1g -Xmx1g` — see
-  `docker-compose.yml`'s own comment on tuning this for your host) and
-  `redact-service` (gunicorn's non-preload fork model means each of the
-  `$(nproc)` workers independently loaded its own copy of the spaCy/
-  Presidio model — see `Dockerfile`'s comments on this tradeoff).
+  `redact-opensearch-node1/2/3` (3-node cluster as of 2026-08-11, `-Xms512m
+  -Xmx512m` each — see `docker-compose.yml`'s own comment on tuning this
+  for your host, and why the per-node heap dropped from the old
+  single-node service's `-Xms1g -Xmx1g` now that three nodes share the
+  host) and `redact-service` (gunicorn's non-preload fork model means
+  each `GUNICORN_WORKERS` worker per replica independently loaded its own
+  copy of the spaCy/Presidio model — see `Dockerfile`'s comments on this
+  tradeoff, and Bug 18/`docker-compose.yml`'s `GUNICORN_WORKERS` comment
+  for the OOM this caused when scaled without a per-replica cap).
 - **Throughput trend as N increases**: run at a few sizes (e.g. 10,000 /
   100,000 / 1,000,000) and compare lines/sec — a roughly flat number
   across sizes suggests the pipeline is I/O- or CPU-bound in a way that

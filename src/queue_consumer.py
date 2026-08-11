@@ -65,7 +65,26 @@ REDACT_SERVICE_URL = os.environ.get(
     "REDACT_SERVICE_URL", "http://redact-lb:8080/anonymize"
 )
 REDACT_SERVICE_API_KEY = os.environ.get("REDACT_SERVICE_API_KEY", "")
-OPENSEARCH_HOST = os.environ.get("OPENSEARCH_HOST", "http://opensearch:9200")
+# OPENSEARCH_HOSTS (plural), added when docker-compose.yml's single-node
+# `opensearch` service became a real 3-node cluster (`opensearch-node1/2/3`,
+# closing the multi-node gap ROADMAP.md previously disclosed as out of
+# reach). Any OpenSearch node can coordinate a write for any index
+# regardless of which node happens to hold the primary shard -- that's
+# standard OpenSearch/Elasticsearch cluster behavior -- so listing all
+# three here isn't about shard placement, it's so THIS PROCESS doesn't
+# become its own single point of failure sitting in front of an
+# otherwise-resilient 3-node cluster. index_document() below tries each
+# host in order and only raises once all three have failed. Old
+# single-value OPENSEARCH_HOST is no longer read -- set OPENSEARCH_HOSTS
+# (comma-separated) instead if overriding the default.
+OPENSEARCH_HOSTS = [
+    h.strip()
+    for h in os.environ.get(
+        "OPENSEARCH_HOSTS",
+        "http://opensearch-node1:9200,http://opensearch-node2:9200,http://opensearch-node3:9200",
+    ).split(",")
+    if h.strip()
+]
 BLPOP_TIMEOUT_SECONDS = int(os.environ.get("REDACT_CONSUMER_BLPOP_TIMEOUT", "5"))
 
 
@@ -100,15 +119,40 @@ def index_document(index: str, doc_id: str, body: dict) -> None:
     a retried write idempotent (a retry with the SAME id overwrites
     rather than duplicates) without ever risking a content-derived
     collision (see Bugs 4/12's history -- this project already learned
-    that lesson once and isn't repeating it here)."""
-    url = f"{OPENSEARCH_HOST}/{index}/_doc/{doc_id}"
+    that lesson once and isn't repeating it here).
+
+    Tries each host in OPENSEARCH_HOSTS in order, moving to the next only
+    on a connection-level failure (a node down, unreachable, or still
+    joining the cluster) -- not on an OpenSearch-level error response
+    (e.g. a mapping conflict), which every node would return identically
+    and which retrying elsewhere would just mask. DISCLOSED, REAL
+    LIMITATION: this is ordered failover, not load distribution -- every
+    healthy write goes to OPENSEARCH_HOSTS[0] (opensearch-node1 by
+    default), so node1 does carry disproportionate write traffic
+    day-to-day. A round-robin index picked by doc_id hash would spread
+    load more evenly but would also make "which node took this write"
+    non-deterministic when debugging a failed run, which mattered more
+    while this path was still being verified. Revisit if node1
+    specifically becomes a throughput bottleneck under real load."""
     payload = json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=payload, method="PUT",
-        headers={"Content-Type": "application/json"},
+    last_error: Exception | None = None
+    for host in OPENSEARCH_HOSTS:
+        url = f"{host}/{index}/_doc/{doc_id}"
+        req = urllib.request.Request(
+            url, data=payload, method="PUT",
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                resp.read()
+            return
+        except (urllib.error.URLError, TimeoutError) as exc:
+            last_error = exc
+            continue
+    raise ConnectionError(
+        f"index_document: all {len(OPENSEARCH_HOSTS)} OPENSEARCH_HOSTS "
+        f"unreachable for {index}/_doc/{doc_id}; last error: {last_error}"
     )
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        resp.read()
 
 
 def process_event(raw_event: dict) -> None:

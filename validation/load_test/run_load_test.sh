@@ -68,8 +68,12 @@ echo "--- Waiting for the stack to become healthy ---"
 # sleep, since a bigger corpus doesn't change startup time but WILL
 # change how long ingestion itself takes.
 for i in $(seq 1 60); do
+  # opensearch-node1 specifically, not "opensearch" -- the single-node
+  # service was replaced with a 3-node cluster (opensearch-node1/2/3,
+  # ROADMAP.md item 12) whose healthcheck lives on node1 and verifies all
+  # 3 nodes actually joined (number_of_nodes:3), not just that node1 is up.
   if docker compose ps redact-service | grep -q "healthy" && \
-     docker compose ps opensearch | grep -q "healthy"; then
+     docker compose ps opensearch-node1 | grep -q "healthy"; then
     echo "Stack healthy after approx $((i * 10))s."
     break
   fi

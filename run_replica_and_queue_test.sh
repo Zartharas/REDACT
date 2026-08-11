@@ -36,8 +36,6 @@
 #   ./run_replica_and_queue_test.sh
 set -euo pipefail
 
-git push origin main
-
 touch .env
 for key in REDACT_PSEUDO_KEY REDACT_AUDIT_KEY REDACT_SERVICE_API_KEY REDACT_FINGERPRINT_KEY REDACT_TOKEN_KEY; do
   if ! grep -q "^${key}=" .env; then
@@ -92,8 +90,13 @@ docker compose up --build -d --scale redact-service=3
 echo "--- Waiting for all services to report healthy ---"
 for i in $(seq 1 60); do
   healthy_count=$(docker compose ps redact-service | grep -c "healthy" || true)
-  if [ "$healthy_count" -eq 3 ] && docker compose ps opensearch | grep -q "healthy"; then
-    echo "All 3 redact-service replicas + opensearch healthy after approx $((i * 5))s."
+  # opensearch-node1 specifically, not "opensearch" -- the single-node
+  # service was replaced with a 3-node cluster (opensearch-node1/2/3,
+  # ROADMAP.md item 12) whose healthcheck lives on node1 and verifies all
+  # 3 nodes actually joined the cluster (number_of_nodes:3), not just that
+  # node1 itself is up.
+  if [ "$healthy_count" -eq 3 ] && docker compose ps opensearch-node1 | grep -q "healthy"; then
+    echo "All 3 redact-service replicas + opensearch (3-node cluster) healthy after approx $((i * 5))s."
     break
   fi
   sleep 5
@@ -165,7 +168,7 @@ python3 src/export_raw_logs.py --input "$CORPUS_PATH" --output-dir data/raw
 # for clarity/documentation, but --profile queued alone was proven live
 # not to be sufficient on its own).
 docker compose --profile queued up --build -d --scale queue-consumer=3 \
-  opensearch redis redact-service redact-lb logstash-queued queue-consumer
+  opensearch-node1 opensearch-node2 opensearch-node3 redis redact-service redact-lb logstash-queued queue-consumer
 # Note: no --scale on redact-service here -- Part B is specifically
 # testing the queue's own decoupling/distribution behavior (3 CONSUMERS
 # pulling from one Redis list), independent of Part A's redact-service
@@ -175,7 +178,7 @@ docker compose --profile queued up --build -d --scale queue-consumer=3 \
 
 echo "--- Waiting for services to report healthy ---"
 for i in $(seq 1 60); do
-  if docker compose ps opensearch | grep -q "healthy" && \
+  if docker compose ps opensearch-node1 | grep -q "healthy" && \
      docker compose ps redis | grep -q "healthy" && \
      docker compose ps redact-service | grep -q "healthy"; then
     echo "Core services healthy after approx $((i * 5))s."

@@ -43,39 +43,136 @@
 # were a one-line service addition.
 
 services:
-  opensearch:
+  # OpenSearch 3-node cluster, added 2026-08-11 (ROADMAP.md's own
+  # disclosed gap: "nothing here establishes behavior on a multi-node
+  # OpenSearch cluster" -- see redact-service's comment block above for
+  # that exact language, now out of date as of this change). Replaces
+  # the single-node `opensearch` service. 3 nodes, not the 2 shown in
+  # OpenSearch's own official example
+  # (raw.githubusercontent.com/opensearch-project/documentation-website/
+  # main/assets/examples/docker-compose.yml, fetched 2026-08-11): a
+  # 2-node cluster cannot demonstrate a real cluster-manager election
+  # under a node failure, since 2 participants can't break a 1-1 tie
+  # without a third voting member. 3 is the minimum that actually
+  # exercises quorum/election behavior, which is the entire point of
+  # closing this gap rather than just running more copies of the same
+  # single-node config.
+  #
+  # Cluster formation uses the current OpenSearch setting names --
+  # cluster.name, node.name, discovery.seed_hosts,
+  # cluster.initial_cluster_manager_nodes -- verified against OpenSearch's
+  # own docs rather than assumed from Elasticsearch familiarity, since
+  # legacy ES's discovery.zen.minimum_master_nodes/initial_master_nodes
+  # naming does NOT carry over unchanged. discovery.type=single-node
+  # (the old service's setting) is gone entirely -- it's specifically
+  # incompatible with multi-node formation.
+  #
+  # DISABLE_SECURITY_PLUGIN stays =true on every node, consistent with
+  # this project's existing single-node convention (see that flag's own
+  # comment below for the standing demo-scope caveat). OpenSearch's
+  # official multi-node example instead enables the security plugin with
+  # self-signed certs and a default admin password -- more
+  # production-representative, but it would make this one service
+  # inconsistent with every other node/config in this file and
+  # reintroduce a self-signed-cert trust problem for Logstash's and
+  # queue-consumer's plain-HTTP clients that this project has
+  # deliberately avoided everywhere else. Tracked as a real, disclosed
+  # simplification, not an oversight.
+  #
+  # Per-node JVM heap dropped from the old single-node service's
+  # -Xms1g/-Xmx1g to 512m each: three nodes now share the host's memory
+  # instead of one, and this project already paid for the OOM lesson
+  # once (GUNICORN_WORKERS' comment below, Bug 18) -- tune to your own
+  # host; see OpenSearch's Docker tuning guidance for production sizing.
+  #
+  # NOT YET VERIFIED against a live 3-node run in this sandbox (no
+  # Docker daemon here) -- needs the user's machine, same disclosure as
+  # every other Docker Compose claim in this project until it's actually
+  # been run.
+  opensearch-node1:
     image: opensearchproject/opensearch:latest
-    container_name: redact-opensearch
+    container_name: redact-opensearch-node1
     environment:
-      - discovery.type=single-node
+      - cluster.name=redact-cluster
+      - node.name=opensearch-node1
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2,opensearch-node3
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2,opensearch-node3
       - DISABLE_SECURITY_PLUGIN=true  # demo/test only -- see chapter Section 9 on why
                                         # this must not be used for real PII-bearing data
-      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"  # tune to your host; see OpenSearch's own
-                                                # Docker tuning guidance for production sizing
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"  # tune to your host; see OpenSearch's own
+                                                     # Docker tuning guidance for production sizing
       - bootstrap.memory_lock=true
     ulimits:
       memlock:
         soft: -1
         hard: -1
-    ports:
+    ports:  # only node1 is reachable from the host -- node2/node3 are
+             # cluster-internal only, reachable over redact-net, matching
+             # how every other internal-only service in this file (redis,
+             # redact-service) is already scoped
       - "9200:9200"
       - "9600:9600"
     volumes:
-      - opensearch-data:/usr/share/opensearch/data
+      - opensearch-data1:/usr/share/opensearch/data
     networks:
       - redact-net
-    healthcheck:  # added after live testing showed Logstash's OpenSearch
-                   # output plugin retrying (and duplicating, see
-                   # logstash/redact-pipeline.conf's document_id comment)
-                   # bulk writes issued before OpenSearch was actually ready
-                   # to accept them. Gating logstash's startup below on this
-                   # fixes the retry storm at its source rather than only
-                   # making the writes idempotent after the fact.
-      test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health | grep -vq '\"status\":\"red\"'"]
+    healthcheck:  # checks more than "is node1 up" -- number_of_nodes
+                   # catches the specific failure mode this item exists to
+                   # guard against: node1 comes up fine standalone but
+                   # never actually forms a cluster with node2/node3 (bad
+                   # seed_hosts, a network issue between containers), which
+                   # a plain "node1 is responding" check would miss
+                   # entirely and let the rest of the stack start against a
+                   # cluster that isn't really a cluster. Gating
+                   # logstash/queue-consumer's startup on this (see their
+                   # depends_on blocks below) carries forward the same
+                   # retry-storm fix the single-node service's healthcheck
+                   # existed for, just against a stronger condition.
+      test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health | grep -q '\"number_of_nodes\":3'"]
       interval: 5s
       timeout: 5s
-      retries: 20
-      start_period: 30s
+      retries: 30
+      start_period: 45s
+
+  opensearch-node2:
+    image: opensearchproject/opensearch:latest
+    container_name: redact-opensearch-node2
+    environment:
+      - cluster.name=redact-cluster
+      - node.name=opensearch-node2
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2,opensearch-node3
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2,opensearch-node3
+      - DISABLE_SECURITY_PLUGIN=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch-data2:/usr/share/opensearch/data
+    networks:
+      - redact-net
+
+  opensearch-node3:
+    image: opensearchproject/opensearch:latest
+    container_name: redact-opensearch-node3
+    environment:
+      - cluster.name=redact-cluster
+      - node.name=opensearch-node3
+      - discovery.seed_hosts=opensearch-node1,opensearch-node2,opensearch-node3
+      - cluster.initial_cluster_manager_nodes=opensearch-node1,opensearch-node2,opensearch-node3
+      - DISABLE_SECURITY_PLUGIN=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch-data3:/usr/share/opensearch/data
+    networks:
+      - redact-net
 
   redact-service:
     build:
@@ -264,14 +361,21 @@ services:
         condition: service_healthy
       redact-lb:
         condition: service_started
-      opensearch:
+      opensearch-node1:
         condition: service_healthy
     environment:
       - REDIS_HOST=redis
       - REDACT_QUEUE_KEY=${REDACT_QUEUE_KEY:-redact:raw-events}
       - REDACT_SERVICE_URL=http://redact-lb:8080/anonymize
       - REDACT_SERVICE_API_KEY=${REDACT_SERVICE_API_KEY:?set a real key in .env, do not use a default}
-      - OPENSEARCH_HOST=http://opensearch:9200
+      # OPENSEARCH_HOSTS (plural), not the old single-value OPENSEARCH_HOST
+      # -- see src/queue_consumer.py's own comment on this env var for why
+      # it lists all three nodes (ordered failover, not load distribution)
+      # now that opensearch is a real 3-node cluster. Depends_on above
+      # gates on node1 specifically because that's the node whose
+      # healthcheck actually verifies 3-node cluster membership -- see
+      # opensearch-node1's healthcheck comment above.
+      - OPENSEARCH_HOSTS=http://opensearch-node1:9200,http://opensearch-node2:9200,http://opensearch-node3:9200
     networks:
       - redact-net
     profiles: ["queued"]
@@ -289,7 +393,7 @@ services:
       dockerfile: Dockerfile
     container_name: redact-logstash
     depends_on:
-      opensearch:
+      opensearch-node1:
         condition: service_healthy
       redact-service:
         condition: service_healthy
@@ -308,8 +412,14 @@ services:
       # scaled: `docker compose up --build --scale redact-service=3`.
       - REDACT_SERVICE_URL=http://redact-lb:8080/anonymize
       - REDACT_SERVICE_API_KEY=${REDACT_SERVICE_API_KEY:?set a real key in .env, do not use a default}
-      - OPENSEARCH_HOST=http://opensearch:9200  # http, not https, matching
-                                                  # DISABLE_SECURITY_PLUGIN above
+      # OPENSEARCH_HOST removed 2026-08-11, opensearch became a real
+      # 3-node cluster -- see logstash/redact-pipeline.conf's opensearch
+      # output blocks, which now list all three nodes directly (hosts =>
+      # [...] with three entries) instead of interpolating a single env
+      # var, since the opensearch-output plugin distributes/fails over
+      # across a hosts list itself. depends_on above gates on node1
+      # specifically because that's the node whose healthcheck verifies
+      # actual 3-node cluster membership, not just that one node is up.
     volumes:
       - ./data/raw:/var/log/security:ro  # run `python src/export_raw_logs.py` first to
                                            # populate this from data/synthetic_logs.jsonl --
@@ -319,7 +429,9 @@ services:
       - redact-net
 
 volumes:
-  opensearch-data:
+  opensearch-data1:
+  opensearch-data2:
+  opensearch-data3:
   redact-output:
 
 networks:
