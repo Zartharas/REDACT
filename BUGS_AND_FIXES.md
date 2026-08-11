@@ -2881,3 +2881,45 @@ daemon here) -- syntax-checked and logic-checked only (`bash -n`,
 `py_compile`, YAML validation, every CLI flag verified against the real
 target script's actual `argparse` definition rather than assumed).
 Handed off for the user to run.
+
+---
+
+## Engineering upgrade 8: 5,000,000-line load test harness -- deadline-scaling gap found and fixed, run handed off (2026-08-11)
+
+ROADMAP item 9's stretch goal (Task #47): push the local-scale load test
+beyond the existing 1,000,000-line high-water mark. Reuses
+`validation/load_test/run_load_test.sh` unmodified in structure (same
+corpus generation, `docker stats` capture, `track_total_hits=true`
+reconciliation poll loop) via a new `run_5m_load_test.sh` wrapper at 5x
+scale, following the same pattern as the existing `run_1m_load_test.sh`.
+
+**Real gap found and fixed before hand-off, not left for the run itself
+to discover:** `run_load_test.sh`'s poll-loop deadline
+(`REDACT_LOAD_TEST_MAX_WAIT_SECONDS`) defaulted to a fixed 14,400s
+(4 hours) -- sized correctly for the 1,000,000-line runs this project
+has actually completed (the slower of the two measured rates, ~224
+lines/sec, finished in ~75 minutes), but not scaled for anything larger.
+At 5,000,000 lines, even the faster measured rate (~439 lines/sec)
+implies ~3.2 hours, and the slower one implies ~6.2 hours -- past the
+old fixed deadline. Had this shipped unfixed, a genuinely healthy,
+still-converging 5,000,000-line run would have been killed by the poll
+loop and falsely reported a deadline-exceeded failure, the same
+false-FAIL shape Bug 15's own iteration-count fix was written to
+prevent, just for wall-clock time instead of poll count. **Fixed at the
+source, in `run_load_test.sh` itself**, not worked around in the new
+wrapper script: the default deadline now scales with `N`
+(`max(14400, N / 100 * 1.5)` seconds -- a conservative 100 lines/sec
+floor, below both measured 1,000,000-line rates, times a 1.5x safety
+margin), still fully overridable via the same env var. This protects
+every future run at any scale, not just the 5,000,000-line one.
+
+`run_5m_load_test.sh`'s header comment carries disk-space and
+expected-runtime estimates extrapolated from the 1,000,000-line runs'
+own measured numbers (~190 bytes/line corpus size at 10,000 lines,
+scaled up; ~9.3% token-store growth rate; ~89.3% audit fan-out) --
+explicitly labeled as estimates, not measurements, since this sandbox
+has no Docker daemon to actually run this against and confirm them.
+
+Both `run_5m_load_test.sh` and the modified `run_load_test.sh` are
+syntax-checked (`bash -n`) only. Handed off for the user to run; not yet
+executed anywhere.

@@ -211,6 +211,37 @@ the mitigation-vs-fix distinction, and what's still open: Bug 15 in
 fix's remaining O(n) compaction cost (now paid far less often, not
 eliminated) can be pushed before it becomes visible again.
 
+### 5,000,000 lines: harness prepared 2026-08-11, not yet run (Task #47)
+
+`run_5m_load_test.sh` (repo root) runs this exact same harness at 5x the
+previous scale, as a stretch goal toward narrowing the gap to real
+production volume -- terabytes/day stays honestly out of reach without
+real cloud spend/hardware (see `ROADMAP.md` item 12's closing paragraph),
+this is not a claim of closing that gap, only of finding where this
+project's single-machine ceiling sits somewhere before it.
+
+**A real gap found and fixed before this was handed off, not left for
+the run itself to discover:** `run_load_test.sh`'s poll-loop deadline
+(`REDACT_LOAD_TEST_MAX_WAIT_SECONDS`) defaulted to a fixed 14,400s
+(4 hours), sized for the 1,000,000-line runs actually completed so far.
+At 5,000,000 lines, even the faster of those two measured rates
+(~439 lines/sec) implies ~3.2 hours, and the slower one (~224 lines/sec)
+implies ~6.2 hours -- past the old fixed deadline, which would have
+falsely reported a deadline-exceeded failure on a pipeline that was
+still healthy and converging, the exact false-FAIL shape Bug 15's
+iteration-count fix above exists to prevent, just for a different
+mechanism (wall-clock deadline instead of poll-count cap). Fixed at the
+source: the default now scales with `N` (a conservative 100 lines/sec
+floor, 1.5x safety margin, `run_load_test.sh` itself, not worked around
+here) -- protects any future run at any scale, not just this one.
+
+Disk-space and expected-runtime estimates are written into
+`run_5m_load_test.sh`'s own header comment, extrapolated from the
+1,000,000-line runs' measured numbers (~190 bytes/line corpus size,
+~9.3% token-store growth rate, ~89.3% audit fan-out) rather than
+measured directly -- this sandbox has no Docker daemon to run this
+against. Handed off for the user to run; not yet executed anywhere.
+
 ### 1,000,000 lines again, 2026-08-10: field-gated NER as the live default, a real Logstash config bug, then a clean PASS
 
 Rerun via `run_1m_load_test.sh` (repo root) to exercise everything added

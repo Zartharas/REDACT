@@ -102,7 +102,24 @@ STABLE_COUNT=0
 # stability check below (3 consecutive unchanged totals) is what
 # actually decides when ingestion is done; this is only a safety
 # backstop against polling forever if something is genuinely stuck.
-MAX_WAIT_SECONDS="${REDACT_LOAD_TEST_MAX_WAIT_SECONDS:-14400}"
+# Real gap found while scoping ROADMAP item 9's "push beyond 1M lines"
+# stretch goal, 2026-08-11: the fixed 14400s (4h) default here was sized
+# for the 1,000,000-line runs this project has actually completed
+# (~75 minutes at the slower of the two measured rates, ~224 lines/sec).
+# It does not scale automatically -- a straightforward 5,000,000-line run
+# at that same conservative rate needs ~6.2 hours (22,320s), which the
+# old fixed default would have cut off mid-run and falsely reported a
+# deadline-exceeded failure on a pipeline that was still healthy and
+# converging, exactly the false-FAIL failure mode Bug 15's own fix above
+# was written to prevent for the iteration-count version of this same
+# problem. Scaled here instead of just documented as "remember to raise
+# this env var yourself": floor of 100 lines/sec (below both measured
+# 1M-line rates, so this errs conservative) times a 1.5x safety margin,
+# with the original 14400s kept as an absolute floor so small runs are
+# unaffected. Still fully overridable via REDACT_LOAD_TEST_MAX_WAIT_SECONDS
+# for a genuinely known-slower or known-faster environment.
+DEFAULT_MAX_WAIT_SECONDS=$(python3 -c "print(max(14400, int(${N} / 100 * 1.5)))")
+MAX_WAIT_SECONDS="${REDACT_LOAD_TEST_MAX_WAIT_SECONDS:-$DEFAULT_MAX_WAIT_SECONDS}"
 POLL_START_TS=$(date +%s)
 i=0
 while true; do
