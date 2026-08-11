@@ -2096,10 +2096,8 @@ every `queue-consumer` replica crashed and stayed dead, permanently
 stranding whatever was already queued (47,694 of ~47,808 remaining
 events in this test) until manually restarted. Zero impact on the
 synchronous (non-queued) pipeline, which doesn't touch this code path
-at all. **Status:** Verified fixed via direct interpreter-level
-confirmation of the root cause; a fresh live re-run of this exact test
-is the next step, same standard as every other Docker-dependent fix in
-this document.
+at all. **Status:** Verified fixed, live, same scenario, same day (see
+addendum below).
 
 **Found by the user's `run_redis_failover_test.sh` run -- the follow-up
 test explicitly written after Bug 23 to check whether
@@ -2161,18 +2159,57 @@ didn't isolate exactly how much of the delay before the crash was this
 specific cause versus other factors, so this is stated as a reasonable
 precaution rather than a second confirmed root cause).
 
-**Verification status, stated precisely:** the exception-hierarchy root
-cause is confirmed with certainty -- checked directly against the
-installed `redis` package's actual class hierarchy in this sandbox, not
-assumed from documentation or memory, and it exactly explains the live
+**Confirmed live, same day, exact same test re-run against the fix.**
+Fresh 60,000-line corpus, kill triggered at ~20% processed (12,508
+events in), `docker kill redact-redis-master`. This time all three
+`queue-consumer` logs showed exactly the intended behavior instead of a
+crash: `Redis connection/timeout error (retrying): Error 111 connecting
+to 172.28.0.240:6379. Connection refused.` immediately followed by
+`Redis connection/timeout error (retrying): Timeout connecting to
+server`, then normal `BLPOP` polling resumed with no further errors --
+the anonymized count climbed steadily from 12,508 to 38,670 across the
+3-minute post-kill observation window at roughly the pre-kill rate,
+confirming this wasn't a fluke recovery. Left running afterward, the
+queue continued draining on its own (21,238 → 7,048 remaining across two
+manual checks a few minutes apart) and **`validation/load_test/reconcile.py`
+eventually reported a clean `PASS`, exactly `60000/60000`, zero events
+lost** -- full recovery from a real master failure under live traffic,
+with the bug that would have prevented it now closed.
+
+**Root cause confirmed with certainty**, unrelated to the live
+re-confirmation above: checked directly against the installed `redis`
+package's actual class hierarchy in this sandbox, not assumed from
+documentation or memory, and it exactly explains the original crash
 symptom (an uncaught traceback matching the exact exception type this
-check confirms was never caught). The fix itself (`py_compile` clean,
-full local test suite still passing 54/2 unmodified, since
-`tests/test_queue_consumer.py` patches `index_document()` at the
-function boundary and never exercises `main()`'s retry loop directly)
-has not yet been re-run against a live repeat of the exact failover
-scenario that found it -- that's the next step, handed back to the
-user, same standard as every other fix in this document.
+check confirms was never caught).
+
+**Addendum: the disclosed producer-side limitation (`logstash-queued`
+having no Sentinel awareness, see this item's own docker-compose.yml
+comment and Bug 22) was NOT actually exercised by either failover test
+run, stated plainly rather than left ambiguous.** Grepping
+`logstash-queued`'s full log for any Redis-related activity around the
+kill found nothing -- no write attempts, no errors, nothing but its own
+startup message. Working theory, and the arithmetic supports it:
+`logstash-queued`'s file-tailing + `RPUSH` job is far faster than the
+downstream anonymization pipeline it feeds, so by the time either test's
+kill-trigger fired (timed against *processing* progress, i.e. 20% of
+events fully anonymized), `logstash-queued` had very likely already
+finished reading and enqueueing the *entire* corpus -- the post-kill
+queue-depth-plus-processed arithmetic came out to within a rounding
+margin of the full 60,000-line corpus both times, consistent with
+production having completed well before the kill rather than being
+interrupted by it. This means the producer-side gap remains reasoned
+directly from the official `logstash-output-redis` plugin's documented
+lack of Sentinel support (an architectural fact, not something that
+needs empirical reproduction to be credible) but has not been watched
+failing live the way Bug 24's consumer-side crash was. A test actually
+designed to catch `logstash-queued` mid-write -- triggering the kill
+against ingestion progress rather than processing progress, or on a
+corpus large enough that ingestion itself takes several minutes -- is a
+reasonable further follow-up, not undertaken here since the consumer-side
+bug this test was built to find (and did find) is now closed, and the
+producer-side claim was never resting on an unverified assumption to
+begin with.
 
 ---
 
