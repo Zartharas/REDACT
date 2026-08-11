@@ -2433,6 +2433,95 @@ just the return value either way).
 
 ---
 
+## Spike: ONNX/INT8 quantization for the NER pipeline — not applicable as proposed (2026-08-11)
+
+Fourth and last item investigated from the external-review batch. The
+review proposed converting "your spaCy pipeline or Custom RoBERTa models"
+to ONNX with INT8 quantization for "up to 4x" throughput. This was
+already flagged as suspect when the review first came in — REDACT has no
+custom RoBERTa model, and the claim was unsourced (see
+`PROJECT_STATUS.md`'s critique) — this spike checks the actual claim
+against REDACT's real pipeline rather than just asserting the suspicion.
+
+**What REDACT actually runs, confirmed directly, not assumed:**
+`detect.py`'s `_get_analyzer()` calls plain `AnalyzerEngine()` with no
+custom `NlpEngineProvider`/`nlp_configuration` — Presidio's own default
+config (`presidio_analyzer/conf/default.yaml`, read directly from the
+installed package in this sandbox) resolves that to `SpacyNlpEngine`
+loading `en_core_web_lg`, matching the `en_core_web_lg` download this
+project's own `Dockerfile`/`README.md` already document. `en_core_web_lg`
+is spaCy's CNN-based (tok2vec + transition-based parser/NER) pipeline —
+**not a transformer, not RoBERTa, not anything `spacy-transformers` or
+Hugging Face `optimum` (the tooling that actually does ONNX/quantization
+well) has first-class support for.**
+
+**Directly verified, not assumed:** spaCy 3.8.15 (installed in this
+sandbox) has zero ONNX-related surface anywhere in its API or CLI
+(`[c for c in dir(spacy) if 'onnx' in c.lower()]` → `[]`, same for
+`spacy.cli`, same for `python -m spacy --help`). Neither
+`spacy-transformers` nor `optimum` — the two packages that together make
+ONNX export/quantization a real, documented path — are installed, and
+neither would apply even if installed, because that toolchain targets
+transformer-backed spaCy pipelines (`en_core_web_trf`), not the
+CNN-based `en_core_web_lg` this project actually uses. Community/
+third-party attempts at ONNX-exporting spaCy's non-transformer
+tok2vec/parser components exist but are not officially maintained by
+Explosion (spaCy's maintainer) and were not evaluated further here —
+adopting unmaintained third-party model-conversion tooling for the exact
+model every accuracy number in this project's README, `BUGS_AND_FIXES.md`,
+and the JCST manuscript is anchored to is a real-money, real-accuracy
+risk that needs far more than a spike to justify.
+
+**The honest options, laid out plainly:**
+1. **Switch to `en_core_web_trf`** to make ONNX/quantization tooling
+   applicable at all. Rejected for this spike: this is not a
+   drop-in speed optimization, it's a different model with a different
+   accuracy profile — every precision/recall number this project has
+   ever published (Bugs 9/10's corrections, the synthetic-vs-real-data
+   tables, the JCST manuscript's Section 5) would need full
+   re-measurement against the new model before any of it could be
+   trusted again. Transformer models are also often *slower* than a CNN
+   pipeline on CPU-only inference even after quantization, so the
+   throughput win itself isn't guaranteed either — an unverified
+   assumption stacked on top of an unverified assumption.
+2. **Unofficial ONNX conversion of `en_core_web_lg` directly.** Not
+   pursued: unmaintained tooling, uncertain fidelity, no official
+   Explosion support — high engineering risk for an uncertain and
+   unmeasured payoff.
+3. **A genuinely lower-risk alternative, found while investigating this:**
+   Presidio ships its own officially-supported pipeline-component
+   pruning via `NlpEngineProvider(nlp_configuration=...)`. Its own
+   `SlimSpacyNlpEngine` (`presidio_analyzer/nlp_engine/slim_spacy_nlp_engine.py`,
+   read directly from the installed package) loads spaCy models with
+   `disable=["ner", "parser"]` for exactly this reason — "reducing memory
+   usage and load time." It isn't directly usable as-is (it returns *no*
+   entities at all, since it's meant for "Presidio v3" architectures
+   where entity extraction is handled by self-contained recognizers, not
+   REDACT's current setup), but its existence confirms a real,
+   first-class, officially-supported configuration knob for disabling
+   pipeline components REDACT's PERSON detection doesn't need (e.g.
+   `parser`, `attribute_ruler`) while keeping `ner` enabled — a much
+   lower-risk lever than ONNX, since it doesn't touch the model's
+   weights or change detection behavior at all, only which computed
+   outputs get produced. **Not implemented here** — whether
+   Presidio's `SpacyRecognizer`/context-enhancement logic secretly
+   depends on lemma or POS output that a narrower disable list would
+   remove is exactly the kind of claim this sandbox has no live model to
+   verify, the same standing constraint as everything else in this file
+   that needs Docker/a real model download. Logged as a real, specific,
+   low-risk follow-up for whoever next has a live spaCy/Presidio
+   environment to test against — see ROADMAP.md.
+
+**Conclusion: the external review's ONNX/quantization suggestion, as
+written, does not apply to REDACT's actual pipeline and was correctly
+not adopted.** The investigation wasn't wasted, though — it surfaced a
+real, concrete, much-lower-risk alternative (component pruning via
+Presidio's own supported configuration API) that the original suggestion
+would never have found, since it was written against an architecture
+REDACT doesn't have.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same
