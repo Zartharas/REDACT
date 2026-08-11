@@ -1552,6 +1552,62 @@ Immediately after, the script's own per-replica distribution check killed the en
 
 ---
 
+## 19. `docker compose --profile queued up` didn't exclude the default synchronous pipeline -- both paths double-processed every line
+
+Found 2026-08-11, the second live rerun of `run_replica_and_queue_test.sh`
+after Bug 18's OOM and distribution-check fixes. Part A this run
+confirmed cleanly on both fronts: `--scale redact-service=3` completed
+with no OOM (Bug 18's fix holding), and the per-replica distribution
+numbers came back genuinely even -- 6,658 / 6,711 / 6,745 requests across
+the 3 replicas, direct, positive confirmation that `redact-lb`'s nginx
+proxy is actually load-balancing, not just that reconciliation happens
+to pass with a single working replica. Part B, run right after, failed:
+`security-logs-anonymized-*` = 40,000 against an expected 20,000 --
+`RECONCILIATION: FAIL`.
+
+**Root cause:** Docker Compose's `profiles` mechanism only gates
+opt-**IN** services -- a service tagged `profiles: ["queued"]` starts
+only when that profile is explicitly active. It does NOT gate opt-**OUT**:
+a service with no `profiles:` key at all always starts, regardless of
+which `--profile` flags are passed on the command line. `docker-compose.yml`'s
+`logstash` service (the default, always-on synchronous pipeline) has no
+`profiles:` key -- so `docker compose --profile queued up ...` started
+`logstash-queued` (correctly, via the profile) AND `logstash` (because it
+has no profile gate to exclude it), side by side. Both independently
+tail the exact same `data/raw` files this project's ingestion has always
+used -- `run_replica_and_queue_test.sh`'s own header comment already
+disclosed the *risk* ("both pipelines tail the same data/raw files
+independently -- running both at once would double-process every line")
+without the actual `docker compose` invocation ever enforcing it. Every
+line got processed and written twice, exactly matching the observed
+40,000 = 2 x 20,000.
+
+**Fixed:** rather than adding a second Compose-profile mechanism (which
+would need `logstash` to gain its own profile AND every existing
+plain-`docker compose up` workflow -- the 10,000/100,000/1,000,000-line
+load tests, all of README's and ROADMAP's already-verified runs -- to
+start explicitly activating it, a much larger blast radius for a
+one-line bug), Part B's `docker compose up` call now explicitly names
+the services it wants (`opensearch redis redact-service redact-lb
+logstash-queued queue-consumer`), omitting `logstash`. Compose only
+starts services you name (plus their own `depends_on` dependencies) when
+you list them on the command line, regardless of profile tags -- naming
+is what actually excludes `logstash` here, not the `--profile queued`
+flag alone (kept in the command for documentation/clarity, but proven
+live, the hard way, not to be sufficient by itself). This leaves every
+other existing `docker compose up` invocation in this project completely
+unchanged -- Part A, the 10K/100K/1M load tests, and manual ad hoc runs
+all still start `logstash` exactly as before.
+
+**Not yet re-confirmed live** -- Part B needs one more
+`./run_replica_and_queue_test.sh` run with this fix in place to move
+from "root-caused and fixed" to "confirmed working," the same bar every
+other Docker-dependent fix in this document is held to. Part A's own
+results from this same run (OOM fix confirmed, distribution confirmed
+even) stand on their own and don't need re-running.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same

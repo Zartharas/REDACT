@@ -144,7 +144,28 @@ docker compose down -v
 python3 src/generate_logs.py --n "$N" --out "$CORPUS_PATH" --dirty-ratio 0.3
 python3 src/export_raw_logs.py --input "$CORPUS_PATH" --output-dir data/raw
 
-docker compose --profile queued up --build -d --scale queue-consumer=3
+# 2026-08-11: first live run of Part B reconciled at 40,000 -- exactly
+# double the expected 20,000 -- confirmed as Bug 19 (see
+# BUGS_AND_FIXES.md): `docker compose --profile queued up` does NOT
+# exclude services that have no `profiles:` key at all. Compose profiles
+# only gate opt-IN (a service tagged `profiles: ["queued"]` starts only
+# when that profile is active); a service with no profiles key always
+# starts regardless of which --profile flags are passed. `logstash` (the
+# default synchronous pipeline) has no profiles key, so the previous
+# `docker compose --profile queued up ...` call started it right
+# alongside `logstash-queued` -- both independently tailed the exact same
+# `data/raw` files (this script's own header comment already warned
+# running both at once would double-process every line; it just hadn't
+# been enforced by the actual docker compose invocation). Fixed by naming
+# the Part B services explicitly instead of relying on --profile alone to
+# exclude `logstash` -- Compose only starts services you name (plus their
+# `depends_on` dependencies) when you list them on the command line,
+# regardless of profile tags, so leaving `logstash` off this list is what
+# actually keeps it from starting, not the --profile flag (kept here too,
+# for clarity/documentation, but --profile queued alone was proven live
+# not to be sufficient on its own).
+docker compose --profile queued up --build -d --scale queue-consumer=3 \
+  opensearch redis redact-service redact-lb logstash-queued queue-consumer
 # Note: no --scale on redact-service here -- Part B is specifically
 # testing the queue's own decoupling/distribution behavior (3 CONSUMERS
 # pulling from one Redis list), independent of Part A's redact-service
