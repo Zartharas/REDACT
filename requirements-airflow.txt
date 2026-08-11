@@ -5,3 +5,10 @@
 # DAG (a dedicated Airflow container/venv, or your existing Airflow
 # deployment), not alongside the Flask service.
 apache-airflow
+
+# Needed only by push_drift_metrics_to_prometheus (src/airflow_tasks.py),
+# lazily imported inside that function so a DAG environment without a
+# Pushgateway configured (REDACT_PUSHGATEWAY_URL unset -- the default
+# everywhere this project has actually run) never needs this installed at
+# all. Listed here for the one real deployment case where it is needed.
+prometheus-client

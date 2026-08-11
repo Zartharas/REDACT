@@ -105,6 +105,47 @@ def compare(baseline: dict, current: dict, threshold: float = 0.05) -> list[dict
     return flagged, insufficient
 
 
+def compare_all(baseline: dict, current: dict, threshold: float = 0.05) -> list[dict]:
+    """Like compare(), but returns one entry per sufficiently-sampled field
+    regardless of whether it crossed the drift threshold, each carrying its
+    own `flagged` boolean.
+
+    compare() only returns fields whose rate actually moved past
+    `threshold` -- correct for the original CLI report (nobody wants a
+    weekly printout of every field that *didn't* drift), but wrong for a
+    continuous exporter: a dashboard or Alertmanager rule needs the current
+    rate for every monitored field, not just the ones that already
+    crossed a line, so trend and threshold-proximity are visible before a
+    field actually flags.
+
+    Deliberately a separate function rather than changing compare()'s
+    return shape -- compare() is the CLI's contract and this project's own
+    convention is one implementation, not two, so this reuses the exact
+    same per-field arithmetic instead of recomputing it a different way."""
+    results = []
+    insufficient = []
+    all_keys = set(baseline) | set(current)
+    for key in all_keys:
+        b = baseline.get(key, {"total": 0, "critical_hits": 0})
+        c = current.get(key, {"total": 0, "critical_hits": 0})
+        if b["total"] < MIN_SAMPLE_SIZE or c["total"] < MIN_SAMPLE_SIZE:
+            insufficient.append({"log_type": key[0], "field": key[1],
+                                  "baseline_n": b["total"], "current_n": c["total"]})
+            continue
+        b_rate = b["critical_hits"] / b["total"]
+        c_rate = c["critical_hits"] / c["total"]
+        delta = c_rate - b_rate
+        results.append({
+            "log_type": key[0], "field": key[1],
+            "baseline_rate": round(b_rate, 4), "current_rate": round(c_rate, 4),
+            "delta": round(delta, 4),
+            "baseline_n": b["total"], "current_n": c["total"],
+            "flagged": abs(delta) >= threshold,
+        })
+    results.sort(key=lambda x: abs(x["delta"]), reverse=True)
+    return results, insufficient
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()

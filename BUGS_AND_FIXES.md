@@ -2259,6 +2259,101 @@ primitive built exactly for this problem shape.
 
 ---
 
+## Engineering upgrade 2: drift detector wired to Prometheus/Alertmanager (2026-08-11)
+
+Second item from the same external-review batch as Engineering upgrade 1.
+The review's framing ("Presidio and Google Cloud DLP treat redaction as a
+silent utility — REDACT can win commercially by making telemetry
+sanitation a core security visibility tool") was itself dismissed earlier
+as marketing framing this project doesn't need (see `PROJECT_STATUS.md`'s
+critique), but the concrete underlying suggestion — actually alert on
+drift instead of leaving it as a script someone has to remember to run
+and read — was real and cheap, and REDACT already had every piece except
+the wiring.
+
+**What existed before this:** `drift.py`'s `field_stats()`/`compare()`
+were correct (Bug 11 fixed the flattened-username blind spot in this
+exact code) but only ever ran as a CLI script or inside the weekly
+Airflow DAG's `check_taxonomy_drift` task — the result went into an
+Airflow task log and nowhere else. `service.py` already exports
+Prometheus metrics (`redact_anonymize_request_seconds`,
+`redact_detections_total`, etc.), but nothing scraped them, and no
+Prometheus/Alertmanager/Pushgateway infrastructure existed anywhere in
+this repo.
+
+**What changed:**
+- `src/drift.py`: added `compare_all()`, a sibling to `compare()` that
+  returns every sufficiently-sampled field's current rate (not only
+  fields that crossed the threshold), each carrying its own `flagged`
+  boolean computed via the exact same arithmetic `compare()` uses.
+  Deliberately a new function, not a change to `compare()`'s return
+  shape — `compare()` is the CLI report's existing contract.
+- `src/airflow_tasks.py`: `check_taxonomy_drift` now also returns
+  `all_field_detail` (from `compare_all()`). New
+  `push_drift_metrics_to_prometheus(result, pushgateway_url, job)`
+  pushes two gauges per `(log_type, field)` to a Prometheus Pushgateway —
+  `redact_drift_field_critical_hit_rate` (always) and
+  `redact_drift_field_flagged` (1/0, mirrors `compare()`'s own decision
+  exactly — the Alertmanager rule fires on this value directly rather
+  than re-deriving a threshold in PromQL, keeping exactly one
+  implementation of "what counts as drift," the same principle
+  `service.py`'s own docstring states for the HMAC/token-store logic).
+  Deliberately a no-op (not an error) when no Pushgateway is configured —
+  the default in every environment this project has run in. A thin
+  `push_drift_metrics_task` wrapper pulls the XCom result via explicit
+  `ti.xcom_pull()` inside the Airflow task context, rather than the more
+  fragile route of templating `"{{ ti.xcom_pull(...) }}"` directly into
+  `op_kwargs` — that only preserves the dict's real type if the DAG sets
+  `render_template_as_native_obj=True`, which this DAG does not, so the
+  templated route would have silently passed a stringified dict instead
+  of the real object.
+- `dags/redact_weekly_validation.py`: new `push_drift_metrics_to_prometheus`
+  task wired in right after `check_taxonomy_drift`, reading
+  `REDACT_PUSHGATEWAY_URL` from the environment (unset by default, so the
+  DAG's existing behavior is unchanged unless someone deliberately
+  configures a Pushgateway).
+- `docker-compose.yml`: new `monitoring` profile (opt-in, same pattern as
+  the existing `queued` profile) adding `pushgateway`, `prometheus`, and
+  `alertmanager` containers.
+- `monitoring/prometheus.yml`, `monitoring/alert_rules.yml`,
+  `monitoring/alertmanager.yml`: scrape config (Pushgateway +
+  `redact-service`'s own `/metrics`), the actual `RedactFieldDriftDetected`
+  and `RedactServiceHighLatency` alert rules, and a deliberately-stub
+  Alertmanager receiver (no real Slack/PagerDuty endpoint exists to point
+  this at from this environment — documented as a stub, not silently
+  left looking like a real integration).
+
+**Verified, not assumed:** `tests/test_drift_prometheus_export.py` (5
+tests) — `compare_all()` returns both flagged and non-flagged fields with
+identical arithmetic to `compare()` for the field that IS flagged;
+sufficiently-sampled-only fields get excluded the same way `compare()`
+excludes them; the push function is a confirmed no-op with no Pushgateway
+configured; the push function is confirmed to push the *specific* gauge
+values/labels expected (not just "no exception raised") via a
+monkeypatched `push_to_gateway` that inspects the actual `CollectorRegistry`
+contents; the Airflow wrapper is confirmed to pull XCom via explicit
+`ti.xcom_pull(task_ids="check_taxonomy_drift")`, not template
+interpolation. Full suite: 59 passed (up from 54), 2 skipped, 0 failed.
+
+**Disclosed, not silently claimed working:** `docker-compose.yml`,
+`monitoring/prometheus.yml`, `monitoring/alert_rules.yml`, and
+`monitoring/alertmanager.yml` are syntax-checked (valid YAML, matches
+each tool's documented config schema as understood from their docs) but
+**not yet run against a live Prometheus/Alertmanager instance** — no
+Docker daemon in this sandbox, same standing limitation as every other
+piece of Docker-dependent infrastructure in this project. Specifically
+unverified: whether Prometheus's `headers:` scrape-config field (used to
+inject `/metrics`'s required `X-Redact-Api-Key` header) is accepted
+exactly as written by the pinned Prometheus image version, and whether
+the DNS-based single-target scrape of `redact-service:8080` behaves as
+expected when `--scale redact-service=N` is also in play (the existing,
+already-documented per-worker/per-replica metric-scoping limitation
+applies here too — see `service.py`'s own comment). Needs the same live
+confirmation pass every other new piece of infrastructure in this
+project has gone through before any of this can be called "confirmed."
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same

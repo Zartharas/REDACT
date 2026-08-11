@@ -1,0 +1,52 @@
+# Alerting rules for REDACT's monitoring profile.
+#
+# The drift-detection rule below fires directly on
+# redact_drift_field_flagged (src/airflow_tasks.py's
+# push_drift_metrics_to_prometheus), which is itself drift.compare()'s
+# own threshold decision -- NOT a second, independently-tuned PromQL
+# threshold. This is deliberate: this project's stated principle (see
+# src/service.py's own module docstring) is one implementation of a
+# decision, not two that can silently drift apart. If the drift threshold
+# ever needs to change, change it in drift.py's compare()/compare_all(),
+# not here.
+#
+# NOT yet confirmed against a live Prometheus/Alertmanager instance in
+# this sandbox (no Docker daemon here) -- syntax-checked only (valid YAML,
+# matches Prometheus's documented rule-file schema). Needs the same live
+# confirmation pass every other piece of new infrastructure in this
+# project has gone through before this comment can say "confirmed."
+groups:
+  - name: redact_drift
+    rules:
+      - alert: RedactFieldDriftDetected
+        expr: redact_drift_field_flagged == 1
+        labels:
+          severity: warning
+        annotations:
+          summary: "REDACT: PII drift detected in {{ $labels.log_type }}.{{ $labels.field }}"
+          description: >-
+            Field {{ $labels.log_type }}.{{ $labels.field }}'s critical-tier
+            PII hit rate moved past drift.py's threshold this run. This is
+            the exact failure mode Section 3.3 of the chapter describes: a
+            field that used to carry no PII silently starting to carry it
+            after an unrelated code change. Check
+            redact_drift_field_critical_hit_rate{log_type="{{ $labels.log_type }}",field="{{ $labels.field }}"}
+            for the actual rate, and drift.py's own weekly Airflow task log
+            for the baseline/current sample sizes this decision was based on.
+
+  - name: redact_service
+    rules:
+      - alert: RedactServiceHighLatency
+        expr: histogram_quantile(0.95, rate(redact_anonymize_request_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "REDACT: /anonymize p95 latency above 1s"
+          description: >-
+            redact-service's 95th-percentile request latency has been above
+            1 second for 5 minutes. This is the same signal that would have
+            caught the TokenStore.save() O(n) cost regression
+            (BUGS_AND_FIXES.md) earlier than the manual `docker stats` +
+            hand-timed curl calls that actually caught it -- see
+            service.py's own comment on why these metrics exist.

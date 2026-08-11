@@ -1,0 +1,25 @@
+# Minimal Alertmanager config for REDACT's monitoring profile.
+#
+# DELIBERATELY A STUB, not a real notification integration: this project
+# has no Slack workspace, PagerDuty account, or other real receiver
+# endpoint to send to from this sandbox, and writing a webhook_configs
+# entry pointed at a URL nobody has actually verified receives anything
+# would be exactly the kind of "confirmed working" claim this project
+# does not make about untested infrastructure. The default receiver below
+# is Alertmanager's own "null" pattern (a receiver with no configured
+# integrations) -- fired alerts are visible in Alertmanager's own UI
+# (http://localhost:9093) and API, just not forwarded anywhere further.
+#
+# To wire this to a real destination: add a slack_configs, webhook_configs,
+# pagerduty_configs, or email_configs block under the `redact-default`
+# receiver below, per Alertmanager's own configuration docs. Swap in real
+# credentials via an env-file-backed secret, not hardcoded here.
+route:
+  receiver: redact-default
+  group_by: ["alertname", "log_type", "field"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: redact-default

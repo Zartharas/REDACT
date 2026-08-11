@@ -613,6 +613,62 @@ services:
     networks:
       - redact-net
 
+  # Monitoring stack, added 2026-08-11 (ROADMAP: "weaponize the drift
+  # detector"). Everything above this point was a metrics SOURCE with
+  # nothing consuming it: redact-service has exposed /metrics since an
+  # earlier engineering upgrade (see service.py's own comment), and
+  # drift.py's weekly Airflow task now pushes per-field critical-hit-rate
+  # to a Pushgateway (src/airflow_tasks.py's push_drift_metrics_to_prometheus),
+  # but until these three services, nothing actually scraped or alerted
+  # on any of it -- the signal existed but nobody was listening.
+  #
+  # profiles: ["monitoring"] -- opt-in, same pattern as the "queued"
+  # profile above, so a plain `docker compose up` behavior is unchanged.
+  # Bring this up alongside either ingestion path with e.g.
+  # `docker compose --profile monitoring up` or
+  # `docker compose --profile queued --profile monitoring up`.
+  #
+  # NOT independently confirmed live in this sandbox (no Docker daemon
+  # here -- see this project's standing disclosure pattern for anything
+  # Docker-dependent). monitoring/prometheus.yml and
+  # monitoring/alert_rules.yml are syntax-checked (valid YAML, valid
+  # Prometheus rule-file schema per promtool's documented format) but not
+  # yet run against a live scrape. Needs the same live confirmation this
+  # project has run every other new piece of infrastructure through.
+  pushgateway:
+    image: prom/pushgateway:v1.11.0
+    container_name: redact-pushgateway
+    ports:
+      - "9091:9091"
+    networks:
+      - redact-net
+    profiles: ["monitoring"]
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: redact-prometheus
+    depends_on:
+      - pushgateway
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - redact-net
+    profiles: ["monitoring"]
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: redact-alertmanager
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    networks:
+      - redact-net
+    profiles: ["monitoring"]
+
 volumes:
   opensearch-data1:
   opensearch-data2:

@@ -29,6 +29,7 @@ def check_taxonomy_drift(baseline_path: str, current_path: str,
     baseline_stats = drift.field_stats(baseline_entries)
     current_stats = drift.field_stats(current_entries)
     flagged, insufficient = drift.compare(baseline_stats, current_stats, threshold)
+    all_compared, _ = drift.compare_all(baseline_stats, current_stats, threshold)
 
     return {
         "baseline_entries": len(baseline_entries),
@@ -36,7 +37,97 @@ def check_taxonomy_drift(baseline_path: str, current_path: str,
         "fields_flagged": len(flagged),
         "flagged_detail": flagged,
         "fields_insufficient_data": len(insufficient),
+        # Full per-field detail (not just flagged fields), for
+        # push_drift_metrics_to_prometheus below -- a dashboard/alert rule
+        # needs the current rate for every monitored field, not only the
+        # ones that already crossed the threshold. See drift.compare_all's
+        # own docstring for why this is a second function, not a change
+        # to drift.compare()'s return shape.
+        "all_field_detail": all_compared,
     }
+
+
+def push_drift_metrics_to_prometheus(result: dict, pushgateway_url: str | None,
+                                      job: str = "redact_drift_check") -> dict:
+    """Pushes check_taxonomy_drift's per-field results to a Prometheus
+    Pushgateway, so Alertmanager can fire on a field's critical-hit-rate
+    the same way it already fires on redact-service's live request
+    metrics (see src/service.py) -- this is what turns drift.py from a
+    script someone has to remember to read into a signal the existing
+    Prometheus/Alertmanager stack can act on directly.
+
+    Two gauges per (log_type, field):
+      redact_drift_field_critical_hit_rate -- the field's current-window
+        critical-tier hit rate, always exported (not only when flagged),
+        so a dashboard shows the trend before a field ever crosses the
+        alert threshold.
+      redact_drift_field_flagged -- 1 if drift.compare()'s own threshold
+        logic flagged this field this run, else 0. The Alertmanager rule
+        fires directly on this value rather than reimplementing the
+        threshold comparison in PromQL, so there is exactly one place
+        (drift.compare/compare_all) that decides what counts as drift --
+        the same "one implementation, not two" principle src/service.py's
+        own docstring states for the HMAC/token-store logic.
+
+    A batch Airflow task, not a long-running process, so this uses
+    Prometheus's Pushgateway pattern (push once per run) rather than
+    /metrics scraping, which only works for something Prometheus can poll
+    continuously.
+
+    Deliberately a no-op, not an error, when pushgateway_url is falsy --
+    this task must not break check_taxonomy_drift's existing behavior (or
+    the DAG, or this project's tests) in any environment that doesn't have
+    a Pushgateway configured, which is every environment this project has
+    actually been able to run in so far (see BUGS_AND_FIXES.md's standing
+    disclosure pattern for anything requiring live infrastructure this
+    sandbox doesn't have)."""
+    if not pushgateway_url:
+        return {"pushed": False, "reason": "no pushgateway_url configured"}
+
+    from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
+
+    registry = CollectorRegistry()
+    rate_gauge = Gauge(
+        "redact_drift_field_critical_hit_rate",
+        "Current-window critical-tier PII hit rate for this (log_type, field), "
+        "from the same computation drift.py's CLI report uses.",
+        ["log_type", "field"], registry=registry,
+    )
+    flagged_gauge = Gauge(
+        "redact_drift_field_flagged",
+        "1 if this field's rate moved past the drift threshold this run, else 0. "
+        "Matches drift.compare()'s own flagging logic exactly -- Alertmanager "
+        "should fire on this value directly rather than re-deriving a threshold.",
+        ["log_type", "field"], registry=registry,
+    )
+
+    for entry in result.get("all_field_detail", []):
+        labels = {"log_type": entry["log_type"], "field": entry["field"]}
+        rate_gauge.labels(**labels).set(entry["current_rate"])
+        flagged_gauge.labels(**labels).set(1 if entry["flagged"] else 0)
+
+    push_to_gateway(pushgateway_url, job=job, registry=registry)
+    return {"pushed": True, "fields_pushed": len(result.get("all_field_detail", []))}
+
+
+def push_drift_metrics_task(pushgateway_url: str | None, **context) -> dict:
+    """Airflow-facing wrapper around push_drift_metrics_to_prometheus.
+
+    Pulls check_taxonomy_drift's return value from XCom explicitly via
+    the task-instance context, rather than relying on Jinja
+    auto-templating a "{{ ti.xcom_pull(...) }}" string in the DAG's
+    op_kwargs -- that trick only preserves the dict's actual type if the
+    DAG sets render_template_as_native_obj=True, which this DAG does not,
+    so a templated string there would silently become str(the_dict)
+    instead of the dict itself, and result.get(...) inside
+    push_drift_metrics_to_prometheus would break. Explicit context access
+    has no such footgun. Kept as a thin wrapper (not merged into
+    push_drift_metrics_to_prometheus itself) so that function stays a
+    plain, directly testable function with no Airflow context dependency
+    at all."""
+    ti = context["ti"]
+    result = ti.xcom_pull(task_ids="check_taxonomy_drift")
+    return push_drift_metrics_to_prometheus(result or {}, pushgateway_url)
 
 
 def sample_medium_confidence_hits(anonymized_log_path: str, sample_rate: float = 0.05,

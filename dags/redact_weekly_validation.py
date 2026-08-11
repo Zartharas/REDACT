@@ -56,6 +56,23 @@ with DAG(
         },
     )
 
+    # Engineering upgrade, 2026-08-11: check_taxonomy_drift's result used to
+    # go nowhere but the Airflow task log -- nothing outside this DAG run
+    # could see it without someone remembering to go read that log. This
+    # pushes the same result to Prometheus so it shows up on the same
+    # dashboard/Alertmanager stack as redact-service's live request
+    # metrics. REDACT_PUSHGATEWAY_URL unset (the default in every
+    # environment this project has actually run in) makes this a
+    # documented no-op, not a failure -- see
+    # push_drift_metrics_to_prometheus's own docstring.
+    push_drift_metrics = PythonOperator(
+        task_id="push_drift_metrics_to_prometheus",
+        python_callable=airflow_tasks.push_drift_metrics_task,
+        op_kwargs={
+            "pushgateway_url": os.environ.get("REDACT_PUSHGATEWAY_URL"),
+        },
+    )
+
     rotate_pseudonym_key = PythonOperator(
         task_id="rotate_pseudonymization_key",
         python_callable=airflow_tasks.rotate_pseudonymization_key,
@@ -82,4 +99,4 @@ with DAG(
         },
     )
 
-    sample_medium_confidence >> check_field_drift >> rotate_pseudonym_key >> rotate_token_key
+    sample_medium_confidence >> check_field_drift >> push_drift_metrics >> rotate_pseudonym_key >> rotate_token_key
