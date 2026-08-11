@@ -3470,3 +3470,53 @@ does something structurally similar to an existing, battle-tested one
 in this repo, the existing one's solved problems should be checked and
 reused deliberately, not re-derived from scratch and re-discovered the
 hard way a second time.
+
+---
+
+## Bug 23/24 CLOSED: clean live rerun confirms both fixes, reconciliation PASS (2026-08-11)
+
+The user reran `./run_floci_kafka_test.sh` after Bug 24's fix (clean-
+slate `-v` teardown + real 3-poll stability check), on top of Bug 23's
+`doc_id_base` idempotency fix. Full clean run against a real floci/
+Redpanda broker:
+
+```
+Expected total (raw exported lines): 20000
+security-logs-anonymized-*:          20000
+security-logs-quarantine-*:          0
+redact-audit-trail-*:                17819
+anonymized + quarantine:             20000
+RECONCILIATION: PASS
+```
+
+**Exact match, first time this path has ever reconciled cleanly.** The
+poll log this time shows real, steadily increasing counts across 48
+polls (0 -> 218 -> 574 -> ... -> 20,000, holding flat for exactly 3
+consecutive polls before stopping) -- genuine evidence of the new
+stability check working as designed, not a lucky single-shot read. The
+audit fan-out ratio (17,819/20,000 = 89.1%) lands in the same
+neighborhood as every prior run's measured ratio (89.159-89.315% across
+the 100K/1M-line synchronous-path runs) -- consistent with, not
+necessarily identical to, since this is a different corpus size/sample,
+matching how this project has always interpreted this ratio elsewhere
+(a consistency check, not an exact-match requirement).
+
+**What this confirms, concretely:**
+- Bug 23's `doc_id_base` fix (stable `topic-partition-offset` document
+  IDs) does what it was built to do: this run's Kafka consumer group
+  handled real message delivery over floci's actual Redpanda broker with
+  zero duplicate documents, whatever combination of the two originally-
+  hypothesized mechanisms (rebalance-driven reprocessing, producer-side
+  retry) was actually at play before -- this is the correctness property
+  that matters, not proof of which specific mechanism it was.
+- Bug 24's clean-slate teardown and real poll-stability fix both worked
+  exactly as designed on a genuine rerun.
+- The full Kafka-shaped queue path -- floci MSK provisioning,
+  `logstash-kafka` (producer), `queue-consumer-kafka` (consumer group,
+  offset-commit redelivery guarantee), OpenSearch write -- is now
+  **CONFIRMED LIVE end to end**, not just syntax-checked and unit-tested,
+  closing the last open disclosure on Engineering upgrade 7/Bug 23/Bug
+  24 in one clean pass.
+
+ROADMAP.md item 13's Kafka bullet updated from "IN PROGRESS" to "DONE,
+CONFIRMED LIVE."
