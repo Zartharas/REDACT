@@ -56,9 +56,27 @@ partial-but-substantial gap against an actual real-world US population
 sampled by true frequency (15.2%). All three numbers matter -- none should
 be dropped when this layer is cited, and 15.2% (the real-population number)
 is the one that should anchor any production-readiness claim.
+
+--- Engineering note, added 2026-08-11 ---
+_segment_match() originally checked every split point of a token with a
+Python-level loop and two set lookups per split (still O(1) per lookup,
+but with real per-iteration interpreter overhead across up to ~24 splits
+for a 30-char token). Replaced with a single Aho-Corasick automaton
+(pyahocorasick) built once at import time over FIRST_NAMES/LAST_NAMES:
+one linear scan of the token finds every dictionary-word substring
+occurrence in one pass, and a lightweight adjacency check over those
+matches (does some match start at 0 and another end at len(token), with
+compatible first/last roles and no gap between them?) replaces the manual
+split loop. This is the textbook Aho-Corasick use case -- matching a
+fixed dictionary against input text in one pass instead of repeated
+substring/set-membership checks -- and produces byte-identical output to
+the original split-loop implementation (verified by direct comparison
+against the prior algorithm across the full synthetic corpus before this
+change was kept; see BUGS_AND_FIXES.md for the throughput numbers).
 """
 import re
 
+import ahocorasick
 from faker.providers.person.en_US import Provider as _EnUSPersonProvider
 
 FIRST_NAMES = {n.lower() for n in _EnUSPersonProvider.first_names}
@@ -75,20 +93,53 @@ _TOKEN_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9._-]{5,29}\b")
 _TRAILING_DIGITS_RE = re.compile(r"\d+$")
 
 
+def _build_name_automaton() -> ahocorasick.Automaton:
+    """One Aho-Corasick automaton over the union of FIRST_NAMES/LAST_NAMES.
+    Payload per word is (is_first, is_last) -- some names (e.g. "James")
+    appear in both lists, so both flags can be True for one word."""
+    automaton = ahocorasick.Automaton()
+    for name in FIRST_NAMES | LAST_NAMES:
+        is_first = name in FIRST_NAMES
+        is_last = name in LAST_NAMES
+        automaton.add_word(name, (name, is_first, is_last))
+    automaton.make_automaton()
+    return automaton
+
+
+_NAME_AUTOMATON = _build_name_automaton()
+
+
 def _strip_trailing_digits(token: str) -> str:
     return _TRAILING_DIGITS_RE.sub("", token)
 
 
 def _segment_match(token: str) -> bool:
     """True if token splits cleanly into <first name><last name> (either
-    order) with no separator, both parts meeting the minimum length."""
+    order) with no separator, both parts meeting the minimum length.
+
+    Same semantics as the original split-loop: every dictionary-word
+    substring occurrence in `token` is found in one Aho-Corasick pass,
+    then checked for a pair that partitions the full token into exactly
+    two adjacent parts (no gap, no overlap) with compatible roles."""
     lower = token.lower()
     n = len(lower)
-    for split in range(MIN_PART_LEN, n - MIN_PART_LEN + 1):
-        left, right = lower[:split], lower[split:]
-        if (left in FIRST_NAMES and right in LAST_NAMES) or \
-           (left in LAST_NAMES and right in FIRST_NAMES):
-            return True
+
+    matches = []  # (start, end_exclusive, is_first, is_last)
+    for end_idx, (word, is_first, is_last) in _NAME_AUTOMATON.iter(lower):
+        start_idx = end_idx - len(word) + 1
+        matches.append((start_idx, end_idx + 1, is_first, is_last))
+
+    starts_at_zero = [m for m in matches if m[0] == 0 and MIN_PART_LEN <= m[1] <= n - MIN_PART_LEN]
+    if not starts_at_zero:
+        return False
+    ends_at_n = {(m[0], m[2], m[3]) for m in matches if m[1] == n}
+
+    for _, split, is_first, is_last in starts_at_zero:
+        for start2, is_first2, is_last2 in ends_at_n:
+            if start2 != split:
+                continue
+            if (is_first and is_last2) or (is_last and is_first2):
+                return True
     return False
 
 

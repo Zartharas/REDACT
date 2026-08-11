@@ -4,3 +4,4 @@ faker
 flask
 gunicorn
 prometheus-client
+pyahocorasick

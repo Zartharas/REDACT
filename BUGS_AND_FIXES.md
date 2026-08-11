@@ -2213,6 +2213,52 @@ begin with.
 
 ---
 
+## Engineering upgrade 1: Aho-Corasick for Layer 4's dictionary scan (2026-08-11)
+
+**Not a bug — a measured performance change**, done as part of a broader batch of
+improvements suggested by an external review of REDACT against commercial
+alternatives (Presidio, Nightfall). Most of that review's suggestions were
+evaluated and several were rejected or descoped as overstated or mismatched
+to this project's actual scale (see `PROJECT_STATUS.md` for the full
+critique); this one held up.
+
+**What changed:** `src/flattened_names.py`'s `_segment_match()` originally
+checked every split point of a candidate token with a Python-level loop
+(up to ~24 iterations for a 30-character token) and two set-membership
+checks per split. Replaced with a single Aho-Corasick automaton
+(`pyahocorasick`) built once at import time over the union of
+`FIRST_NAMES`/`LAST_NAMES`: one linear scan of the token finds every
+dictionary-word substring occurrence in a single pass, and a lightweight
+adjacency check (does some match start at index 0 and another end at the
+token's length, with compatible first/last roles and no gap between them)
+replaces the manual split loop. This is the textbook Aho-Corasick
+application — matching a fixed dictionary against input text in one pass.
+
+**Verified, not assumed:** `validation/aho_corasick_layer4_verify.py`
+reimplements the original split-loop algorithm verbatim for direct
+comparison, then runs both implementations across the full 10,000-line
+canonical synthetic corpus (`data/synthetic_logs.jsonl`). Result: **0
+mismatches across all 10,000 lines**, 1,013 hits from both implementations,
+byte-identical output. This is a real correctness guarantee, not an
+assumption that the rewrite preserves behavior.
+
+**Throughput, measured honestly:** 57,134 lines/sec (old) -> 66,757
+lines/sec (new), a **1.17x speedup** on this sandbox's hardware. This is
+real but modest — nowhere near the "up to 4x" figure the external review's
+ONNX-quantization suggestion claimed for a different part of the pipeline
+(and that figure was never adopted here precisely because it wasn't
+backed by a measurement against REDACT's actual architecture; see the
+ONNX spike task in `PROJECT_STATUS.md`). At this token-level scale, the
+original split-loop's per-iteration cost was already small (set lookups
+are O(1)), so Aho-Corasick's real win is structural — one automaton pass
+instead of a Python-level loop with repeated set lookups — rather than a
+change in asymptotic complexity that would show up as a dramatic number
+at this input size. Worth keeping regardless of the modest measured
+speedup, since it removes a manual loop in favor of a well-tested library
+primitive built exactly for this problem shape.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same
