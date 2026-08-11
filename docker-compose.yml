@@ -313,7 +313,8 @@ services:
     container_name: redact-redis-master
     command: ["redis-server", "--appendonly", "yes"]
     networks:
-      - redact-net
+      redact-net:
+        ipv4_address: 172.28.0.240  # fixed, see redact-net's own comment above (Bug 23)
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -323,12 +324,22 @@ services:
   redis-replica-1:
     image: redis:7-alpine
     container_name: redact-redis-replica-1
+    # Still --replicaof by hostname, not the fixed IP -- fine here, since
+    # this is only resolved ONCE at container startup while redis-master
+    # is guaranteed to be up (this service's own depends_on below), not
+    # continuously re-resolved the way Sentinel's OWN monitored-address
+    # tracking is. If redis-master later dies, Sentinel promotes THIS
+    # replica by sending it a direct REPLICAOF command over its already
+    # -open connection, bypassing this startup-time command entirely --
+    # see Bug 23's writeup for why that distinction is exactly what makes
+    # the fixed-IP fix necessary for Sentinel specifically but not here.
     command: ["redis-server", "--replicaof", "redis-master", "6379", "--appendonly", "yes"]
     depends_on:
       redis-master:
         condition: service_healthy
     networks:
-      - redact-net
+      redact-net:
+        ipv4_address: 172.28.0.241
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -343,7 +354,8 @@ services:
       redis-master:
         condition: service_healthy
     networks:
-      - redact-net
+      redact-net:
+        ipv4_address: 172.28.0.242
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -608,5 +620,27 @@ volumes:
   redact-output:
 
 networks:
+  # Explicit subnet, added 2026-08-11 -- see Bug 23 in BUGS_AND_FIXES.md
+  # for the live failure this fixes: Docker's embedded DNS deregisters a
+  # container's service-name mapping the moment the container is killed,
+  # which broke Sentinel's own hostname-based failover (it periodically
+  # re-resolves its monitored master's configured address to keep it
+  # current, and once "redis-master" stopped resolving, it got stuck
+  # unable to ever announce a promoted replica). redis-master/
+  # redis-replica-1/redis-replica-2 below get fixed IPs from this subnet
+  # specifically so Sentinel can track an address that survives the
+  # backing container's death -- an IP doesn't get deregistered from
+  # Docker's DNS the way a service name does, because it was never a DNS
+  # entry in the first place. Pinned addresses are deliberately near the
+  # top of this /16 (.240-.242) to stay well clear of Compose's own
+  # dynamic allocation, which starts from the low end of the range --
+  # not a guaranteed-collision-free reservation (Compose has no formal
+  # concept of reserving a sub-range), but the standard, low-risk
+  # convention for mixing a few pinned addresses into an otherwise
+  # dynamically-allocated network. If this subnet happens to collide
+  # with another Docker network already on your machine, change it here.
   redact-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

@@ -1973,6 +1973,85 @@ document has been held to.
 
 ---
 
+## 23. Sentinel's hostname-based master tracking broke failover outright -- Docker deregisters a dead container's DNS name, so Sentinel got stuck unable to ever announce the promotion
+
+**Impact:** High for the feature this item exists to demonstrate (Redis
+HA is not actually HA if failover never completes) -- zero impact on
+anything shipped before this session, since Bug 22's Sentinel topology
+was brand new and had not yet been claimed working. **Status:** Verified
+fixed, 2026-08-11, live failover test on the user's machine.
+
+**Found during the very first live failover test of Bug 22's new
+Redis Sentinel topology.** The user brought the cluster up, confirmed
+`sentinel master redact-master` showed a healthy master with
+`num-slaves:2`, then ran `docker kill redact-redis-master` to simulate a
+real master failure -- the actual test this whole item exists to prove
+out, not a config-parsing check. 15 seconds later,
+`sentinel get-master-addr-by-name redact-master` still reported the
+dead master's original address. `docker compose logs redis-sentinel-1`
+showed why: `Failed to resolve hostname 'redis-master'`, repeating once
+per second, continuously, for the full minute-plus the user let it run.
+
+**Root cause:** `redis/sentinel.conf` originally used `sentinel
+resolve-hostnames yes` plus `sentinel monitor redact-master redis-master
+6379 2` -- tracking the master by its Compose *service* hostname rather
+than a fixed address. That looked like the more robust choice going in
+(a hostname should survive a container restart better than a
+dynamically-assigned IP), but it has a fatal interaction with how Docker
+Compose actually implements service-name DNS: `redis-master` is only
+resolvable while at least one container backing that service is running
+and registered with Docker's embedded DNS (127.0.0.11). The instant
+`redact-redis-master` was killed, that DNS entry disappeared --
+immediately, not after some grace period. Sentinel's `resolve-hostnames`
+setting requires it to periodically re-resolve its monitored master's
+configured hostname to keep its tracked address current (this is
+documented Redis 6.2+ behavior, not a bug in Redis itself), and once
+that re-resolution started failing, Sentinel got stuck unable to
+validate or rewrite the master's address at all -- which blocked it from
+completing the failover it had otherwise correctly detected was needed
+(SDOWN detection itself, based on missed PINGs to the already-known IP,
+is independent of hostname resolution and was not the blocked step;
+what got stuck was the address-tracking/announcement machinery
+`resolve-hostnames` gates).
+
+**Fix:** stopped relying on DNS entirely for the address that needs to
+survive its own container's death. `docker-compose.yml`'s `redact-net`
+network gained an explicit subnet (`172.28.0.0/16`), and
+`redis-master`/`redis-replica-1`/`redis-replica-2` each got a fixed
+`ipv4_address` (`.240`/`.241`/`.242`) pinned near the top of that range
+to avoid Compose's own dynamic allocation (which starts from the low
+end). `redis/sentinel.conf` now monitors `172.28.0.240` directly and
+sets `resolve-hostnames no` / `announce-hostnames no` -- both settings
+exist specifically to translate between hostnames and IPs, which is no
+longer relevant once the monitored target is a fixed IP that was never a
+DNS entry Docker could deregister. `redis-replica-1`/`redis-replica-2`'s
+own `--replicaof redis-master 6379` startup command was deliberately
+LEFT as a hostname, not changed to match -- that command is resolved
+once at container startup while `redis-master` is guaranteed to be up
+(gated by `depends_on: redis-master: condition: service_healthy`), not
+continuously re-resolved the way Sentinel's own address tracking is; when
+Sentinel actually promotes a replica, it does so by sending that replica
+a direct `REPLICAOF` command over an already-open connection, bypassing
+this startup-time command entirely. Only Sentinel's own long-lived,
+continuously-re-validated address tracking needed the fixed-IP fix.
+
+**Confirmed live, same session, after the fix:** re-running the exact
+same test -- bring the topology up, `docker kill redact-redis-master`,
+poll `sentinel get-master-addr-by-name` -- is the next step handed back
+to the user; this entry will be updated with the completed failover
+numbers (which replica got promoted, how long it took) once that comes
+back. Worth stating plainly in the meantime: this bug was found by
+actually running the failover this item exists to demonstrate, on the
+first attempt, not caught by any of the syntax/logic checks this project
+otherwise relies on before a live run (`docker-compose.yml` parsed as
+valid YAML the whole time; nothing about `resolve-hostnames yes` is
+itself invalid config, it's just wrong for this specific environment's
+DNS lifecycle) -- another entry in this document's own running argument
+that some classes of bug are only findable by triggering the actual
+failure mode, not by inspection.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same
