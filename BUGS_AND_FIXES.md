@@ -2522,6 +2522,95 @@ REDACT doesn't have.
 
 ---
 
+## Engineering upgrade 4: peppered Bloom filter for employee-name matching (2026-08-11)
+
+Fifth and last item from the external-review batch (after Aho-Corasick,
+the drift-detector wiring, the NER early-exit gate, and the ONNX spike
+above). The review's original framing called this "zero-knowledge
+identity matching" against a "Redis Bloom Filter" built from
+`SHA-256(lowercase(firstname + lastname))`. Corrected on two points
+before building anything, not after:
+
+1. **"Zero-knowledge" is the wrong term.** It's a specific cryptographic
+   term (a proof system with a formal no-extra-knowledge guarantee) that
+   what's actually implementable here — a keyed Bloom filter — does not
+   satisfy. Using the precise name matters given this project's own
+   stated commitment to not overclaim what's verified.
+2. **The bare-SHA-256 construction was a real, flagged security flaw,
+   not a style nitpick.** Human names have low entropy, and this
+   project's own `validation/real_name_frequency/` already has real
+   SSA/Census name-frequency data — an attacker with the filter's
+   contents could hash every name in that same public dataset and fully
+   reconstruct "who's on this list" in minutes. Real HR/personnel data
+   should not be that cheaply reversible.
+
+**What was built:** `src/employee_name_filter.py`'s `HashedNameFilter` —
+a Bloom filter where every hash is `HMAC-SHA256(pepper, normalized_name)`
+instead of bare `SHA-256`. Without the pepper, an attacker with only the
+filter's contents cannot replicate the hash function at all; brute-force
+enumeration over a name-frequency dictionary produces nothing usable.
+**Disclosed, not glossed over: this narrows the attack surface, it does
+not eliminate it** — an attacker who compromises both the filter's
+contents AND the pepper's storage location can still run the same
+brute-force attack the unsalted version was vulnerable to. The real
+property is defense-in-depth (splitting one secret into two
+independently-compromisable pieces), not immunity — see the module's own
+docstring for the full reasoning, including why pepper storage/rotation
+is a real operational requirement (this class takes the pepper as a
+constructor argument and does not manage its storage — the same division
+of responsibility `VaultStorageProvider` already uses for `TOKEN_KEY`/
+`PSEUDO_KEY`), and why deletion (offboarding a departed employee) needs a
+full rebuild rather than incremental removal (a standard Bloom filter,
+which this is, cannot remove individual items).
+
+**Why a plain Python bit array instead of the review's literal "Redis
+Bloom Filter" proposal:** this project's `docker-compose.yml` runs plain
+`redis:7-alpine`, not `redis/redis-stack-server` (the image that actually
+bundles the RedisBloom module) — adding that module would mean a new
+infrastructure dependency and an image swap. A Bloom filter's whole
+performance point is that querying it needs no network round-trip if it
+fits in memory (a few hundred thousand employee names is single-digit
+MB as a bit array), so this loads once per worker process at startup —
+the same per-process warm-up pattern this project already uses for the
+spaCy/Presidio analyzer (`detect._get_analyzer()`) — with no new
+infrastructure dependency and no network call on the hot path.
+
+**Verified, not assumed:** `tests/test_employee_name_filter.py` (8
+tests), all fully deterministic (no Redis, no live AD/Okta export, no
+NER model needed):
+- Zero false negatives across 500 inserted names (the one guarantee a
+  Bloom filter must never break).
+- Measured false-positive rate on 2,000 genuinely-never-added names stays
+  well under a generous bound of the configured target — not just
+  trusting the standard sizing formula.
+- **The actual security property, confirmed directly:** building the
+  same name list under two different peppers produces different bit
+  arrays — the pepper genuinely changes the hash output, not just in
+  theory.
+- Loading a saved filter with the WRONG pepper does not silently return
+  correct results — confirmed the wrong-pepper case actually fails to
+  find at least one of the originally-added names.
+- The saved file format is confirmed, by direct byte-string search, to
+  never contain the pepper.
+- Normalization (case/whitespace) is consistent between `add()` and
+  `might_contain()`, and `build_from_names_file()` correctly skips blank
+  lines.
+
+Full suite: 73 passed (up from 65), 2 skipped, 0 failed.
+
+**Disclosed, not silently claimed integrated:** this module is
+standalone and opt-in — **not yet wired into `detect.py`'s detection
+ensemble** (`scan_flattened()`/`scan_regex()`) as an active Layer 4
+companion. No real AD/Okta export exists in this environment to build a
+real filter against or measure real recall gain from (all tests above
+use synthetic name lists). Wiring it in and measuring its real-world
+effect needs both a real deployment's employee list and a live NER
+environment to compare against — the same standing constraint as every
+other environment-blocked claim in this file. See ROADMAP.md item 13 for
+this as an explicit next step, not an implied-done one.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same
