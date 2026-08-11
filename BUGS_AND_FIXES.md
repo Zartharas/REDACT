@@ -1667,6 +1667,26 @@ change in this document is held to. `python3 -c "import yaml;
 yaml.safe_load(...)"` confirms the file parses as valid YAML, which is
 not the same thing as the workflow actually running clean.
 
+**Incident scope, checked directly rather than assumed: this repo was never exposed.**
+The user asked whether this needed reporting anywhere -- checked GitHub's
+own run history instead of guessing. `container-scan`'s very first run
+in this repo's history (run #1, commit `e9b3ee9`, pushed 2026-08-10 --
+this workflow's own creation date) failed with the identical "Unable to
+resolve action aquasecurity/trivy-action@0.28.0" error, 2 seconds in,
+same as every run since. The poisoned tag was already pulled/quarantined
+upstream by the time this workflow first existed, months after the
+2026-03-19 compromise -- there was never a run, in this repo's entire
+history, where the compromised code actually executed. Also checked:
+`ci.yml` has no `secrets.*` references anywhere, no cloud credentials, no
+deploy/publish tokens -- only the default job-scoped `GITHUB_TOKEN`,
+which expires when each job ends -- so even a hypothetical successful run
+would have had a small blast radius. Conclusion: no credentials to
+rotate, no incident to disclose, nothing to report to GitHub or Aqua
+Security (the compromise itself is already public: CVE-2026-33634 /
+GHSA-69fq-xp46-6x23, already fixed upstream at v0.35.0). This was
+defensive hardening against a known upstream incident this repo was
+adjacent to via a broken pin, not a response to an actual breach here.
+
 ---
 
 ## Pattern across these bugs
