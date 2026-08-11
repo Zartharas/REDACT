@@ -1609,6 +1609,66 @@ all still start `logstash` exactly as before.
 
 ---
 
+## 20. CI's container-scan job was failing outright -- root cause was a real upstream supply-chain compromise, not a routine broken pin
+
+Found 2026-08-11, the user noticed the CI badge going red and asked
+about it directly rather than it being caught proactively -- worth
+saying plainly, since every other bug in this document was found by
+this project's own testing discipline, not by a user flagging a visibly
+broken status badge first.
+
+**Symptom:** `container-scan` failing at the very first step with
+`Unable to resolve action aquasecurity/trivy-action@0.28.0, unable to
+find version 0.28.0`. `fast-tests` and `redis-tests` were both green
+(confirmed by checking the actual job logs on GitHub, not assumed) --
+isolated entirely to the one step referencing this specific action.
+
+**Root cause, and it's more serious than a stale version pin:** on
+2026-03-19, `aquasecurity/trivy-action` suffered a real supply-chain
+compromise (CVE-2026-33634 / GHSA-69fq-xp46-6x23) -- attackers force-pushed
+a credential-stealing payload into every release tag except `v0.35.0`,
+which GitHub's immutable-releases protection (enabled 2026-03-04, just
+before that tag shipped) happened to keep intact. `0.28.0`, the tag this
+workflow was pinned to, was one of the poisoned tags -- it stopped
+resolving because it was pulled/quarantined after the compromise was
+discovered, not because of an unrelated versioning mistake. That's
+actually the fortunate outcome here: a resolvable-but-poisoned tag would
+have silently run a credential stealer against this repo's CI secrets on
+every push, with the scan still appearing to complete normally (per the
+public incident writeups on this compromise) -- the loud failure is what
+prevented that, not anything this project did to prevent it in advance.
+
+**Also caught and corrected in the same pass:** this file's own earlier
+comment (in `ci.yml` directly, added when the non-root Dockerfile
+paragraph was corrected elsewhere in this same repo-cleanup session)
+claimed `container-scan` "has since run against many real pushes to
+main" -- stated without actually checking the Actions tab. It was wrong;
+the job had been failing this whole time. Corrected in `ci.yml`'s own
+comment, and noted here as a reminder that "this probably still works"
+is exactly the kind of unverified claim this document's own discipline
+exists to catch, including when the claim is about CI itself.
+
+**Fixed:** the Trivy step is now pinned by its exact commit SHA
+(`57a97c7e7821a5776cebc9bb87c984fa69cba8f1`, the commit backing the one
+safe tag, `v0.35.0`) instead of a mutable tag name -- the standard
+supply-chain-hardening practice for third-party GitHub Actions, and
+specifically the one that would have prevented this exact class of
+incident (a tag getting silently repointed to something malicious)
+regardless of which tag had been chosen. `actions/checkout` bumped
+`v4` → `v7` and `actions/setup-python` bumped `v5` → `v6` in the same
+pass, clearing two "Node.js 20 is deprecated" warnings that showed up
+alongside the real failure (both were warnings, not failures, but no
+reason to leave them once the workflow file was already open for a fix).
+
+**Not yet re-confirmed live** -- this needs the next real push to `main`
+to show a green `container-scan` job on GitHub's actual runners, the
+same "syntax-checked here, confirmed there" bar every other CI/Docker
+change in this document is held to. `python3 -c "import yaml;
+yaml.safe_load(...)"` confirms the file parses as valid YAML, which is
+not the same thing as the workflow actually running clean.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same

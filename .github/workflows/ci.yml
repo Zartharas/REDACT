@@ -29,12 +29,21 @@ name: CI
 # than fail-the-build for now -- turning that into a hard gate on
 # CRITICAL/HIGH findings is a reasonable next step, but doing it in the
 # same change as introducing the scan would risk an unrelated, unreviewed
-# base-image CVE blocking every future push on day one. This has since
-# run against many real pushes to main over the course of this project's
-# development -- check the CI badge in README.md or the repo's Actions
-# tab for current pass/fail, since this environment still can't build
-# Docker images itself and hasn't reviewed individual Trivy findings run
-# by run.
+# base-image CVE blocking every future push on day one.
+#
+# CORRECTION, 2026-08-11 (Bug 20, BUGS_AND_FIXES.md): a prior version of
+# this comment claimed this job "has since run against many real pushes"
+# without checking -- wrong, and found the hard way. The job had actually
+# been failing outright ("Unable to resolve action
+# aquasecurity/trivy-action@0.28.0") because that tag was pulled/
+# quarantined after a real supply-chain compromise upstream (every
+# trivy-action release tag except v0.35.0 was poisoned with a
+# credential-stealing payload on 2026-03-19, CVE-2026-33634). Fixed here
+# by pinning the Trivy step to its exact commit SHA instead of a tag (see
+# that step's own comment for the full incident writeup) and by actually
+# checking the Actions tab this time instead of assuming. `fast-tests`
+# and `redis-tests` were never affected -- this was isolated to the one
+# step that referenced the compromised action.
 
 on:
   push:
@@ -47,8 +56,8 @@ jobs:
   fast-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install dependencies
@@ -71,8 +80,8 @@ jobs:
           --health-timeout 3s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install dependencies
@@ -88,11 +97,28 @@ jobs:
   container-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build redact-service image
         run: docker build -t redact-service:ci .
       - name: Scan image with Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        # Pinned by full commit SHA, not a tag -- found 2026-08-11 (Bug 20,
+        # BUGS_AND_FIXES.md) that CI had gone red on "Unable to resolve
+        # action aquasecurity/trivy-action@0.28.0, unable to find version
+        # 0.28.0." Root cause is a real supply-chain compromise, not a
+        # routine deprecation: on 2026-03-19, attackers force-pushed a
+        # credential-stealing payload into every trivy-action release tag
+        # except v0.35.0 (CVE-2026-33634 / GHSA-69fq-xp46-6x23) -- 0.28.0
+        # was one of the poisoned tags, later pulled/quarantined, which is
+        # why it stopped resolving rather than silently running malicious
+        # code. v0.35.0 is the one tag GitHub's immutable-releases
+        # protection (enabled 2026-03-04, just before that tag shipped)
+        # kept safe. Pinning by its exact commit SHA -- not the tag name --
+        # means this step can never silently start running a different,
+        # possibly-compromised commit if a tag is ever repointed again.
+        # Do not "helpfully" simplify this back to @v0.35.0 or any other
+        # tag without re-checking the trivy-action security advisories
+        # first.
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: redact-service:ci
           format: table
