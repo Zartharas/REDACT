@@ -1872,8 +1872,12 @@ real cluster" gap, not building out full chaos-engineering coverage.
 ## 22. Redis became a real master/2-replica/3-sentinel topology -- two disclosed client-side gaps, not yet tested against a live failover
 
 **Impact:** N/A (feature closure, not a defect in previously-shipped
-behavior). **Status:** Implemented and syntax/logic-checked; not yet
-confirmed against a live failover (no Docker daemon in this sandbox).
+behavior). **Status:** Sentinel-level failover confirmed live, 2026-08-11
+-- see Bug 23 for the fix this took and the confirmed run. Client-level
+behavior under live traffic (`queue_consumer.py`'s reconnect path,
+`logstash-queued`'s disclosed limitation reproducing as predicted) is
+the one piece of this item still unexercised -- see Bug 23's own closing
+paragraph.
 
 The user asked to work through ROADMAP.md's remaining "explicitly out of
 reach" items after the OpenSearch multi-node closure (Bug 21). Of the
@@ -1979,7 +1983,8 @@ document has been held to.
 HA is not actually HA if failover never completes) -- zero impact on
 anything shipped before this session, since Bug 22's Sentinel topology
 was brand new and had not yet been claimed working. **Status:** Verified
-fixed, 2026-08-11, live failover test on the user's machine.
+fixed, 2026-08-11 -- confirmed via a live failover on the user's machine
+(see addendum below for the completed run).
 
 **Found during the very first live failover test of Bug 22's new
 Redis Sentinel topology.** The user brought the cluster up, confirmed
@@ -2035,20 +2040,52 @@ a direct `REPLICAOF` command over an already-open connection, bypassing
 this startup-time command entirely. Only Sentinel's own long-lived,
 continuously-re-validated address tracking needed the fixed-IP fix.
 
-**Confirmed live, same session, after the fix:** re-running the exact
-same test -- bring the topology up, `docker kill redact-redis-master`,
-poll `sentinel get-master-addr-by-name` -- is the next step handed back
-to the user; this entry will be updated with the completed failover
-numbers (which replica got promoted, how long it took) once that comes
-back. Worth stating plainly in the meantime: this bug was found by
-actually running the failover this item exists to demonstrate, on the
-first attempt, not caught by any of the syntax/logic checks this project
-otherwise relies on before a live run (`docker-compose.yml` parsed as
-valid YAML the whole time; nothing about `resolve-hostnames yes` is
-itself invalid config, it's just wrong for this specific environment's
-DNS lifecycle) -- another entry in this document's own running argument
-that some classes of bug are only findable by triggering the actual
-failure mode, not by inspection.
+**Confirmed live, same session, after the fix.** Re-ran the exact same
+test against the fixed topology: bring the stack up, confirm
+`sentinel master redact-master` shows a healthy master with
+`num-slaves:2`, `docker kill redact-redis-master`, poll
+`get-master-addr-by-name`. This time it returned `172.28.0.241` --
+`redis-replica-1` -- a genuinely different address from the killed
+master's `172.28.0.240`, direct confirmation the promotion actually
+happened rather than the previous run's stuck state. `redis-sentinel-1`'s
+own log gives the complete, clean sequence: `+sdown master redact-master
+172.28.0.240 6379` -> `+new-epoch 1` -> `+vote-for-leader ...` ->
+`+config-update-from ...` -> `+switch-master redact-master 172.28.0.240
+6379 172.28.0.241 6379` -> the surviving replica (`172.28.0.242`)
+immediately reparented to follow the new master -> the old master,
+still down, correctly marked `+sdown slave` once Sentinel tried to
+reach it as a demoted replica too. From `+sdown` to `+switch-master`
+completing was under one second (`13:43:22.803` to `13:43:23.355`) --
+`down-after-milliseconds` (5000ms) governs how long Sentinel waits
+before DECLARING the master down in the first place, not how long the
+subsequent election/promotion takes once it has; the whole sequence
+finished well inside the 10s `failover-timeout`. **This confirms the
+core claim ROADMAP item 12's Redis-HA piece exists to demonstrate --
+Sentinel genuinely promotes a replica on real master failure, using this
+project's own topology, not just on paper.** Worth stating plainly: this
+bug was found by actually running the failover this item exists to
+demonstrate, on the first attempt, not caught by any of the syntax/logic
+checks this project otherwise relies on before a live run
+(`docker-compose.yml` parsed as valid YAML the whole time; nothing about
+`resolve-hostnames yes` was itself invalid config, it was just wrong for
+this specific environment's DNS lifecycle) -- another entry in this
+document's own running argument that some classes of bug are only
+findable by triggering the actual failure mode, not by inspection.
+
+**Not yet exercised, disclosed rather than implied covered:** this test
+confirmed Sentinel's own promotion mechanics, at the Redis level, with
+no client traffic in flight. It did NOT yet confirm the two client-side
+pieces Bug 22 added on top of this: whether `queue_consumer.py`'s
+`REDIS_SENTINELS` connection-error/retry loop actually resumes cleanly
+against the newly promoted master while events are actively being
+processed (rather than just parsing correctly, which is all that's been
+checked so far), and whether `logstash-queued`'s disclosed
+non-Sentinel-aware limitation reproduces exactly as predicted (keeps
+retrying the dead master's fixed IP rather than failing over). A
+reasonable follow-up -- run `run_replica_and_queue_test.sh`'s Part B and
+kill `redact-redis-master` partway through -- not required to call this
+specific bug (Sentinel's own failover mechanics) closed, since that's
+what this entry was scoped to.
 
 ---
 
