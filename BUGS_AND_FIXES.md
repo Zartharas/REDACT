@@ -3150,3 +3150,92 @@ afterward: 86 passed, 2 skipped, unchanged from before this fix (this
 sandbox already has both optional dependencies installed, so this fix
 is invisible here -- its effect is only visible in the fresh
 environment that found the bug in the first place).
+
+---
+
+## Bug 22: required KAFKA_BROKERS variable broke every docker compose command in the file, plus two related script gaps (2026-08-11)
+
+Found live by the user, not caught in this sandbox (no Docker daemon
+here to actually run any `docker compose` command against). Both
+`./run_floci_kafka_test.sh` and `./run_floci_elbv2_test.sh` failed
+immediately:
+
+```
+error while interpolating services.queue-consumer-kafka.environment.[]:
+required variable KAFKA_BROKERS is missing a value: set to a real
+broker address, e.g. via run_floci_kafka_test.sh
+```
+
+**The important part: `run_floci_elbv2_test.sh` failed too, and that
+script has nothing to do with Kafka at all.** That's the real signal
+this wasn't a Kafka-test-specific problem.
+
+**Root cause:** `docker-compose.yml`'s `logstash-kafka`/
+`queue-consumer-kafka` services (Engineering upgrade 7) used
+`${KAFKA_BROKERS:?set to a real broker address, ...}` -- the "required,
+error if unset" interpolation syntax. Docker Compose interpolates and
+validates required variables for the WHOLE compose file up front,
+before filtering by `--profile` or by which service names were actually
+requested on the command line -- confirmed via Compose's own documented
+behavior and community-reported issues, not assumed. A service gated
+behind `profiles: ["kafka-queued"]` that never gets started in a given
+invocation still has its `:?` variables validated, and a missing one
+fails the ENTIRE `docker compose` invocation, not just that service.
+Every other required variable in this file (`REDACT_PSEUDO_KEY`,
+`REDACT_SERVICE_API_KEY`, etc.) is required by `redact-service`, which
+has no `profiles:` key and therefore always starts -- so requiring
+those unconditionally was always correct. `KAFKA_BROKERS` was the first
+required variable belonging ONLY to a profile-gated, opt-in service,
+and that combination is what broke every unrelated invocation.
+
+**Fixed:** `KAFKA_BROKERS` changed to `${KAFKA_BROKERS:-}` (defaults to
+empty rather than erroring). Safe specifically because both Kafka
+services are already profile-gated and only ever started by
+`run_floci_kafka_test.sh`, which exports a real `KAFKA_BROKERS` before
+invoking `docker compose --profile kafka-queued up` -- an empty value
+only reaches these containers if someone starts them directly outside
+that script, in which case the Kafka client fails to connect at runtime
+(a normal, visible error) instead of silently succeeding with a bad
+value.
+
+**Two more real gaps found and fixed while investigating this, neither
+previously caught because neither script had actually been run
+before:**
+1. Neither `run_floci_kafka_test.sh` nor `run_floci_elbv2_test.sh`
+   bootstrapped the 5 required `.env` keys (`REDACT_PSEUDO_KEY`,
+   `REDACT_AUDIT_KEY`, `REDACT_SERVICE_API_KEY`,
+   `REDACT_FINGERPRINT_KEY`, `REDACT_TOKEN_KEY`) the way
+   `run_1m_load_test.sh`/`run_5m_load_test.sh` already do -- both would
+   have hit a second, legitimate required-variable error on
+   `redact-service` itself the moment the `KAFKA_BROKERS` bug above was
+   fixed. Fixed by adding the identical bootstrap block both other
+   scripts already use.
+2. `run_floci_elbv2_test.sh`'s Part 4 `curl` call referenced
+   `${REDACT_API_KEY:-}` -- not a real variable anywhere in this
+   project (the actual name, used everywhere else including this same
+   script's own comments, is `REDACT_SERVICE_API_KEY`). Harmless in
+   practice only because `/health` is the one route exempt from the
+   API-key check (`src/service.py`'s `_require_api_key`), but a script
+   meant to demonstrate the real path should use the real variable name
+   regardless. Fixed.
+
+**Verified, not just argued:** confirmed via `yaml.safe_load` that
+`docker-compose.yml` still parses correctly after the fix, `bash -n` on
+both scripts, and the full pytest suite still passing (86 passed, 2
+skipped, unaffected -- this bug was purely in Compose interpolation,
+not Python code). **Still not run against a live Docker daemon in this
+sandbox** -- the user's next run of either script is the actual
+confirmation this fix works, same disclosed limitation as every other
+Docker-dependent claim in this project.
+
+**Process gap, worth stating plainly:** neither of these scripts had
+actually been executed anywhere before this bug was found -- they were
+syntax-checked (`bash -n`) and had every `aws`/`docker` command's
+parameters checked against real documented syntax, which is real
+verification, but is not the same as running the script and watching it
+fail. `bash -n` cannot catch a Compose-level interpolation-ordering
+interaction like this one; only actually running `docker compose`
+against the real file can. This is the same category of gap Bug 21
+(the ff3 import) represents -- verification that's real but doesn't
+cover the specific failure mode that only shows up in a genuinely fresh
+environment or a genuine execution attempt, not a rehearsed one.

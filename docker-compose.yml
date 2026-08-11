@@ -581,13 +581,38 @@ services:
   # has real broker-discovery/leader-election awareness the Redis output
   # plugin doesn't).
   #
-  # KAFKA_BROKERS is intentionally NOT given a hardcoded default the way
-  # REDIS_HOST is above -- unlike Redis, this project has no
-  # self-hosted Kafka-compatible broker of its own in this compose file.
-  # run_floci_kafka_test.sh provisions one via floci's MSK emulation and
-  # exports KAFKA_BROKERS with the resulting broker address before
-  # bringing these two services up. Point it at a real MSK/Kafka cluster
-  # the same way for a genuine production deployment.
+  # KAFKA_BROKERS has no self-hosted default the way REDIS_HOST does --
+  # unlike Redis, this project has no self-hosted Kafka-compatible broker
+  # of its own in this compose file. run_floci_kafka_test.sh provisions
+  # one via floci's MSK emulation and exports KAFKA_BROKERS with the
+  # resulting broker address before bringing these two services up.
+  # Point it at a real MSK/Kafka cluster the same way for a genuine
+  # production deployment.
+  #
+  # REAL BUG, found by the user and fixed 2026-08-11 (Bug 22,
+  # BUGS_AND_FIXES.md): this used to be
+  # `${KAFKA_BROKERS:?set to a real broker address, ...}` -- the
+  # "required, error if unset" interpolation syntax. That broke every
+  # `docker compose` command in this ENTIRE file, not just Kafka-related
+  # ones -- confirmed live: `./run_floci_kafka_test.sh` failed on its own
+  # first step ("bring up floci"), and `./run_floci_elbv2_test.sh` (which
+  # has nothing to do with Kafka at all) failed the same way. Root cause:
+  # Compose interpolates and validates required variables for the WHOLE
+  # compose file up front, before filtering by --profile or by which
+  # service names were actually requested on the command line -- a
+  # service gated behind `profiles: ["kafka-queued"]` that never gets
+  # started this run still has its `:?` variables validated, and a
+  # missing one fails the ENTIRE invocation, not just that service.
+  # Fixed by dropping the hard requirement (`${KAFKA_BROKERS:-}`,
+  # defaulting to empty) -- safe here specifically because both
+  # `logstash-kafka` and `queue-consumer-kafka` are already profile-gated
+  # (`kafka-queued`, opt-in only) and only ever started by
+  # run_floci_kafka_test.sh, which exports a real KAFKA_BROKERS before
+  # invoking `docker compose --profile kafka-queued up` -- an empty value
+  # only reaches these two containers if someone starts them directly
+  # without going through that script, in which case the Kafka client
+  # inside fails to connect at runtime (a normal, visible connection
+  # error) rather than silently succeeding with a bad value.
   #
   # profiles: ["kafka-queued"] -- opt-in, same pattern as "queued" above,
   # and mutually exclusive with it and with the default profile against
@@ -601,7 +626,7 @@ services:
       context: ./logstash
       dockerfile: Dockerfile
     environment:
-      - KAFKA_BROKERS=${KAFKA_BROKERS:?set to a real broker address, e.g. via run_floci_kafka_test.sh}
+      - KAFKA_BROKERS=${KAFKA_BROKERS:-}
       - KAFKA_TOPIC=${KAFKA_TOPIC:-redact-raw-events}
     volumes:
       - ./data/raw:/var/log/security:ro
@@ -621,7 +646,7 @@ services:
       opensearch-node1:
         condition: service_healthy
     environment:
-      - KAFKA_BROKERS=${KAFKA_BROKERS:?set to a real broker address, e.g. via run_floci_kafka_test.sh}
+      - KAFKA_BROKERS=${KAFKA_BROKERS:-}
       - KAFKA_TOPIC=${KAFKA_TOPIC:-redact-raw-events}
       - KAFKA_GROUP_ID=${KAFKA_GROUP_ID:-redact-queue-consumer}
       - REDACT_SERVICE_URL=http://redact-lb:8080/anonymize

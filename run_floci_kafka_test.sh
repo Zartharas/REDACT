@@ -16,6 +16,26 @@
 # this project has gone through.
 set -euo pipefail
 
+# Real gap found and fixed 2026-08-11 (Bug 22, BUGS_AND_FIXES.md), same
+# missing step run_1m_load_test.sh/run_5m_load_test.sh already have:
+# redact-service's docker-compose.yml block requires 5 keys
+# (REDACT_PSEUDO_KEY/REDACT_AUDIT_KEY/REDACT_SERVICE_API_KEY/
+# REDACT_FINGERPRINT_KEY/REDACT_TOKEN_KEY) via `${VAR:?...}` -- without
+# them already in .env, `docker compose up` for redact-service (needed
+# later in this script) fails with its own required-variable error. This
+# script never bootstrapped them; fixed here, only adding keys that
+# aren't already present, never touching existing values.
+touch .env
+for key in REDACT_PSEUDO_KEY REDACT_AUDIT_KEY REDACT_SERVICE_API_KEY REDACT_FINGERPRINT_KEY REDACT_TOKEN_KEY; do
+  if ! grep -q "^${key}=" .env; then
+    echo "${key}=$(openssl rand -hex 32)" >> .env
+    echo "Added ${key} to .env"
+  fi
+done
+set -a
+source .env
+set +a
+
 echo "=== Part 1: bring up floci ==="
 docker compose --profile cloud-sim up -d floci
 

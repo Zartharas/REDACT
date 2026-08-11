@@ -22,6 +22,30 @@
 # of infrastructure in this project has gone through.
 set -euo pipefail
 
+# Real gap found and fixed 2026-08-11 (Bug 22, BUGS_AND_FIXES.md), same
+# missing step run_1m_load_test.sh/run_5m_load_test.sh already have:
+# redact-service's docker-compose.yml block requires 5 keys
+# (REDACT_PSEUDO_KEY/REDACT_AUDIT_KEY/REDACT_SERVICE_API_KEY/
+# REDACT_FINGERPRINT_KEY/REDACT_TOKEN_KEY) via `${VAR:?...}` -- without
+# them already in .env, the `docker compose up ... redact-service` call
+# two lines below fails with its own required-variable error. This
+# script never bootstrapped them; fixed here, only adding keys that
+# aren't already present, never touching existing values. Also sources
+# .env into this shell's own environment (Compose reads .env on its own
+# for interpolation, but this script's own `curl` call in Part 4 below
+# needs REDACT_SERVICE_API_KEY directly too -- see that section's own
+# fix for the variable-name bug this also caught).
+touch .env
+for key in REDACT_PSEUDO_KEY REDACT_AUDIT_KEY REDACT_SERVICE_API_KEY REDACT_FINGERPRINT_KEY REDACT_TOKEN_KEY; do
+  if ! grep -q "^${key}=" .env; then
+    echo "${key}=$(openssl rand -hex 32)" >> .env
+    echo "Added ${key} to .env"
+  fi
+done
+set -a
+source .env
+set +a
+
 echo "=== Part 1: bring up floci and a scaled redact-service ==="
 docker compose --profile cloud-sim up -d floci
 docker compose up -d --scale redact-service=3 redact-service
@@ -98,7 +122,17 @@ aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
 echo ""
 echo "=== Part 4: data-plane test -- does the ALB's DNS name actually proxy real traffic? ==="
 echo "Attempting a real HTTP request through the ALB endpoint..."
-if curl -sf -m 10 "http://${ALB_DNS}/health" -H "X-Redact-Api-Key: ${REDACT_API_KEY:-}" ; then
+# REDACT_API_KEY -> REDACT_SERVICE_API_KEY: fixed a variable-name bug
+# found alongside the .env bootstrap fix above -- this project's actual
+# env var (src/service.py, docker-compose.yml, every other script) is
+# REDACT_SERVICE_API_KEY; REDACT_API_KEY was never defined anywhere,
+# so this always sent an empty header. Harmless in practice specifically
+# because /health is the one route exempt from the API-key check
+# (src/service.py's _require_api_key), but wrong is still wrong, and a
+# script that's supposed to demonstrate the real auth-bearing path
+# should use the real variable name regardless of whether this one
+# route happens to not need it.
+if curl -sf -m 10 "http://${ALB_DNS}/health" -H "X-Redact-Api-Key: ${REDACT_SERVICE_API_KEY:-}" ; then
     echo ""
     echo "RESULT: floci's ELB v2 DOES proxy real traffic -- full data-plane fidelity confirmed."
 else
