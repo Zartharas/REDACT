@@ -3385,3 +3385,88 @@ worth working around.
 No code changes from this finding -- a clean negative result,
 confirming the disclosed uncertainty in "Engineering upgrade 6" rather
 than contradicting it.
+
+---
+
+## Bug 24: stale same-day OpenSearch data + a naive poll-stability check made the Bug 23 rerun look worse, not better (2026-08-11)
+
+The user re-ran `./run_floci_kafka_test.sh` after Bug 23's fix (the
+`doc_id_base` idempotency change), doing everything asked --
+`docker compose --profile kafka-queued down` /
+`docker compose --profile cloud-sim down`, then `git pull` before
+re-running. Result: reconciliation FAILED again, this time with **77,812
+documents for a 20,000-line corpus -- MORE than the pre-fix run's
+60,000, not less.**
+
+**That direction of change is the important diagnostic signal.** A fix
+that makes writes more idempotent cannot legitimately raise a document
+count above what it was before the fix existed -- if it had, that would
+mean the fix made things worse, which would be a real, serious problem
+worth taking very seriously. It didn't: the actual cause was two
+pre-existing gaps in this test script itself, neither related to
+`doc_id_base`'s correctness.
+
+**Gap 1: no clean-slate teardown, and `docker compose down` (without
+`-v`) does not delete OpenSearch's data.** `security-logs-anonymized-*`
+indices are DATE-suffixed at day granularity
+(`redact-pipeline-kafka.conf`/`queue_consumer.py`'s own `date_suffix`),
+so a second run on the same calendar day writes into the exact same
+index the first run left behind. The user's teardown commands (as
+instructed) removed containers, but OpenSearch's named volumes
+(`opensearch-data1/2/3`) persisted -- the FIRST run's 60,000 documents
+(minted before the Bug 23 fix existed, all with independent random
+UUIDs) were still sitting in that index when the second run started.
+77,812 total is consistent with 60,000 stale + this run's own
+contribution, not a fresh, comparable count at all.
+`validation/load_test/run_load_test.sh` already solved this exact
+problem correctly (`docker compose down -v`, its own "Tearing down any
+previous stack (clean slate)" step) -- `run_floci_kafka_test.sh` never
+had the equivalent step, a real gap introduced when that script was
+first written (Task #46) and not caught until this live rerun exposed
+it.
+
+**Gap 2, compounding it: the poll loop broke on a single `TOTAL >= N`
+check, not real stability.** Because the leftover 60,000 already
+exceeded `N=20000` before this run's own Logstash/queue-consumer had
+processed anything, the very first poll iteration likely satisfied
+`TOTAL >= N` and broke immediately -- the live output shows only ONE
+poll line before reconciliation ran, consistent with this. That means
+this run's OWN processing may not have even finished before
+reconciliation was checked, on top of measuring against already-
+contaminated data.
+`validation/load_test/run_load_test.sh`'s poll loop already solved this
+correctly too (3 consecutive unchanged reads, with `TOTAL > 0` required
+so an all-zero reading never counts as "stable," originally fixed for a
+different reason in that script -- see Bug 13) -- `run_floci_kafka_test.sh`
+reinvented a materially weaker version of an already-solved problem
+instead of reusing it.
+
+**Both fixed, mirroring `run_load_test.sh`'s proven patterns exactly
+rather than inventing new ones:**
+- `run_floci_kafka_test.sh` and `run_floci_elbv2_test.sh` both now run
+  `docker compose --profile ... down -v` as their very first action,
+  before anything else, guaranteeing a genuinely clean slate every run
+  (OpenSearch volumes included) regardless of what the previous
+  invocation left behind or whether the user remembered to pass `-v`
+  themselves.
+- `run_floci_kafka_test.sh`'s poll loop now requires 3 consecutive
+  identical, non-zero `TOTAL` readings before declaring ingestion
+  finished, identical logic to `run_load_test.sh`'s own.
+
+**Not yet re-confirmed against a live rerun** -- this sandbox has no
+Docker daemon to run either script. The user's next `./run_floci_kafka_test.sh`
+is the actual test of whether Bug 23's `doc_id_base` fix produces a
+clean 20,000/20,000 reconciliation once measured against a genuinely
+fresh index and a real completion signal, which this rerun -- through no
+fault of the underlying fix -- never actually tested.
+
+**Process note, stated plainly:** this is the second time a script
+written in this project (Task #46, `run_floci_kafka_test.sh`) reinvented
+logic that an earlier, already-debugged script in the same project
+(`run_load_test.sh`) had already solved correctly, instead of reusing
+it -- Bug 22's missing `.env` bootstrap was the first instance of this
+same pattern. Worth naming directly: when writing a new script that
+does something structurally similar to an existing, battle-tested one
+in this repo, the existing one's solved problems should be checked and
+reused deliberately, not re-derived from scratch and re-discovered the
+hard way a second time.

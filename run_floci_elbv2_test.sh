@@ -46,6 +46,21 @@ set -a
 source .env
 set +a
 
+# Clean-slate teardown, added 2026-08-11 alongside the identical fix in
+# run_floci_kafka_test.sh (Bug 24, BUGS_AND_FIXES.md) -- that script's
+# own live rerun found stale, same-day OpenSearch data and leftover
+# floci resources (VPCs/target groups/ALBs from a prior run) distorting
+# results. This test doesn't reconcile a document count the way the
+# Kafka test does, so the risk here is lower, but leftover floci
+# VPC/subnet/ALB/target-group resources from a prior run could still
+# collide with or shadow this run's own (a stale target group with the
+# same name, an old ALB DNS entry, etc.) -- cheap to avoid by tearing
+# down first, matching validation/load_test/run_load_test.sh's own
+# proven "clean slate" convention rather than assuming a fresh floci
+# container has no memory of anything.
+echo "=== Part 0: tearing down any previous stack for a clean slate (docker compose down -v) ==="
+docker compose --profile cloud-sim down -v || true
+
 echo "=== Part 1: bring up floci and a scaled redact-service ==="
 docker compose --profile cloud-sim up -d floci
 docker compose up -d --scale redact-service=3 redact-service

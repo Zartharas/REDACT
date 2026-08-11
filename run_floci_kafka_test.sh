@@ -36,6 +36,27 @@ set -a
 source .env
 set +a
 
+# Real bug, found 2026-08-11 from a live rerun (Bug 24, BUGS_AND_FIXES.md):
+# a second consecutive run reported 77,812 documents for a 20,000-line
+# corpus -- HIGHER than the FIRST run's already-wrong 60,000, which ruled
+# out the Bug 23 doc_id_base fix as the cause (a fix that makes writes
+# MORE idempotent cannot legitimately produce a HIGHER count than before
+# it existed). Root cause: this script never did a clean-slate teardown
+# the way validation/load_test/run_load_test.sh already does (see that
+# script's own "Tearing down any previous stack (clean slate)" step) --
+# `docker compose down` (without `-v`) does NOT delete OpenSearch's named
+# volumes, and security-logs-anonymized-* indices are DATE-suffixed
+# (day granularity, redact-pipeline-kafka.conf / queue_consumer.py's own
+# date_suffix), so a second run on the same calendar day writes into the
+# EXACT SAME index as the first run's leftover 60,000 documents --
+# 60,000 (stale, from before the Bug 23 fix existed) + this run's own
+# contribution landed at 77,812 total, not a fresh, comparable count.
+# Fixed by tearing down (INCLUDING volumes) before this script does
+# anything else, mirroring run_load_test.sh's own proven pattern exactly
+# rather than reinventing a different, weaker approach.
+echo "=== Part 0: tearing down any previous stack for a clean slate (docker compose down -v) ==="
+docker compose --profile kafka-queued --profile cloud-sim down -v || true
+
 echo "=== Part 1: bring up floci ==="
 docker compose --profile cloud-sim up -d floci
 
@@ -109,12 +130,34 @@ docker compose up -d --build redact-service redact-lb \
 docker compose --profile kafka-queued up -d --build logstash-kafka queue-consumer-kafka
 
 echo "Waiting for the queue to drain (polling every 10s, up to 10 minutes)..."
+# Real bug, found and fixed alongside the clean-slate teardown above
+# (Bug 24, BUGS_AND_FIXES.md): this loop used to break the instant
+# TOTAL >= N on a SINGLE poll, a single-shot check, not real stability.
+# validation/load_test/run_load_test.sh already solved this exact
+# problem correctly (3 consecutive unchanged polls, with TOTAL > 0
+# required so an all-zero reading never counts as "stable") -- reused
+# that proven logic here instead of the weaker one-shot check this
+# script originally had, which (compounded by the stale-data bug above)
+# meant a live run could report "done" before this run's own processing
+# had actually finished, or without ever detecting a stalled pipeline
+# separately from a genuinely-slow-but-healthy one.
+PREV_TOTAL=-1
+STABLE_COUNT=0
 for i in $(seq 1 60); do
     ANON_COUNT=$(curl -s "http://localhost:9200/security-logs-anonymized-*/_count" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count', 0))" 2>/dev/null || echo 0)
     QUAR_COUNT=$(curl -s "http://localhost:9200/security-logs-quarantine-*/_count" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count', 0))" 2>/dev/null || echo 0)
     TOTAL=$((ANON_COUNT + QUAR_COUNT))
     echo "  processed so far: $TOTAL / $N (anonymized=$ANON_COUNT, quarantine=$QUAR_COUNT)"
-    if [ "$TOTAL" -ge "$N" ]; then break; fi
+    if [ "$TOTAL" -eq "$PREV_TOTAL" ] && [ "$TOTAL" -gt 0 ]; then
+        STABLE_COUNT=$((STABLE_COUNT + 1))
+    else
+        STABLE_COUNT=0
+    fi
+    PREV_TOTAL=$TOTAL
+    if [ "$STABLE_COUNT" -ge 3 ]; then
+        echo "  total stable for 3 consecutive polls (30s), assuming ingestion finished."
+        break
+    fi
     sleep 10
 done
 
