@@ -220,7 +220,7 @@ def index_document(index: str, doc_id: str, body: dict) -> None:
     )
 
 
-def process_event(raw_event: dict) -> None:
+def process_event(raw_event: dict, doc_id_base: str | None = None) -> None:
     """One popped queue item -> one redact-service call -> N OpenSearch
     writes (one anonymized-or-quarantine doc, plus one per audit event).
     Field/index names deliberately match redact-pipeline.conf's output
@@ -237,7 +237,41 @@ def process_event(raw_event: dict) -> None:
     through the queue in the first place (see that file's own comment on
     why). A dashboard or downstream consumer built against the
     synchronous path's exact document shape may need updating to handle
-    documents from this path too."""
+    documents from this path too.
+
+    doc_id_base, added 2026-08-11 (Bug 23, BUGS_AND_FIXES.md): a real,
+    live 3x document-count over-count was found running the Kafka path
+    against floci's Redpanda broker (60,000 OpenSearch documents for a
+    20,000-line corpus, ~89% audit fan-out ratio unchanged from every
+    prior run -- meaning the DETECTION logic was never the problem,
+    something upstream really did call process_event() roughly 3 times
+    per raw line). Root cause not fully isolated in this sandbox (no
+    Docker daemon here to inspect a live Kafka consumer group's own
+    rebalance/commit behavior directly) -- the most likely mechanism,
+    based on well-documented Kafka client behavior, is a consumer-group
+    rebalance during a slow processing batch causing already-processed-
+    but-not-yet-committed messages to be redelivered; a producer-side
+    retry duplicating publishes is a second plausible mechanism. EITHER
+    WAY, this parameter closes the visible symptom at the point it
+    actually matters: before this fix, EVERY call to process_event()
+    minted a fresh uuid4() regardless of whether it was a first delivery
+    or a redelivery of the exact same underlying message, so re-
+    processing (from whatever layer) always produced a NEW OpenSearch
+    document instead of overwriting the existing one -- turning Kafka's
+    normal, expected at-least-once delivery guarantee directly into
+    duplicate data. When the caller supplies a doc_id_base that's stable
+    per source message (see _run_kafka_consumer below:
+    f"{topic}-{partition}-{offset}", a real Kafka message's own natural
+    unique identity), redelivering that same message now overwrites the
+    same OpenSearch document instead of creating a new one -- the
+    textbook correct way to get effectively-once writes on top of an
+    at-least-once source, needed regardless of which specific mechanism
+    caused THIS particular over-count. Defaults to None (the original
+    behavior, a fresh uuid4() per call) for the Redis/BLPOP path, which
+    has no equivalent stable per-message identifier to offer -- BLPOP
+    doesn't expose anything like a Kafka offset, so this fix is
+    Kafka-path-specific, not silently backported to a path where it
+    can't actually be implemented the same way."""
     text = raw_event.get("message")
     log_type = raw_event.get("log_type")
     if not text:
@@ -257,7 +291,7 @@ def process_event(raw_event: dict) -> None:
         # Fail closed, same principle as redact-pipeline.conf's
         # _httprequestfailure branch: unavailable/errored detection means
         # quarantine, never a silent pass-through of un-anonymized text.
-        doc_id = str(uuid.uuid4())
+        doc_id = doc_id_base if doc_id_base else str(uuid.uuid4())
         index_document(
             f"security-logs-quarantine-{date_suffix}", doc_id,
             {
@@ -268,7 +302,7 @@ def process_event(raw_event: dict) -> None:
         )
         return
 
-    doc_id = str(uuid.uuid4())
+    doc_id = doc_id_base if doc_id_base else str(uuid.uuid4())
     index_document(
         f"security-logs-anonymized-{date_suffix}", doc_id,
         {
@@ -278,17 +312,22 @@ def process_event(raw_event: dict) -> None:
         },
     )
 
-    # Audit fan-out: one document per audit event, each with its OWN
-    # random UUID -- NOT derived from the audit event's own content
-    # (authentication_tag) and NOT shared with the parent doc_id above.
-    # This is exactly Bug 15's fix in redact-pipeline.conf (see that
-    # file's fifth-bug comment): a content-derived audit doc_id collides
-    # under real traffic when two distinct audit events share identical
-    # field content within the same wall-clock second -- a random UUID
-    # per audit event, generated fresh here, doesn't have that failure
-    # mode regardless of throughput.
-    for audit_event in result.get("audit_events", []):
-        audit_doc_id = str(uuid.uuid4())
+    # Audit fan-out: one document per audit event. Each gets its OWN
+    # independent identity -- NOT derived from the audit event's own
+    # content (authentication_tag) and NOT the same value as the parent
+    # doc_id above -- this is exactly Bug 15's fix in redact-pipeline.conf
+    # (see that file's fifth-bug comment): a content-derived audit doc_id
+    # collides under real traffic when two distinct audit events share
+    # identical field content within the same wall-clock second. When
+    # doc_id_base is set, each audit event's id is
+    # f"{doc_id_base}-audit-{i}" -- stable across redelivery of the SAME
+    # source message (so a Kafka redelivery still overwrites rather than
+    # duplicates), but still independent per audit event WITHIN one
+    # message (index i), preserving Bug 15's guarantee. Falls back to a
+    # fresh uuid4() per audit event when doc_id_base is unset, identical
+    # to the original behavior.
+    for i, audit_event in enumerate(result.get("audit_events", [])):
+        audit_doc_id = f"{doc_id_base}-audit-{i}" if doc_id_base else str(uuid.uuid4())
         index_document(
             f"redact-audit-trail-{month_suffix}", audit_doc_id,
             {"audit_event": audit_event, "log_type": log_type},
@@ -316,6 +355,38 @@ def _run_kafka_consumer():
         auto_offset_reset="earliest",
         value_deserializer=lambda v: v.decode("utf-8"),
         consumer_timeout_ms=BLPOP_TIMEOUT_SECONDS * 1000,
+        # max_poll_records, added 2026-08-11 alongside the doc_id_base fix
+        # above (Bug 23, BUGS_AND_FIXES.md) -- a probable CONTRIBUTING
+        # cause of the live 3x over-processing found running this against
+        # floci's Redpanda broker, not confirmed as the sole cause (this
+        # sandbox has no Docker daemon to inspect the actual rebalance/
+        # commit sequence that occurred). kafka-python's default is 500:
+        # one `poll()` cycle can hand back up to 500 messages, which this
+        # loop then processes ONE AT A TIME with a real, synchronous
+        # redact-service HTTP call each -- no further `poll()` (and
+        # therefore no progress against `max_poll_interval_ms`, the
+        # "you must call poll() again within this time or the group
+        # coordinator presumes you're dead and rebalances your
+        # partitions away" timer every real Kafka client enforces) happens
+        # until that entire batch of up to 500 is done. A slow enough
+        # batch under real load (multiple containers/builds competing for
+        # this same machine's CPU, as Part 3 of run_floci_kafka_test.sh
+        # does) can plausibly exceed that window mid-batch, causing
+        # already-processed-but-not-yet-committed messages in that batch
+        # to be reassigned and reprocessed once the group rebalances --
+        # the standard, well-documented failure shape for any synchronous,
+        # one-at-a-time consumer loop with a large poll batch size, not
+        # specific to this project. Set low (10) so each poll/heartbeat
+        # cycle only has to clear a small amount of processing before the
+        # next `poll()` call renews this consumer's group membership --
+        # trades a small amount of per-poll overhead for a much smaller
+        # window in which a slow batch could ever threaten the group's
+        # rejoin timer. This is a mitigation for the most likely
+        # mechanism, not a confirmed fix -- the doc_id_base change above
+        # is what actually closes the visible symptom (duplicate
+        # documents) regardless of whether this specific mechanism turns
+        # out to be the true cause or not.
+        max_poll_records=10,
     )
     print(
         f"queue_consumer: polling topic '{KAFKA_TOPIC}' via Kafka brokers "
@@ -330,6 +401,16 @@ def _run_kafka_consumer():
             # BLPOP's own timeout-then-loop-again behavior in the Redis
             # path rather than blocking forever.
             for message in consumer:
+                # Stable per-message identity (Bug 23, BUGS_AND_FIXES.md) --
+                # a Kafka message's own (topic, partition, offset) triple is
+                # unique and stable across any redelivery of that exact
+                # message, unlike a freshly-minted uuid4() per
+                # process_event() call. Passing this through makes a
+                # redelivered message overwrite its own prior OpenSearch
+                # document instead of creating a new one -- see
+                # process_event()'s own doc_id_base docstring for the full
+                # reasoning and the live over-count this closes.
+                doc_id_base = f"{message.topic}-{message.partition}-{message.offset}"
                 try:
                     event = json.loads(message.value)
                 except json.JSONDecodeError as exc:
@@ -340,7 +421,7 @@ def _run_kafka_consumer():
                                         # forever on redelivery.
                     continue
                 try:
-                    process_event(event)
+                    process_event(event, doc_id_base=doc_id_base)
                 except Exception as exc:  # noqa: BLE001 -- see module-level
                     # while-loop's identical broad catch for the Redis path;
                     # same reasoning applies here. Deliberately does NOT

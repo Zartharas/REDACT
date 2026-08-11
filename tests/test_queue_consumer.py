@@ -138,6 +138,94 @@ def test_service_failure_quarantines_original_text_not_silently_dropped(exc_fact
     assert _is_valid_uuid4(doc_id)
 
 
+def test_doc_id_base_makes_reprocessing_idempotent():
+    """Bug 23 (BUGS_AND_FIXES.md): a live run against floci's Redpanda
+    broker found a real 3x document over-count (60,000 OpenSearch docs
+    for a 20,000-line corpus) -- something redelivered/reprocessed
+    roughly every message about 3 times. Regardless of which layer
+    caused that, the fix is that redelivery of the SAME source message
+    (same doc_id_base) must overwrite the same OpenSearch document, not
+    create a new one. This test confirms that directly: calling
+    process_event() twice with the identical doc_id_base for the exact
+    same underlying event must produce the exact same doc_id both times,
+    not two different (implicitly duplicate) documents."""
+    fake_result = {
+        "anonymized": "user [REDACTED] logged in",
+        "span_count": 1,
+        "audit_events": [
+            {"field_type": "PERSON", "method": "redact", "policy_version": 1,
+             "original_value_fingerprint": "abc123", "timestamp": 1234567890,
+             "authentication_tag": "tag1"},
+        ],
+    }
+    calls = []
+    with patch.object(queue_consumer, "call_redact_service", return_value=fake_result), \
+         patch.object(queue_consumer, "index_document", side_effect=lambda i, d, b: calls.append((i, d, b))):
+        # Simulates the exact scenario found live: the same Kafka message
+        # (same topic-partition-offset) gets delivered to process_event()
+        # twice.
+        queue_consumer.process_event(
+            {"message": "user jsmith logged in", "log_type": "syslog"},
+            doc_id_base="redact-raw-events-0-42",
+        )
+        queue_consumer.process_event(
+            {"message": "user jsmith logged in", "log_type": "syslog"},
+            doc_id_base="redact-raw-events-0-42",
+        )
+
+    anon_doc_ids = {c[1] for c in calls if c[0].startswith("security-logs-anonymized-")}
+    audit_doc_ids = {c[1] for c in calls if c[0].startswith("redact-audit-trail-")}
+    # A set collapses duplicates -- if both calls produced the SAME doc_id
+    # (the fix), there's exactly one distinct value despite 2 calls/4
+    # total index_document() invocations across both calls.
+    assert anon_doc_ids == {"redact-raw-events-0-42"}
+    assert audit_doc_ids == {"redact-raw-events-0-42-audit-0"}
+
+
+def test_doc_id_base_different_messages_still_get_different_ids():
+    """The other half of the same guarantee: doc_id_base must NOT collapse
+    genuinely DIFFERENT messages into the same document -- only actual
+    redelivery of the identical message (same topic-partition-offset)
+    should share an id."""
+    fake_result = {"anonymized": "x", "span_count": 0, "audit_events": []}
+    calls = []
+    with patch.object(queue_consumer, "call_redact_service", return_value=fake_result), \
+         patch.object(queue_consumer, "index_document", side_effect=lambda i, d, b: calls.append((i, d, b))):
+        queue_consumer.process_event({"message": "line one", "log_type": "syslog"},
+                                      doc_id_base="redact-raw-events-0-1")
+        queue_consumer.process_event({"message": "line two", "log_type": "syslog"},
+                                      doc_id_base="redact-raw-events-0-2")
+
+    doc_ids = [c[1] for c in calls]
+    assert doc_ids[0] != doc_ids[1]
+
+
+@requires_kafka
+def test_kafka_consumer_passes_topic_partition_offset_as_doc_id_base():
+    """Confirms _run_kafka_consumer actually builds and passes the stable
+    id through to process_event(), not just that process_event() itself
+    supports the parameter in isolation."""
+    fake_message = _FakeKafkaMessage(json.dumps({"message": "x", "log_type": "syslog"}))
+    fake_message.topic = "redact-raw-events"
+    fake_message.partition = 3
+    fake_message.offset = 77
+
+    fake_consumer_instance = _FakeKafkaConsumer(_test_messages=[fake_message])
+
+    def fake_kafka_consumer_factory(*args, **kwargs):
+        return fake_consumer_instance
+
+    with patch.object(queue_consumer, "KAFKA_BROKERS", ["broker1:9092"]), \
+         patch("kafka.KafkaConsumer", side_effect=fake_kafka_consumer_factory), \
+         patch.object(queue_consumer, "process_event", return_value=None) as mock_process:
+        with pytest.raises(_StopTestLoop):
+            queue_consumer._run_kafka_consumer()
+
+    mock_process.assert_called_once()
+    _, kwargs = mock_process.call_args
+    assert kwargs["doc_id_base"] == "redact-raw-events-3-77"
+
+
 def test_event_with_no_message_field_is_a_silent_noop():
     """Matches Logstash's own behavior on an event with nothing to
     anonymize: no calls made at all, not an error."""
@@ -175,8 +263,19 @@ def test_service_error_field_in_response_also_quarantines():
 # just a different transport with the same at-most-once failure mode.
 
 class _FakeKafkaMessage:
-    def __init__(self, value: str):
+    def __init__(self, value: str, topic: str = "redact-raw-events", partition: int = 0, offset: int = 0):
         self.value = value
+        # topic/partition/offset added 2026-08-11 alongside the
+        # doc_id_base fix (Bug 23) -- real kafka-python ConsumerRecord
+        # objects always carry these three fields; this fake needs them
+        # too so _run_kafka_consumer's doc_id_base construction
+        # (f"{message.topic}-{message.partition}-{message.offset}") has
+        # something real to read in tests. Defaulted so every EXISTING
+        # test that constructs a bare _FakeKafkaMessage(value) is
+        # unaffected.
+        self.topic = topic
+        self.partition = partition
+        self.offset = offset
 
 
 class _StopTestLoop(Exception):

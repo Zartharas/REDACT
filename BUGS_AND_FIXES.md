@@ -3239,3 +3239,149 @@ against the real file can. This is the same category of gap Bug 21
 (the ff3 import) represents -- verification that's real but doesn't
 cover the specific failure mode that only shows up in a genuinely fresh
 environment or a genuine execution attempt, not a rehearsed one.
+
+---
+
+## Bug 23: live Kafka test found a real 3x document over-count -- root cause not fully isolated, fixed at the point that actually matters (2026-08-11)
+
+The user ran `./run_floci_kafka_test.sh` after Bug 22's fix -- it
+completed end to end for the first time (provisioned a real floci/
+Redpanda MSK cluster, built and ran the full stack, processed a real
+20,000-line corpus) but reconciliation FAILED with a striking number:
+
+```
+Expected total (raw exported lines): 20000
+security-logs-anonymized-*:          60000
+security-logs-quarantine-*:          0
+redact-audit-trail-*:                53507
+anonymized + quarantine:             60000
+RECONCILIATION: FAIL
+```
+
+**60,000 is exactly 3.0x 20,000, not a random overcount** -- and the
+audit fan-out ratio (53,507/60,000 = 89.2%) is right in line with every
+prior run's measured ratio (~89.2-89.3%), which is the important
+diagnostic signal: the DETECTION/anonymization logic itself produced
+correct, consistent output -- something upstream of it really did call
+`process_event()` roughly 3 times per raw line, not a bug in what
+`process_event()` does with a given line.
+
+**Root cause not fully isolated in this sandbox** (no Docker daemon
+here to inspect the actual Kafka consumer group's rebalance/commit
+sequence, or Logstash's producer-side retry logs, from the live run
+that found this). Two plausible mechanisms, both real and
+well-documented for Kafka clients in general, not specific to floci:
+
+1. **Consumer-group rebalance during a slow processing batch.**
+   `_run_kafka_consumer()`'s `KafkaConsumer` used the library's default
+   `max_poll_records=500` -- one `poll()` cycle can hand back up to 500
+   messages, which the loop then processes ONE AT A TIME with a real,
+   synchronous `redact-service` HTTP call each. No further `poll()`
+   happens (and therefore no progress against `max_poll_interval_ms`,
+   the "call poll() again within this time or the group coordinator
+   presumes you're dead" timer every real Kafka client enforces) until
+   that entire batch finishes. Under real load -- this exact test run
+   had a corpus generator, a full multi-container Docker build, and the
+   Kafka/OpenSearch/redact-service stack all competing for one machine's
+   CPU at the same time -- a slow enough batch could plausibly exceed
+   that window mid-batch, triggering a rebalance that reassigns
+   already-processed-but-not-yet-committed messages for reprocessing.
+2. **Producer-side retry duplicating publishes.** `logstash-output-kafka`
+   is configured with `acks => "all"` but without an explicit idempotent-
+   producer setting -- a transient ack timeout against floci's Redpanda
+   broker under load could cause Logstash to retry (and therefore
+   re-publish) a message the broker had actually already accepted.
+
+**Fixed at the point that actually matters, regardless of which
+mechanism (or both) caused this specific run's over-count:**
+`process_event()` (`src/queue_consumer.py`) used to mint a fresh
+`uuid.uuid4()` on every call, with no way to tell "this is the first
+time I've seen this message" from "this is a redelivery of a message
+I've already fully processed" -- so ANY reprocessing, from either
+mechanism above, always produced a brand-new OpenSearch document
+instead of overwriting the existing one. Kafka's delivery guarantee is
+fundamentally *at-least-once* by design (that's the entire redelivery
+mechanism Engineering upgrade 7 exists to provide over BLPOP's weaker
+guarantee) -- a consumer that isn't idempotent downstream will always be
+vulnerable to exactly this class of duplication under real-world
+conditions, this run's specific trigger aside. Added `doc_id_base`
+(optional, defaults to the original `uuid4()` behavior for the Redis
+path, which has no equivalent stable identifier BLPOP could offer):
+`_run_kafka_consumer()` now builds `f"{message.topic}-{message.partition}-{message.offset}"`
+-- a Kafka message's own natural, stable identity -- and passes it
+through. Redelivery of the identical message now overwrites the same
+document instead of creating a new one; audit sub-documents get
+`f"{doc_id_base}-audit-{i}"`, preserving Bug 15's own guarantee (audit
+IDs must be independent per event within one message) while still being
+stable across redelivery of that message as a whole.
+
+**Also mitigated the more-likely-mechanism directly**, not just its
+symptom: `max_poll_records` dropped from the library default (500) to
+10, so each poll/heartbeat cycle only has to clear a small amount of
+synchronous processing before the consumer's group membership renews --
+shrinking the window in which a slow batch could threaten the
+`max_poll_interval_ms` rejoin timer, without eliminating the underlying
+one-message-at-a-time synchronous design (a real, larger redesign --
+batching or async processing -- not attempted here).
+
+**Verified, not just argued:** 3 new tests (`test_queue_consumer.py`,
+89 total suite tests now, up from 86) confirm directly -- calling
+`process_event()` twice with the identical `doc_id_base` produces
+exactly one distinct document ID despite two calls (the actual
+idempotency guarantee), two different `doc_id_base` values still
+produce different IDs (confirming this doesn't collapse genuinely
+different messages together), and `_run_kafka_consumer()` itself
+actually constructs and passes the `topic-partition-offset` string
+through to `process_event()`, not just that `process_event()` supports
+the parameter in isolation. **Not yet confirmed against a live rerun**
+-- this fix has not been re-run against floci/Redpanda in this sandbox
+(no Docker daemon here); the user re-running
+`./run_floci_kafka_test.sh` is the actual confirmation that
+reconciliation now passes.
+
+---
+
+## Engineering upgrade 6 addendum: floci ELB v2 confirmed control-plane-only, live (2026-08-11)
+
+`./run_floci_elbv2_test.sh` (after Bug 22's fix) ran end to end for the
+first time -- provisioned a VPC/subnets/target group/ALB/listener via
+real `aws elbv2`/`aws ec2` calls against floci, registered 3 real
+`redact-service` replica IPs as targets, and tested both the
+control-plane and data-plane separately, exactly as the script's own
+"HONEST UNCERTAINTY" header comment said it would.
+
+**Result: floci's ELB v2 is control-plane-only, confirmed live, not
+just inferred from floci's own service table.** Every `aws elbv2`/
+`aws ec2` command succeeded (VPC, subnets, target group, ALB, listener
+all created and described correctly, real ARNs returned) -- the API
+surface is real and functional. But `describe-target-health` reported
+all 3 targets stuck in `initial` state (never transitioning to
+`healthy`, meaning floci never actually ran the configured health
+checks against them), and the actual data-plane test -- a real HTTP
+request to the ALB's own DNS name
+(`redact-alb-<id>.elb.localhost.floci.io`) -- did not succeed. This
+matches floci's own documentation listing ELB v2 as "In-process" rather
+than "Real Docker" (unlike MSK, which Bug 23 above confirms DOES
+forward real traffic): a control-plane emulation that lets tooling
+built against the real AWS API shape create/describe/tag these
+resources correctly, without floci actually proxying requests through
+them.
+
+**Practical implication, stated plainly:** floci's ELB v2 emulation is
+useful for testing that infrastructure-as-code / CLI automation against
+the real ALB API shape works correctly (a real, useful thing to
+validate for free, locally), but it cannot be used as a stand-in for
+verifying actual load-balancing BEHAVIOR (traffic distribution,
+health-check-driven target removal, connection draining) the way
+floci's MSK emulation can for Kafka. `docker compose --scale
+redact-service=N` + `redact-lb`'s own nginx-based proxy (already built
+and documented, see `docker-compose.yml`'s `redact-lb` comment) remains
+the actual verified way this project tests real load-balancing behavior
+locally -- this floci ELB v2 test was always scoped as a control-plane/
+API-shape check, and that's exactly what it confirmed, cleanly, rather
+than something to treat as a load-balancer functionality gap in floci
+worth working around.
+
+No code changes from this finding -- a clean negative result,
+confirming the disclosed uncertainty in "Engineering upgrade 6" rather
+than contradicting it.
