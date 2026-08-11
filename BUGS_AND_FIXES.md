@@ -2998,3 +2998,48 @@ against every realistic email shape this project's synthetic and real
 corpora actually contain, but not proven equivalent to true regex
 backtracking for fully pathological inputs -- see that function's own
 comment.
+
+---
+
+## Engineering upgrade 10: edge collector integration scoping -- Task #49's own recommendation corrected (2026-08-11)
+
+Task #49 (follow-on to the Task #48 Wasm port) asked for a scoping doc
+for Vector/Fluent Bit/Envoy plugin integration, with the task's own
+description recommending Vector "since it has the most straightforward
+Wasm/VRL extension story." **Checked that claim against current reality
+before scoping around it, rather than taking it at face value:**
+
+- **Vector removed its `wasm` transform in v0.17.0 (October 2021)** and
+  has not brought it back -- confirmed via Vector's own removal
+  announcement (`vector.dev/highlights/2021-08-23-removing-wasm`), not
+  assumed from general familiarity. VRL being compiled to Wasm for a
+  browser playground (a real, separate thing search results surface) is
+  not the same as Vector supporting third-party Wasm plugins in a
+  running pipeline -- confirmed the distinction directly rather than
+  conflating the two.
+- **Fluent Bit has real, current, functional Wasm filter/input plugin
+  support**, confirmed via `docs.fluentbit.io`'s own developer docs
+  (fetched directly, not summarized secondhand): a defined C-ABI
+  function signature (`char* c_filter(char*, int, uint32_t, uint32_t,
+  char*, int)`), supported toolchains (Rust `wasm32-unknown-unknown`,
+  TinyGo `wasm32-wasi`, WASI SDK), real example filters in Fluent Bit's
+  own repo.
+
+**Recommendation reversed from the task's own premise: Fluent Bit, not
+Vector.** Full reasoning, the exact ABI Task #48's module would need to
+grow a second entry point for, the real added scope (redaction, not
+just detection -- pulling in a slice of `anonymize.py`'s
+responsibility), an unresolved open design question (PERSON-type
+pseudonym consistency across independent edge nodes -- flagged, not
+answered, since answering it needs a real product decision this project
+hasn't made), and a phased effort estimate are all in
+`wasm/EDGE_COLLECTOR_INTEGRATION_SCOPING.md`. No integration build was
+attempted -- this task was scoping only, per its own description.
+
+**Also disclosed:** an edge Wasm filter built from Task #48's module can
+only ever cover Layer 1 (regex) + Layer 4 (flattened names) detection --
+Presidio's NER (Layer 2), responsible for the large majority of
+normally-formatted PERSON recall per this project's own measured
+numbers, cannot run in a Wasm sandbox. An edge filter is a pre-filter,
+not a `redact-service` replacement -- stated explicitly in the scoping
+doc so this isn't discovered as a surprise later.
