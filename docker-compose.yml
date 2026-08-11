@@ -613,6 +613,51 @@ services:
     networks:
       - redact-net
 
+  # floci, added 2026-08-11 (ROADMAP item 13, closing the "real cloud
+  # load balancer" / "real Kafka cluster" gaps this project's own
+  # ROADMAP has disclosed as out of reach since item 12). floci
+  # (github.com/floci-io/floci) is a free, open-source, MIT-licensed
+  # local AWS emulator -- no cloud account, no auth token, no billing.
+  # Gives real Docker-backed AWS-shaped services (ELB v2, MSK via
+  # Redpanda, and 60+ others) on localhost:4566, closing the local
+  # portion of the gap ROADMAP item 12 flagged as needing real
+  # infrastructure this project's development environment doesn't have.
+  #
+  # HONEST LIMIT, stated the same way every other gap in this project is:
+  # floci is still one machine. It gives real API/architecture fidelity
+  # to test against (real ALB/NLB routing semantics, a real Redpanda
+  # broker for the Kafka-shaped queue prototype), but it does NOT
+  # manufacture real network egress, real multi-AZ latency/failure
+  # modes, or genuine internet-facing load-balancer behavior, and it
+  # does nothing for the still-separate terabytes/day volume question.
+  # See ROADMAP.md item 13 for the planned follow-up: validating these
+  # local prototypes against real free-tier cloud resources once billing
+  # guardrails are in place.
+  #
+  # profiles: ["cloud-sim"] -- opt-in, same pattern as "queued" and
+  # "monitoring" above. `docker compose --profile cloud-sim up`.
+  # Requires the Docker socket for floci's real-Docker-backed services
+  # (Lambda, RDS, ElastiCache, ECS, EC2, EKS, MSK, OpenSearch,
+  # CodeBuild) -- per floci's own documented requirement, not this
+  # project's own choice.
+  #
+  # NOT run live in this sandbox (no Docker daemon here) -- syntax-checked
+  # only. Needs the same live confirmation pass every other new piece of
+  # infrastructure in this project has gone through.
+  floci:
+    image: floci/floci:latest
+    container_name: redact-floci
+    user: root  # required for Docker-backed services to reach the socket -- per floci's own documented run command
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+    networks:
+      - redact-net
+    profiles: ["cloud-sim"]
+
   # Monitoring stack, added 2026-08-11 (ROADMAP: "weaponize the drift
   # detector"). Everything above this point was a metrics SOURCE with
   # nothing consuming it: redact-service has exposed /metrics since an
