@@ -8,6 +8,7 @@ index + one audit doc per audit_event, each with a fresh random UUID
 never equal to the parent doc's ID or to each other; failure -> quarantine
 index, original (un-anonymized) text preserved, never silently dropped.
 """
+import importlib.util
 import json
 import os
 import sys
@@ -22,6 +23,27 @@ if SRC_PATH not in sys.path:
     sys.path.insert(0, SRC_PATH)
 
 import queue_consumer  # noqa: E402
+
+# kafka-python (requirements-kafka.txt) is optional, same pattern as
+# ff3/hvac/redis elsewhere in this project -- most environments running
+# `pytest tests/` per tests/README.md's own quick-start won't have it
+# installed. queue_consumer.py itself already lazily imports `kafka`
+# (only inside _run_kafka_consumer, when KAFKA_BROKERS is actually set),
+# so importing this test file is always safe -- but the three tests
+# below call `patch("kafka.KafkaConsumer", ...)`, which needs to import
+# the real `kafka` module to resolve that patch target. Without this
+# guard those three would fail at test EXECUTION time (not collection,
+# since queue_consumer.py's own import is already lazy) with a
+# ModuleNotFoundError surfacing as a test failure rather than a clean
+# skip. Marked skipif rather than fixed via importorskip at file scope,
+# since test_main_dispatches_to_kafka_when_brokers_configured (below)
+# never touches the real kafka module at all (it patches
+# _run_kafka_consumer itself) and should still run without kafka-python
+# installed.
+_HAS_KAFKA = importlib.util.find_spec("kafka") is not None
+requires_kafka = pytest.mark.skipif(
+    not _HAS_KAFKA, reason="kafka-python not installed (pip install -r requirements-kafka.txt)"
+)
 
 
 def _is_valid_uuid4(s: str) -> bool:
@@ -202,6 +224,7 @@ def test_main_dispatches_to_kafka_when_brokers_configured():
     assert called["kafka"] is True
 
 
+@requires_kafka
 def test_kafka_consumer_commits_after_successful_processing():
     fake_consumer_instance = _FakeKafkaConsumer(
         _test_messages=[_FakeKafkaMessage(json.dumps(
@@ -222,6 +245,7 @@ def test_kafka_consumer_commits_after_successful_processing():
     assert fake_consumer_instance.commit_call_count == 1
 
 
+@requires_kafka
 def test_kafka_consumer_does_not_commit_after_failed_processing():
     """The actual redelivery-guarantee mechanism, confirmed directly: a
     message whose process_event() call raises must NOT be committed, so
@@ -247,6 +271,7 @@ def test_kafka_consumer_does_not_commit_after_failed_processing():
     assert fake_consumer_instance.commit_call_count == 0
 
 
+@requires_kafka
 def test_kafka_consumer_commits_unparseable_messages_to_avoid_permanent_block():
     """A malformed message that will never successfully parse must still
     be committed -- otherwise it would permanently block that partition's

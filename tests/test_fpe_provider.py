@@ -17,6 +17,18 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
 import pytest  # noqa: E402
+
+# ff3 (requirements-fpe.txt) is optional -- most environments running
+# `pytest tests/` per tests/README.md's own quick-start will NOT have it
+# installed (it's a separate, opt-in requirements file, same as Redis/
+# Vault/Kafka). importorskip here means this file cleanly SKIPS when ff3
+# isn't available, rather than raising an ImportError during collection
+# that used to abort pytest's ENTIRE run (see src/fpe_provider.py's own
+# header comment for the real bug this fixes -- ff3 used to be imported
+# at fpe_provider's module level, so even importing THIS test file
+# without ff3 installed would fail before a single test ran).
+pytest.importorskip("ff3")
+
 from fpe_provider import FPEDigitsProvider, DEFAULT_TWEAK  # noqa: E402
 
 # Real NIST SP 800-38G Rev. 1 published test-vector key (128-bit) --

@@ -10,11 +10,42 @@ the kind of drift risk that caused the overlapping-span bug documented in
 `BUGS_AND_FIXES.md`.
 
 ```bash
+pip install -r requirements.txt
 pip install pytest
 pytest tests/                      # everything reachable in this environment
 pytest tests/test_fast_validation.py   # pure Python, no external services, ~5s
 pytest tests/test_redis_validation.py  # needs a live Redis (auto-skips if none reachable)
 ```
+
+**Optional-dependency test files, disclosed plainly:** `test_fpe_provider.py`
+and part of `test_queue_consumer.py` (the Kafka-path tests) need
+`requirements-fpe.txt` (`ff3`) and `requirements-kafka.txt`
+(`kafka-python`) respectively, on top of the base `requirements.txt`
+install above -- neither needs a live external service (unlike Redis/
+Vault below), so it's safe to install both alongside the base
+requirements if you want full coverage:
+
+```bash
+pip install -r requirements-fpe.txt -r requirements-kafka.txt
+```
+
+Without them, both files **skip cleanly** rather than failing --
+`test_fpe_provider.py` uses `pytest.importorskip("ff3")`, and the three
+Kafka-path tests in `test_queue_consumer.py` are marked
+`@pytest.mark.skipif` on `kafka` being importable. **This wasn't always
+true**: `src/fpe_provider.py` used to import `ff3` unconditionally at
+module level, so simply *collecting* `test_fpe_provider.py` without
+`ff3` installed aborted pytest's entire run with a hard `ImportError`,
+not just that one file's tests -- found the hard way (Bug 21,
+`BUGS_AND_FIXES.md`) when a fresh `pip install -r requirements.txt`
+environment ran `pytest tests/` exactly as instructed above and got
+nothing but a collection error. Fixed by making the `ff3` import lazy
+(inside `FPEDigitsProvider.__init__`, matching every other optional
+dependency in this project) and adding the `importorskip`/`skipif`
+guards described here. CI's own `fast-tests` job now installs both
+optional requirement files too, so this project's real CI coverage
+includes these 13 tests rather than silently skipping them on every
+push.
 
 ## What's covered here vs. not
 

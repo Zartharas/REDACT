@@ -63,6 +63,24 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+          # requirements-fpe.txt (ff3) and requirements-kafka.txt
+          # (kafka-python) added here 2026-08-11 (Bug 21, see
+          # BUGS_AND_FIXES.md): tests/test_fpe_provider.py and
+          # tests/test_queue_consumer.py's Kafka tests need these, and
+          # neither needs a LIVE external service (ff3 is pure crypto;
+          # the Kafka tests mock kafka.KafkaConsumer entirely) -- unlike
+          # requirements-redis.txt/requirements-vault.txt, which need a
+          # real running service and stay confined to their own jobs
+          # (redis-tests below) or go unrun in CI entirely (Vault).
+          # Before this fix, this job was silently getting ZERO coverage
+          # of either module: pytest.importorskip("ff3") makes a missing
+          # ff3 skip cleanly rather than aborting collection (the actual
+          # bug being fixed here), but a clean skip is still a skip --
+          # installing the real dependency is what makes these 13 tests
+          # (9 fpe + 4 kafka) actually run in CI instead of always
+          # silently no-op'ing.
+          pip install -r requirements-fpe.txt
+          pip install -r requirements-kafka.txt
           pip install pytest
       - name: Run fast validation suite
         run: pytest tests/ -v -m "not needs_redis"

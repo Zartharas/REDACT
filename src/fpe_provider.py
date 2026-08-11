@@ -104,7 +104,23 @@ explicit, undone next step.
 """
 import re
 
-from ff3 import FF3Cipher
+# REAL BUG, found and fixed 2026-08-11: this used to be `from ff3 import
+# FF3Cipher` at module level, which meant simply IMPORTING fpe_provider
+# (e.g. tests/test_fpe_provider.py's own `from fpe_provider import ...`)
+# required the optional `ff3` package (requirements-fpe.txt) to already
+# be installed -- and pytest's collection phase fails HARD on an
+# ImportError, aborting the entire `pytest tests/` run, not just skipping
+# this one file. Every other optional dependency in this project
+# (kafka-python, hvac, redis, prometheus-client) is lazily imported
+# inside the function/class that actually needs it, specifically so a
+# missing optional dependency degrades to "this one feature isn't
+# available" rather than "nothing in this test suite can run at all."
+# This module was the one exception, caught only when a user ran
+# `pytest tests/` in a fresh environment that had installed
+# requirements.txt but not requirements-fpe.txt -- exactly the
+# environment tests/README.md's own documented quick-start produces.
+# Fixed by moving the import inside __init__, matching the established
+# pattern everywhere else.
 
 # 56-bit tweak, deliberately -- this is what selects FF3-1's corrected
 # code path in the underlying library rather than the deprecated
@@ -134,6 +150,7 @@ class FPEDigitsProvider:
         """key_hex: 128/192/256-bit AES key, hex-encoded (32/48/64 hex
         chars). Caller is responsible for sourcing this securely (Vault/
         KMS) -- see module docstring's key-management section."""
+        from ff3 import FF3Cipher  # lazy -- see module header comment
         self._cipher = FF3Cipher(key_hex, tweak_hex, radix=10)
 
     def encrypt_digits(self, digits: str) -> str:

@@ -3075,3 +3075,78 @@ treat the catalog integration as an explicit future step gated on a
 real target catalog existing, with the integration point identified
 (`src/airflow_tasks.py`'s `push_drift_metrics_to_prometheus()`) if that
 day comes.
+
+---
+
+## Bug 21: optional-dependency import aborted the entire test suite, not just one file (2026-08-11)
+
+Found by the user, not caught in this sandbox first -- a real gap in
+this project's own verification discipline, worth stating plainly. A
+fresh `pip install -r requirements.txt` followed by `pytest tests/`
+(exactly `tests/README.md`'s own documented quick-start) failed
+outright:
+
+```
+ImportError while importing test module '.../tests/test_fpe_provider.py'
+src/fpe_provider.py:107: in <module>
+    from ff3 import FF3Cipher
+E   ModuleNotFoundError: No module named 'ff3'
+Interrupted: 1 error during collection
+```
+
+**Root cause:** `src/fpe_provider.py` (Engineering upgrade 5) imported
+`ff3` unconditionally at module level. Every OTHER optional dependency
+in this project (`kafka-python`, `hvac`, `redis`, `prometheus-client`)
+is lazily imported inside the specific function/class that actually
+needs it, precisely so a missing optional dependency degrades to "that
+one feature/test file isn't available" -- `fpe_provider.py` was the one
+exception, and pytest's collection phase treats an `ImportError` as
+fatal to the ENTIRE run, not just the one file, so this one unguarded
+import silently would have broken `fast-tests` in CI too (confirmed:
+`ci.yml`'s `fast-tests` job only ever installed `requirements.txt`,
+never `requirements-fpe.txt`) -- not caught earlier because this
+sandbox had `ff3` already installed from earlier work in the same long
+session, so the gap was invisible here until a genuinely fresh
+environment (the user's) hit it.
+
+**Why this wasn't caught by this project's own "run the suite before
+every commit" discipline:** that discipline checked THAT the suite
+passed in this sandbox, correctly, every time -- but never checked
+WHETHER this sandbox's environment still matched what
+`tests/README.md`'s own documented install instructions would actually
+produce on a clean machine. A real process gap, not just a code one.
+
+**Fixed on three levels, not just the one import:**
+1. `src/fpe_provider.py`: `from ff3 import FF3Cipher` moved from module
+   level into `FPEDigitsProvider.__init__`, matching the lazy-import
+   pattern already established everywhere else.
+2. `tests/test_fpe_provider.py`: added `pytest.importorskip("ff3")`
+   before importing `fpe_provider`, so this file cleanly SKIPS instead
+   of erroring even if the lazy-import fix above were ever
+   accidentally reverted.
+3. `tests/test_queue_consumer.py`: the three tests that `patch("kafka.KafkaConsumer", ...)`
+   (which requires importing the real `kafka` module to resolve the
+   patch target) are now marked `@pytest.mark.skipif` on
+   `importlib.util.find_spec("kafka") is None` -- these were not
+   actually broken (queue_consumer.py's own `kafka` import was already
+   lazy), but would have failed at test-EXECUTION time with a
+   confusing `ModuleNotFoundError` on a machine without kafka-python,
+   rather than skipping cleanly like everything else in this suite
+   does for a missing optional dependency.
+4. `.github/workflows/ci.yml`'s `fast-tests` job now installs
+   `requirements-fpe.txt` and `requirements-kafka.txt` too (neither
+   needs a live external service, unlike Redis/Vault, so it's safe and
+   cheap to add here) -- this project's real CI coverage now actually
+   includes these 13 tests (9 fpe + 4 kafka) instead of silently never
+   running them.
+
+**Verified, not just argued:** simulated a fresh-environment collection
+attempt via `pytest.importorskip` against a genuinely nonexistent
+package name (confirmed: cleanly skips, doesn't abort the run) and
+confirmed `importlib.util.find_spec` returns `None` (not an exception)
+for a genuinely missing package -- both are the real mechanisms the
+fixes above depend on. Full suite re-confirmed passing in this sandbox
+afterward: 86 passed, 2 skipped, unchanged from before this fix (this
+sandbox already has both optional dependencies installed, so this fix
+is invisible here -- its effect is only visible in the fresh
+environment that found the bug in the first place).
