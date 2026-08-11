@@ -112,7 +112,23 @@ echo "a nonzero, roughly comparable count -- one replica at ~3x N/3 requests"
 echo "and two at 0 would mean the proxy isn't distributing, despite everything"
 echo "above still reconciling correctly (a single working replica is enough"
 echo "for reconciliation to pass, which is exactly why this check is separate)."
-docker compose logs redact-service 2>/dev/null | grep -oE '^[a-zA-Z0-9._-]+-redact-service-[0-9]+' | sort | uniq -c
+# 2026-08-10: first live run found this check's original anchored regex
+# (`^[a-zA-Z0-9._-]+-redact-service-[0-9]+`) matched zero lines against
+# the real docker compose logs prefix format on the user's machine --
+# cause not yet confirmed (compose version differences in how the log
+# prefix is rendered are the leading suspect, not yet verified against
+# the actual raw output). Worse, that zero-match grep, piped without a
+# `|| true` fallback under this script's own `set -euo pipefail`, killed
+# the ENTIRE script silently right here -- Part B never ran as a direct
+# consequence of this one check's own regex being too strict. Fixed two
+# ways: (1) unanchored, project-prefix-agnostic pattern that matches
+# `redact-service-N` wherever it appears in the line rather than
+# requiring it to be the first token, and (2) `|| true` plus a raw
+# fallback dump so a genuine zero-match result reports data instead of
+# silently ending the run.
+docker compose logs redact-service 2>/dev/null | grep -oE 'redact-service-[0-9]+' | sort | uniq -c || true
+echo "--- Raw sample (first 5 log lines from redact-service, for diagnosing the above if all counts read 0) ---"
+docker compose logs redact-service 2>/dev/null | head -5 || true
 
 echo
 echo "=================================================================="

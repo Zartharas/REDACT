@@ -1544,18 +1544,11 @@ override (`GUNICORN_WORKERS=N ./run_replica_and_queue_test.sh`, or
 reducing `--scale` to 2) for hosts that are still memory-constrained even
 at the new default.
 
-**Not yet re-confirmed live with this fix in place** -- disclosed
-plainly, not implied fixed by the code change alone. The 3-replica Part A
-run, its per-replica gunicorn access-log distribution check (does
-`redact-lb`'s nginx proxy actually spread requests across all 3
-replicas, not just keep the pipeline reconciling on one working replica),
-and Part B (the queue-decoupled path, `logstash-queued` -> Redis list ->
-3x `queue-consumer` -> `redact-lb` -> OpenSearch, never reached in the
-first live run since Part A failed before the script could get to it)
-all still need a fresh `./run_replica_and_queue_test.sh` run to move from
-"fixed, unit-checked" to "confirmed working" -- the same bar
-`redact-pipeline.conf` itself was held to before Bug 16's own first live
-run found a separate, real problem.
+**Re-run live, same day -- the OOM is confirmed fixed, and a second, unrelated bug turned up immediately after it.** `--scale redact-service=3` with `GUNICORN_WORKERS` defaulting to 2 completed cleanly: all 3 replicas + OpenSearch reported healthy in ~5s (versus the OOM crash at the same scale before this fix), and reconciliation passed exactly -- `security-logs-anonymized-*` = 20,000, `security-logs-quarantine-*` = 0, `redact-audit-trail-*` = 17,819, `RECONCILIATION: PASS`. That's direct confirmation the memory fix itself works, not just a plausible theory.
+
+Immediately after, the script's own per-replica distribution check killed the entire run silently: `docker compose logs redact-service | grep -oE '^[a-zA-Z0-9._-]+-redact-service-[0-9]+' | sort | uniq -c` matched zero lines against the real `docker compose logs` prefix format on the user's machine (exact cause not yet confirmed -- a Compose-version difference in how the log-line prefix is rendered is the leading suspect, not yet verified against the actual raw output), and with no `|| true` fallback on that pipe, `set -euo pipefail` aborted the whole script right there -- Part B never ran, as a direct, mechanical consequence of this one regex being too strict, not a real infrastructure problem. This is a small, script-level bug in the test harness itself, not in `redact-service`/`redact-lb`/anything shipped to users, but worth being just as honest about as any other bug in this document, since it's exactly the kind of silent-stop failure this project's own bug history has repeatedly flagged as the dangerous shape to miss. **Fixed**: the check is now unanchored (`grep -oE 'redact-service-[0-9]+'`, matches the container/replica identifier wherever it appears in the line rather than requiring it be the literal first token) and wrapped in `|| true` with a raw-log fallback dump, so a genuine zero-match result reports diagnosable data instead of silently ending the run.
+
+**Still pending, disclosed plainly:** the per-replica distribution numbers themselves (does `redact-lb`'s nginx proxy actually spread the 20,000 requests roughly evenly across all 3 replicas, versus everything landing on one working replica while the other two sit idle -- reconciliation alone can't distinguish these, which is exactly why this check exists as a separate signal) and Part B (the queue-decoupled path, `logstash-queued` -> Redis list -> 3x `queue-consumer` -> `redact-lb` -> OpenSearch, never reached in either live run so far) both still need one more `./run_replica_and_queue_test.sh` pass with this second fix in place to move from "fixed, unit-checked" to "confirmed working" -- the same bar `redact-pipeline.conf` itself was held to before Bug 16's own first live run found a separate, real problem.
 
 ---
 
