@@ -1060,8 +1060,14 @@ with how long a run actually takes rather than an assumption baked in at
 100,000-line scale. The stability decision itself is unchanged (still 3
 consecutive polls with an unchanged anonymized+quarantine total); the fix
 only changes when the harness gives up waiting for that condition, not
-what the condition is. `bash -n` syntax-checked; not yet re-run against a
-live Docker stack (that verification needs the user's machine -- see
+what the condition is. **Re-verified live, 2026-08-10**: `run_1m_load_test.sh`
+(repo root) calls this exact harness unmodified for the field-gated
+1,000,000-line run described in Bug 16's addendum below -- that run took
+~2,276s and reported a clean `RECONCILIATION: PASS`, well inside the new
+4-hour deadline and with no false `FAIL` from the old fixed-iteration cap.
+`bash -n` syntax-checked before that run too, but this is the actual live
+confirmation, not just the syntax check (that verification needed the
+user's machine -- see
 ROADMAP item 9).
 
 **What a real fix still needs (as originally written, 2026-08-08, before
@@ -1548,7 +1554,7 @@ at the new default.
 
 Immediately after, the script's own per-replica distribution check killed the entire run silently: `docker compose logs redact-service | grep -oE '^[a-zA-Z0-9._-]+-redact-service-[0-9]+' | sort | uniq -c` matched zero lines against the real `docker compose logs` prefix format on the user's machine (exact cause not yet confirmed -- a Compose-version difference in how the log-line prefix is rendered is the leading suspect, not yet verified against the actual raw output), and with no `|| true` fallback on that pipe, `set -euo pipefail` aborted the whole script right there -- Part B never ran, as a direct, mechanical consequence of this one regex being too strict, not a real infrastructure problem. This is a small, script-level bug in the test harness itself, not in `redact-service`/`redact-lb`/anything shipped to users, but worth being just as honest about as any other bug in this document, since it's exactly the kind of silent-stop failure this project's own bug history has repeatedly flagged as the dangerous shape to miss. **Fixed**: the check is now unanchored (`grep -oE 'redact-service-[0-9]+'`, matches the container/replica identifier wherever it appears in the line rather than requiring it be the literal first token) and wrapped in `|| true` with a raw-log fallback dump, so a genuine zero-match result reports diagnosable data instead of silently ending the run.
 
-**Still pending, disclosed plainly:** the per-replica distribution numbers themselves (does `redact-lb`'s nginx proxy actually spread the 20,000 requests roughly evenly across all 3 replicas, versus everything landing on one working replica while the other two sit idle -- reconciliation alone can't distinguish these, which is exactly why this check exists as a separate signal) and Part B (the queue-decoupled path, `logstash-queued` -> Redis list -> 3x `queue-consumer` -> `redact-lb` -> OpenSearch, never reached in either live run so far) both still need one more `./run_replica_and_queue_test.sh` pass with this second fix in place to move from "fixed, unit-checked" to "confirmed working" -- the same bar `redact-pipeline.conf` itself was held to before Bug 16's own first live run found a separate, real problem.
+**Both closed out by the next two live runs, not left open.** The second run (same day) got the distribution numbers this fix was written for: 6,658 / 6,711 / 6,745 requests across the 3 replicas -- genuinely even, direct confirmation `redact-lb` load-balances rather than an inference from reconciliation alone. That same run's Part B surfaced a separate, unrelated bug (double-processing every line -- see Bug 19 below), fixed there and re-confirmed clean on a third run. See Bug 19 and ROADMAP.md item 12 for the complete closing sequence.
 
 ---
 

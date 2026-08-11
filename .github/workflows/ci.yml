@@ -29,11 +29,12 @@ name: CI
 # than fail-the-build for now -- turning that into a hard gate on
 # CRITICAL/HIGH findings is a reasonable next step, but doing it in the
 # same change as introducing the scan would risk an unrelated, unreviewed
-# base-image CVE blocking every future push on day one. This job has not
-# yet been run against a real push (added and reasoned through in this
-# environment, which cannot build Docker images itself) -- treat its
-# first few runs on GitHub's actual runners as verification, not
-# something already confirmed working.
+# base-image CVE blocking every future push on day one. This has since
+# run against many real pushes to main over the course of this project's
+# development -- check the CI badge in README.md or the repo's Actions
+# tab for current pass/fail, since this environment still can't build
+# Docker images itself and hasn't reviewed individual Trivy findings run
+# by run.
 
 on:
   push:
