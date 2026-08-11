@@ -110,7 +110,63 @@ def _get_analyzer():
     return analyzer
 
 
+# Early-exit gate, added 2026-08-11 (part of the same external-review
+# batch as the Aho-Corasick and drift-detector changes -- see
+# BUGS_AND_FIXES.md's "Engineering upgrade 3"). The memo's proposal was a
+# Rust-based pre-filter; rejected in favor of this cheap Python check
+# first, per this project's own evaluation of that suggestion (see
+# PROJECT_STATUS.md) -- reach for a native-code rewrite only if profiling
+# against a live NER run ever proves this insufficient, not before.
+#
+# Deliberately conservative, and this is a real constraint, not just
+# caution: this sandbox has no network access to download the spaCy/
+# Presidio model (same standing limitation noted throughout
+# BUGS_AND_FIXES.md), so no heuristic here can be verified against a live
+# NER model's actual behavior in this environment. Rather than ship an
+# aggressive heuristic (e.g. "skip if no capitalized word") that LOOKS
+# reasonable but is unverified against the real model, this gate is
+# scoped to something provable by construction, independent of what the
+# model would have done: every one of the six canonical entity types
+# scan_ner can produce (PERSON, EMAIL, IP, SSN, CREDIT_CARD, MRN --
+# _PRESIDIO_TO_CANONICAL above) requires at least a 2-character
+# alphabetic run OR a 2-character digit run somewhere in the text (a
+# person's name, an email local-part, an IP octet, digits of an SSN/
+# credit card/MRN). A text with neither cannot structurally contain any
+# of them, regardless of what the model does internally -- this doesn't
+# need the model to be true.
+#
+# Directly verified, not just argued: validation/early_exit_gate_verify.py
+# runs this gate against the full 10,000-line canonical corpus
+# (data/synthetic_logs.jsonl) and its GOLD PII SPANS (not just a
+# plausibility argument) -- confirms it never skips a line that the
+# ground truth says contains a real PII span of any of the six types, and
+# reports the real skip rate on this corpus (how often the gate actually
+# fires). See BUGS_AND_FIXES.md for those numbers.
+#
+# Disclosed, not silently assumed: the *end-to-end throughput* benefit
+# (wall-clock time actually saved by skipping real spaCy/Presidio calls)
+# is NOT measured here, because no live model exists in this sandbox to
+# time. The skip-rate number below tells you how often this gate would
+# fire; it does not by itself tell you how much time that saves, since
+# that depends on the real per-call NER cost on whatever hardware runs
+# it. Needs a live measurement on the user's machine, same as every other
+# environment-blocked throughput claim in this project.
+_LETTER_RUN_RE = re.compile(r"[A-Za-z]{2,}")
+_DIGIT_RUN_RE = re.compile(r"\d{2,}")
+
+
+def _could_contain_ner_entity(text: str) -> bool:
+    """False only when `text` structurally cannot contain any of
+    scan_ner's six canonical entity types -- see the module comment above
+    for why this specific, narrow condition (and not something broader
+    like "no capitalized word") is what's safe to assert without a live
+    model to verify against."""
+    return bool(_LETTER_RUN_RE.search(text) or _DIGIT_RUN_RE.search(text))
+
+
 def scan_ner(text: str, min_score: float = 0.5) -> list[dict]:
+    if not _could_contain_ner_entity(text):
+        return []
     analyzer = _get_analyzer()
     results = analyzer.analyze(
         text=text,

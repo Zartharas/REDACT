@@ -2354,6 +2354,85 @@ project has gone through before any of this can be called "confirmed."
 
 ---
 
+## Engineering upgrade 3: NER early-exit gate — implemented, honestly near-useless as scoped (2026-08-11)
+
+Third item from the same external-review batch as upgrades 1 and 2. The
+review proposed a Rust-based pre-filter to skip the NER call entirely on
+lines with no PII-shaped content (e.g. "a pure system heartbeat log").
+Rejected the Rust part per this project's own evaluation
+(`PROJECT_STATUS.md`): reach for native code only if a cheap Python check
+first proves insufficient, not before. This entry is that cheap Python
+check — built, verified, and reported honestly, including the negative
+result.
+
+**What was built:** `detect._could_contain_ner_entity(text)` — returns
+`False` only when `text` has neither a 2+ character letter run nor a 2+
+character digit run anywhere. `scan_ner()` now returns `[]` immediately
+when this is `False`, skipping the expensive `_get_analyzer()` /
+`analyzer.analyze()` call path entirely.
+
+**Why this specific, narrow condition and not something broader:** this
+sandbox has no network access to the spaCy/Presidio model (same standing
+constraint noted throughout this file), so nothing here can be verified
+against the real model's actual behavior. A broader heuristic like "skip
+if no capitalized word" is a real, plausible next step, but shipping it
+without live verification would be asserting a recall claim this project
+has no way to check — exactly the kind of thing this project's own
+discipline exists to prevent. The condition actually shipped is instead
+provable by construction, independent of the model: all six of
+`scan_ner`'s canonical entity types (PERSON, EMAIL, IP, SSN, CREDIT_CARD,
+MRN) structurally require at least a 2-character letter or digit run
+somewhere (a name, an email local-part, an IP octet, digits of an
+SSN/credit-card/MRN) — a text with neither cannot contain any of them,
+regardless of what the model would have said.
+
+**Verified two ways, and the second one is the actually important
+result:**
+1. `validation/early_exit_gate_verify.py` runs the gate against the full
+   10,000-line canonical corpus and its gold PII spans directly (not a
+   plausibility argument) — **0 false skips** across all 10,000 lines:
+   the gate never fires on a line the ground truth says contains a real
+   PII span. Safety confirmed against real labeled data.
+2. **The same script found the gate's real-world trigger rate on this
+   corpus is 0/10,000 (0.0%)** — every line in the canonical corpus has
+   *some* digit run somewhere (a timestamp, a JSON field, an ID),
+   which alone is enough to keep the gate's structural condition from
+   ever being satisfied. A follow-up check against five representative
+   heartbeat/health-check-style example lines ("heartbeat ok", "PING",
+   "status: alive", "health check passed", "keepalive") found the gate
+   **does not fire on any of them either** — ordinary English words
+   ("heartbeat", "alive") are themselves 2+ character letter runs, so the
+   gate can't distinguish "this could be a name" from "this is a real
+   word" without a live model to verify a tighter rule against. **Honest
+   conclusion: as scoped, this gate is close to useless on realistic log
+   text.** It is not wrong, and it is genuinely free (see below), but it
+   essentially only fires on lines with zero alphabetic content and zero
+   multi-digit runs at all — a case rare enough that this project's own
+   10,000-line corpus contains exactly none of it, and neither did five
+   hand-picked examples of the motivating case from the original memo.
+
+**Overhead, measured:** ~2.1 million calls/sec in this sandbox (4.76ms
+for 10,000 calls) — genuinely negligible regardless of trigger rate, so
+keeping this costs effectively nothing even though it rarely helps.
+
+**Kept anyway, and here's why that's still the right call:** the gate is
+zero-risk (proven against ground truth) and zero-cost (measured), so
+there's no argument for reverting it even though its measured value on
+realistic text is close to nil. The actually useful version of this idea
+— a heuristic that can tell "ordinary word" from "plausibly a name" —
+needs the live NER model this sandbox doesn't have, to verify it doesn't
+quietly cost recall. That's the real follow-up, tracked as its own item
+rather than shipped here without verification.
+
+**Full test suite:** 65 passed (up from 59), 2 skipped, 0 failed —
+`tests/test_early_exit_gate.py` (6 tests) covers the gate's own boolean
+logic and confirms, via monkeypatching `_get_analyzer` to raise, that
+`scan_ner()` genuinely never constructs the analyzer when the gate fires,
+and genuinely still does when it doesn't (checking the mechanism, not
+just the return value either way).
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same
