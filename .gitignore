@@ -64,3 +64,15 @@ data/kafka_queue_test_corpus_*.jsonl
 # before this rule existed.
 validation/real_data/datasets/CloudTrailFlaws_raw.jsonl
 *.tar
+
+# wasm/layer1_4 (Task #48/ROADMAP item 13) -- npm dependencies and
+# compiled build output are both regenerable (`npm install && npm run
+# build`, see wasm/layer1_4/README.md), same policy this project already
+# applies to every other generated artifact above. Test-run scratch
+# corpora (equivalence_test.py/real_data_equivalence_test.py both write
+# a plain-text working file under tests/ before invoking Node) are
+# regenerated fresh on every run and not meant to be tracked either.
+wasm/layer1_4/node_modules/
+wasm/layer1_4/build/
+wasm/layer1_4/tests/_equivalence_corpus.txt
+wasm/layer1_4/tests/_real_data_equivalence_corpus.txt

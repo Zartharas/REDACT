@@ -1,0 +1,14 @@
+{
+  "name": "redact-layer1-4-wasm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone WebAssembly port of REDACT's Layer 1 (regex) and Layer 4 (flattened-username name segmentation) detection logic -- Task #48/ROADMAP item 13. See assembly/index.ts's header comment for scope and honest deviations from the original external-review memo (AssemblyScript instead of Rust; no Vector/Fluent Bit/Envoy integration here, that's Task #49).",
+  "scripts": {
+    "build": "asc assembly/index.ts --target release --outFile build/layer1_4.wasm --textFile build/layer1_4.wat --bindings esm -O3",
+    "build:debug": "asc assembly/index.ts --target debug --outFile build/layer1_4.debug.wasm --bindings esm",
+    "test": "node tests/equivalence_test.mjs"
+  },
+  "devDependencies": {
+    "assemblyscript": "^0.28.20"
+  }
+}
