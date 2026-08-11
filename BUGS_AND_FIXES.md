@@ -3043,3 +3043,35 @@ normally-formatted PERSON recall per this project's own measured
 numbers, cannot run in a Wasm sandbox. An edge filter is a pre-filter,
 not a `redact-service` replacement -- stated explicitly in the scoping
 doc so this isn't discovered as a surprise later.
+
+---
+
+## Engineering upgrade 11: drift-alert source-attribution design doc (Task #50, 2026-08-11)
+
+Design/dependency doc only, per Task #50's own instruction ("write the
+design/dependency doc first before committing to a specific
+integration") -- no code changes. See
+`monitoring/SOURCE_ATTRIBUTION_DESIGN.md` for the full doc.
+
+**Real gap found while scoping, stated before anything else in the
+doc:** REDACT's pipeline carries no source metadata finer than
+`log_type` (only 3 fixed values: `windows_event`/`syslog`/`cloudtrail`,
+assigned purely by which file path a raw log line was read from). "Map
+log source metadata back to an owning team," this task's own phrasing,
+implicitly assumes finer-grained metadata already exists -- it doesn't,
+in REDACT's current scope. Flagged as a real precondition, not silently
+assumed solvable.
+
+**Two real options scoped, one recommended:** a static
+`log_type` -> team YAML mapping consumed directly by Alertmanager's own
+native routing tree (zero REDACT code changes, works today at the
+current 3-log-type scale, real staleness risk disclosed) versus a real
+service-catalog integration (Backstage-style -- organizationally
+correct long-term, but REDACT has no existing dependency on any catalog
+and building one speculatively against nothing real would be
+untestable and possibly wrong for whatever a real deploying
+organization actually runs). Recommended: ship the static mapping now,
+treat the catalog integration as an explicit future step gated on a
+real target catalog existing, with the integration point identified
+(`src/airflow_tasks.py`'s `push_drift_metrics_to_prometheus()`) if that
+day comes.
