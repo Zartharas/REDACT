@@ -2743,3 +2743,37 @@ landed in `security-logs-anonymized`, 16 in `security-logs-quarantine`
 (9,984 + 16 = 10,000, exact), 5,168 signed records in `redact-audit-trail`,
 and zero `docs.deleted` on any real index — no outstanding collisions or
 overwrites anywhere in the pipeline.
+
+---
+
+## Engineering upgrade 6: floci-based ALB test written, hand-off pending (2026-08-11)
+
+ROADMAP item 13's floci follow-up. `docker-compose.yml` gained an
+opt-in `floci` service (`cloud-sim` profile) and `run_floci_elbv2_test.sh`
+was written to test REDACT behind a floci-emulated AWS ALB — creating a
+real VPC/subnets/target group/listener via the actual `aws elbv2`/
+`aws ec2` CLI commands (real, documented AWS API shapes, not invented),
+registering the scaled `redact-service` replicas' container IPs as
+targets, and testing both the control plane (can these resources be
+created/described at all) and the data plane (does traffic sent to the
+ALB's DNS name actually reach a `redact-service` replica) separately.
+
+**Honest uncertainty flagged up front, not resolved by assumption:**
+floci's own documentation lists ELB v2 as an "In-process" implementation
+(unlike MSK/RDS/ElastiCache, which are "Real Docker"), with "ALB, NLB,
+target groups, listeners, routing rules" as stated features — this could
+mean a full data-plane emulation that actually proxies HTTP traffic, or
+a control-plane-only emulation that accepts the right API calls without
+forwarding anything. The script tests both separately and prints which
+one is actually true, rather than the write-up asserting an answer this
+sandbox has no way to check.
+
+**Not run — cannot be run in this sandbox** (no Docker daemon here, same
+standing constraint as every other Compose-dependent test in this
+project). Syntax-checked only (`bash -n`, every AWS CLI command's
+parameters checked against real, documented `aws elbv2`/`aws ec2`
+syntax). Handed off for the user to run and report back which of the two
+outcomes (full data-plane proxy vs. control-plane-only) floci actually
+provides — that result determines whether this genuinely closes the
+"real cloud load balancer" gap or only partially does (API/architecture
+fidelity without traffic-forwarding fidelity).
