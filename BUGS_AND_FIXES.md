@@ -1599,12 +1599,7 @@ other existing `docker compose up` invocation in this project completely
 unchanged -- Part A, the 10K/100K/1M load tests, and manual ad hoc runs
 all still start `logstash` exactly as before.
 
-**Not yet re-confirmed live** -- Part B needs one more
-`./run_replica_and_queue_test.sh` run with this fix in place to move
-from "root-caused and fixed" to "confirmed working," the same bar every
-other Docker-dependent fix in this document is held to. Part A's own
-results from this same run (OOM fix confirmed, distribution confirmed
-even) stand on their own and don't need re-running.
+**Re-confirmed live, 2026-08-11, third run of this script -- both parts now pass clean.** Part A: `RECONCILIATION: PASS` exactly at 20,000/20,000 again, distribution 6,653 / 6,803 / 6,652 across the 3 replicas (consistent with the prior run's 6,658/6,711/6,745 -- genuinely even both times, not a fluke). Part B, with `logstash` correctly excluded this time: `RECONCILIATION: PASS` exactly at 20,000/20,000 (not 40,000), queue depth 0 at the end (all 3 `queue-consumer` processes kept up with ingestion, nothing left un-popped). This closes ROADMAP item 12 completely -- multi-replica `redact-service` behind a real load-balancing proxy, and the queue-decoupled ingestion path, are both now genuinely confirmed working against live Docker infrastructure, not just "implemented, unit-checked."
 
 ---
 
