@@ -107,12 +107,27 @@ EXPOSE 8080
 # time regardless of gunicorn's cwd, so detect.py/anonymize.py/audit.py's
 # bare `import detect` etc. keep working unchanged.
 #
-# --workers $(nproc): matched to the container's available CPU cores, per
-# the standard gunicorn sync-worker sizing guidance for CPU-bound work (the
-# NER call is CPU-bound and GIL-serialized per process, so more workers
-# than cores buys nothing but memory pressure). Requires shell form (not
-# JSON-array exec form) so $(nproc) actually expands; sh -c is the standard
-# way to get that inside an exec-form-only CMD.
+# --workers ${GUNICORN_WORKERS:-$(nproc)}: originally a bare `$(nproc)`,
+# matched to the container's available CPU cores per the standard gunicorn
+# sync-worker sizing guidance for CPU-bound work (the NER call is CPU-bound
+# and GIL-serialized per process, so more workers than cores buys nothing
+# but memory pressure). Made configurable, 2026-08-10 (ROADMAP item 12
+# follow-up), after a live `docker compose up --scale redact-service=3`
+# run OOM-killed OpenSearch (exit 137) -- root-caused to `nproc` workers
+# PER REPLICA, each warming its own full spaCy/Presidio model copy (see
+# the model-memory comment below), so replica_count x nproc x model-memory
+# is what actually has to fit in the host's Docker memory budget, not just
+# nproc x model-memory as the un-scaled, single-replica case always was.
+# `docker compose --scale` has no way to divide worker count by replica
+# count on its own -- this env var is what lets docker-compose.yml (or a
+# .env override) size workers-per-replica DOWN as replica count goes UP,
+# instead of every additional replica silently multiplying total memory
+# demand by a full `nproc`. See docker-compose.yml's redact-service
+# environment block for the default this project now ships with (2), and
+# BUGS_AND_FIXES.md / ROADMAP.md item 12 for the OOM finding this fixes.
+# Still shell form (not JSON-array exec form), same reason as before: both
+# `$(nproc)` and `${GUNICORN_WORKERS:-...}` need real shell expansion, and
+# sh -c is the standard way to get that inside an exec-form-only CMD.
 #
 # --timeout 60: gunicorn's default worker timeout is 30s, sized for typical
 # web request latency, not headroom for anything unusual under load. This
@@ -140,4 +155,4 @@ EXPOSE 8080
 # distribute requests across all replicas, or did they all land on one"
 # -- without this flag there was no way to answer that question short of
 # adding new instrumentation.
-CMD ["sh", "-c", "gunicorn --chdir src --workers $(nproc) --bind 0.0.0.0:8080 --timeout 60 --access-logfile - service:app"]
+CMD ["sh", "-c", "gunicorn --chdir src --workers ${GUNICORN_WORKERS:-$(nproc)} --bind 0.0.0.0:8080 --timeout 60 --access-logfile - service:app"]

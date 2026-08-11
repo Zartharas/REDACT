@@ -1500,6 +1500,65 @@ windows_event's real-data sample is ever grown past its current n=33.
 
 ---
 
+## 18. `docker compose --scale redact-service=N` OOM-killed OpenSearch -- gunicorn's per-container worker count silently multiplied by replica count
+
+Found 2026-08-10, the first live run of `run_replica_and_queue_test.sh`
+(ROADMAP item 12). Part A (`docker compose up --build -d --scale
+redact-service=3`) OOM-killed OpenSearch (exit 137) before reconciliation
+could complete.
+
+**Root cause:** `Dockerfile`'s gunicorn `CMD` used a bare `--workers
+$(nproc)` -- sized correctly for a *single* container (matched to
+available CPU cores, standard sync-worker sizing for CPU-bound work), but
+with no awareness of replica count at all. Each gunicorn worker imports
+`service.py` independently after forking and warms its own full
+spaCy/Presidio model copy (`Dockerfile`'s own pre-existing comment
+already documented this for the single-replica case: `worker_count x
+model-memory` at steady state). Scaling to 3 replicas multiplies that
+same `nproc`-sized worker count by 3 -- so actual memory demand became
+`3 x nproc x model-memory`, not `3x` a single replica's already-known,
+already-sized footprint. On a host with, say, 8 cores, that's 24 total
+gunicorn workers each holding a full NER model, competing with
+OpenSearch's own `-Xms1g -Xmx1g` heap for whatever memory Docker Desktop
+had allocated -- more than enough to explain an OOM kill.
+
+**Worked around live, in the moment, not fixed:** retrying with
+`--scale redact-service=2` succeeded (all containers reported healthy).
+This reduced the multiplier from `3x` to `2x` but didn't address the
+underlying issue -- the same multiplication is still present at any
+replica count above 1, it just hadn't crossed the host's memory ceiling
+at 2x yet.
+
+**Fixed, same day:** `GUNICORN_WORKERS` is now a configurable environment
+variable. `Dockerfile`'s `CMD` changed from `--workers $(nproc)` to
+`--workers ${GUNICORN_WORKERS:-$(nproc)}` (falls back to the original
+`$(nproc)` behavior if unset, so a single-replica, non-Compose deployment
+of this image is unaffected). `docker-compose.yml`'s `redact-service`
+environment block sets `GUNICORN_WORKERS=${GUNICORN_WORKERS:-2}` --
+deliberately conservative (chosen to survive the OOM this project
+actually hit, not benchmarked as an optimal throughput number) so `N`
+replicas now cost `N x 2` total workers regardless of host core count,
+not `N x nproc`. `run_replica_and_queue_test.sh` updated to print the
+effective per-replica worker count at Part A's start and to document the
+override (`GUNICORN_WORKERS=N ./run_replica_and_queue_test.sh`, or
+reducing `--scale` to 2) for hosts that are still memory-constrained even
+at the new default.
+
+**Not yet re-confirmed live with this fix in place** -- disclosed
+plainly, not implied fixed by the code change alone. The 3-replica Part A
+run, its per-replica gunicorn access-log distribution check (does
+`redact-lb`'s nginx proxy actually spread requests across all 3
+replicas, not just keep the pipeline reconciling on one working replica),
+and Part B (the queue-decoupled path, `logstash-queued` -> Redis list ->
+3x `queue-consumer` -> `redact-lb` -> OpenSearch, never reached in the
+first live run since Part A failed before the script could get to it)
+all still need a fresh `./run_replica_and_queue_test.sh` run to move from
+"fixed, unit-checked" to "confirmed working" -- the same bar
+`redact-pipeline.conf` itself was held to before Bug 16's own first live
+run found a separate, real problem.
+
+---
+
 ## Pattern across these bugs
 
 Every critical-impact bug on this list (1, 4, 5, 7, 12, 14) shared the same

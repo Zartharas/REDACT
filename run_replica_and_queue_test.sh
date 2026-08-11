@@ -16,6 +16,21 @@
 # list -> 3x queue-consumer -> redact-lb -> OpenSearch) reconcile exactly,
 # same as the synchronous path always has.
 #
+# FIRST LIVE RUN OF THIS SCRIPT (2026-08-10) OOM-KILLED OPENSEARCH (exit
+# 137) during Part A's --scale redact-service=3 -- root-caused to gunicorn
+# defaulting to $(nproc) workers PER REPLICA, so 3 replicas multiplied
+# total worker count (and spaCy/Presidio model memory, one copy per
+# worker) by 3 x nproc, not just 3x a single replica's own footprint.
+# Fixed: GUNICORN_WORKERS is now a configurable env var (Dockerfile CMD,
+# default 2 in docker-compose.yml's redact-service block), so 3 replicas
+# now means 6 total workers regardless of host core count. That run was
+# worked around live with `--scale redact-service=2` instead (succeeded,
+# all containers healthy) rather than this fix, since the fix hadn't been
+# written yet -- this script still asks for 3 below now that the fix is
+# in place; if your host is memory-constrained, override with
+# `GUNICORN_WORKERS=1 ./run_replica_and_queue_test.sh` or edit the
+# --scale value down to 2, same workaround as before.
+#
 # Needs Docker Desktop running. Run from the repo root:
 #   chmod +x run_replica_and_queue_test.sh
 #   ./run_replica_and_queue_test.sh
@@ -67,6 +82,7 @@ wait_for_reconciliation() {
 echo "=================================================================="
 echo "PART A: multi-replica redact-service (x3) behind redact-lb"
 echo "=================================================================="
+echo "GUNICORN_WORKERS=${GUNICORN_WORKERS:-2 (docker-compose.yml default)} per replica -- 3 replicas = ~6 total workers, not 3x nproc (see this script's header comment re: the OOM this fixes)."
 python3 src/generate_logs.py --n "$N" --out "$CORPUS_PATH" --dirty-ratio 0.3
 python3 src/export_raw_logs.py --input "$CORPUS_PATH" --output-dir data/raw
 

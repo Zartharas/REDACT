@@ -113,6 +113,20 @@ services:
       - REDACT_FINGERPRINT_KEY=${REDACT_FINGERPRINT_KEY:?set a real key in .env, do not use a default}
       - REDACT_TOKEN_KEY=${REDACT_TOKEN_KEY:?set a real key in .env, do not use a default}
       - REDACT_TOKEN_STORE_PATH=/app/output/token_store.json
+      # GUNICORN_WORKERS, added 2026-08-10 after a live --scale
+      # redact-service=3 run OOM-killed OpenSearch (exit 137): the
+      # Dockerfile's CMD used a bare `$(nproc)` workers-per-container, so
+      # scaling to N replicas silently multiplied total worker count (and
+      # therefore total spaCy/Presidio model-memory, since each gunicorn
+      # worker warms its own copy) by N x nproc, not just N x one worker's
+      # worth. Default here (2) is a deliberately conservative per-replica
+      # count chosen so 3 replicas = 6 total workers regardless of host
+      # core count, not `3 x nproc`. Override per-run with
+      # `GUNICORN_WORKERS=N docker compose up ...` if your host has memory
+      # to spare and you want to test higher per-replica concurrency --
+      # this default was chosen to survive the OOM this project actually
+      # hit, not benchmarked as an optimal throughput number.
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-2}
     volumes:
       - redact-output:/app/output
     # No host port mapping (see comment above) -- reachable only over
