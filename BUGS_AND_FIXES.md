@@ -3527,8 +3527,9 @@ CONFIRMED LIVE."
 
 **Impact:** High (blocked Task #47's 5,000,000-line run from starting at
 all -- not a data-integrity bug, a hard startup failure). **Status:**
-Fix applied same day, 2026-08-11; not yet reconfirmed live (the user's
-next `./run_5m_load_test.sh` attempt is what will confirm it).
+Verified fixed, 2026-08-12 -- the user's rerun completed a full,
+clean `RECONCILIATION: PASS` at 5,000,000 lines (see the dedicated
+entry below this one for the complete result).
 
 Found from the user's first live attempt at `./run_5m_load_test.sh`
 (Task #47's stretch-goal run). The stack failed during startup, before a
@@ -3580,16 +3581,79 @@ dependency resolution. By the time the pre-flight `run` executes,
 `opensearch-node1` can actually become healthy because all 3 real nodes
 already exist.
 
-**Not yet reconfirmed live:** syntax-checked (`bash -n`) in this sandbox
-only, same disclosed limitation as every other script here that needs a
-live Docker daemon to actually verify. The next `./run_5m_load_test.sh`
-attempt is what will confirm whether this specific failure is resolved --
-worth noting that a real 3-node OpenSearch cluster, a 6-container Redis
-Sentinel HA stack, `redact-service`, `redact-lb`, and Logstash all
-starting together (once the full unscoped `docker compose up --build -d`
-in `validation/load_test/run_load_test.sh` itself runs, after this
-pre-flight step passes) is real, new resource contention this project
-has not exercised before at any scale -- if the stack becomes healthy
-this time but takes meaningfully longer than the ~195s the healthcheck
-window assumes, that would be a second, separate finding worth its own
-entry, not evidence this fix was wrong.
+**Confirmed live, 2026-08-12.** The user reran `./run_5m_load_test.sh`
+after pulling this fix. Pre-flight step: `docker compose up -d --build
+redact-service redact-lb opensearch-node1 opensearch-node2
+opensearch-node3` brought up the full 3-node cluster, `opensearch-node1`
+went `Healthy` in 47.5s (well inside the ~195s healthcheck window), and
+`docker compose run --rm logstash --config.test_and_exit ...` then
+passed immediately (`Configuration OK`) instead of failing on an
+unreachable dependency. The subsequent full-stack `docker compose up
+--build -d` -- now genuinely starting the 3-node OpenSearch cluster, the
+6-container Redis Sentinel HA stack, `redact-service`, `redact-lb`, and
+Logstash all together for the first time -- also went healthy without
+incident (node1 healthy in 47.5s again, well within budget); the
+resource-contention risk flagged when this fix was first applied did not
+materialize. This closes Bug 25 as fully verified, not just
+syntax-checked. See the dedicated entry below for the full 5,000,000-line
+run result this fix unblocked.
+
+---
+
+## 26. Task #47 confirmed live: 5,000,000-line load test, clean PASS
+
+**Impact:** N/A (a confirmation entry, not a bug). **Status:** Verified,
+2026-08-12.
+
+With Bug 25's pre-flight fix in place, `./run_5m_load_test.sh` completed
+a full, clean run end to end -- the first time this project has been
+verified at 5x its previous high-water mark (the 1,000,000-line run in
+Bug 15/ROADMAP item 9). Final reconciliation:
+
+```
+Expected total (raw exported lines): 5000000
+security-logs-anonymized-*:          5000000
+security-logs-quarantine-*:          0
+redact-audit-trail-*:                4460786
+anonymized + quarantine:             5000000
+RECONCILIATION: PASS
+```
+
+**Exact match** -- every one of the 5,000,000 exported lines landed
+correctly anonymized, zero quarantined. Audit fan-out (4,460,786/5,000,000
+= 89.2%) lands in the same neighborhood as every prior run's measured
+ratio (89.159% at 100,000 lines, 89.315% at 1,000,000 lines) -- a real
+consistency check, not a coincidence, confirming correctness held at 5x
+further scale rather than just completion at scale.
+
+**Timing:** 22,900s wall clock (~6.4 hours), ~218.3 lines/sec end-to-end
+throughput -- closely matching the pre-run estimate (~224 lines/sec,
+extrapolated from the slower of the two 1,000,000-line runs' measured
+rates) documented in `run_5m_load_test.sh`'s own header comment. The poll
+loop ran 1,505 polls before declaring 3 consecutive stable reads and
+exiting -- `run_load_test.sh`'s auto-scaled `DEFAULT_MAX_WAIT_SECONDS`
+fix (added specifically anticipating this run, previously unverified)
+worked exactly as designed: no false timeout, no premature exit.
+
+**What this confirms, concretely:**
+- Bug 25's pre-flight fix (bringing up all 3 OpenSearch nodes explicitly
+  before the Logstash config-test step) resolved the real blocker, not
+  just a superficial symptom.
+- The auto-scaling poll deadline added to `run_load_test.sh` for exactly
+  this scale of run holds up under a real ~6.4-hour execution.
+- The full stack -- 3-node OpenSearch, 6-container Redis Sentinel HA,
+  `redact-service`, `redact-lb`, Logstash -- starting and running
+  together at once does not introduce the resource-contention risk that
+  was flagged (but unconfirmed either way) when Bug 25's fix was applied.
+- This project's largest verified single-machine run is now 5,000,000
+  lines, up from 1,000,000 -- Task #47 (ROADMAP item 9's stretch goal) is
+  closed.
+
+**Scoped honestly, unchanged from every prior load-test entry:** this
+remains a single-machine, single-shard-per-node vertical-scaling test.
+It does not establish anything about real multi-machine infrastructure or
+actual terabytes/day production volume -- see item 9/item 12's own
+closing caveats in `ROADMAP.md`, restated here rather than re-argued.
+
+ROADMAP.md item 9 updated with the full 5,000,000-line result; Task #47
+marked complete.
