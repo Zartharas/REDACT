@@ -84,6 +84,31 @@ sed 's/=.*/=<redacted>/' .env
 echo
 echo "--- Pre-flight: validating Logstash pipeline config syntax ---"
 docker compose build logstash
+
+# Real bug, found 2026-08-11 from a live run: `docker compose run --rm
+# logstash ...` only starts the DIRECT dependencies logstash itself
+# declares in docker-compose.yml (opensearch-node1, redact-service,
+# redact-lb) -- it does NOT start opensearch-node2/opensearch-node3, since
+# nothing in that dependency graph names them. That was fine back when
+# OpenSearch was a single-node service, but since ROADMAP item 12 made it
+# a real 3-node cluster, opensearch-node1's own healthcheck specifically
+# requires all 3 nodes to have joined ("number_of_nodes":3) -- so node1
+# can never pass health in this isolated context, and `docker compose run`
+# fails with "dependency failed to start: container ... is unhealthy"
+# before Logstash's config is ever actually tested. This exact OpenSearch
+# config already proved it forms a healthy cluster fine (confirmed live,
+# same day) under run_floci_kafka_test.sh's explicitly-scoped
+# `docker compose up -d --build redact-service redact-lb opensearch-node1
+# opensearch-node2 opensearch-node3` -- the difference is that invocation
+# names all 3 nodes explicitly and this pre-flight step didn't. Fixed by
+# bringing up the full dependency set (matching that proven invocation)
+# BEFORE the `docker compose run` call, so by the time it runs, node1 can
+# actually become healthy.
+echo "--- Bringing up Logstash's full dependency set first (all 3 OpenSearch"
+echo "    nodes, not just node1 -- see comment above for why) ---"
+docker compose up -d --build redact-service redact-lb \
+  opensearch-node1 opensearch-node2 opensearch-node3
+
 docker compose run --rm logstash \
   bin/logstash --config.test_and_exit -f /usr/share/logstash/pipeline/redact-pipeline.conf
 echo "Logstash config syntax OK."

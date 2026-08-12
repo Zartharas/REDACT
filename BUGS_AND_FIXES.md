@@ -3520,3 +3520,76 @@ matching how this project has always interpreted this ratio elsewhere
 
 ROADMAP.md item 13's Kafka bullet updated from "IN PROGRESS" to "DONE,
 CONFIRMED LIVE."
+
+---
+
+## 25. 5M-line load test's own pre-flight step could never pass, against the new 3-node OpenSearch cluster
+
+**Impact:** High (blocked Task #47's 5,000,000-line run from starting at
+all -- not a data-integrity bug, a hard startup failure). **Status:**
+Fix applied same day, 2026-08-11; not yet reconfirmed live (the user's
+next `./run_5m_load_test.sh` attempt is what will confirm it).
+
+Found from the user's first live attempt at `./run_5m_load_test.sh`
+(Task #47's stretch-goal run). The stack failed during startup, before a
+single corpus line was processed:
+
+```
+Container redact-opensearch-node1 Error dependency opensearch-node1 failed to start
+dependency failed to start: container redact-opensearch-node1 is unhealthy
+```
+
+**Root cause:** the Logstash config pre-flight step (`docker compose run
+--rm logstash bin/logstash --config.test_and_exit ...`, added 2026-08-10
+per Bug 16 to catch pipeline syntax errors in seconds instead of minutes)
+only starts the containers `logstash` itself directly lists under
+`depends_on` in `docker-compose.yml`: `opensearch-node1`, `redact-service`,
+`redact-lb`. `docker compose run` does not start every service in the
+file, only the named service's own transitive dependency graph -- and
+nothing in that graph names `opensearch-node2` or `opensearch-node3`.
+That was harmless when OpenSearch was a single-node service (this
+pre-flight step's original design target), but since ROADMAP item 12
+replaced it with a real 3-node cluster, `opensearch-node1`'s own
+healthcheck specifically requires all 3 nodes to have joined
+(`"number_of_nodes":3` in its `_cluster/health` response, see that
+service's own healthcheck comment in `docker-compose.yml`) -- so node1
+can never pass health in this isolated context, `docker compose run`
+correctly reports its dependency as permanently unhealthy, and the
+pre-flight step fails before Logstash's config is ever actually tested.
+
+This pre-flight step exists in two scripts (`run_1m_load_test.sh` and
+`run_5m_load_test.sh`, identical code, `run_5m_load_test.sh` copied from
+the other per that script's own header comment) and both had the
+identical latent bug -- it just hadn't been triggered yet in
+`run_1m_load_test.sh` because that script hasn't been rerun since the
+3-node OpenSearch change landed. Confirmed this is specifically an
+isolation problem, not a real cluster-formation problem, by cross-
+referencing against `run_floci_kafka_test.sh`'s own invocation earlier
+the same day: `docker compose up -d --build redact-service redact-lb
+opensearch-node1 opensearch-node2 opensearch-node3` (explicitly naming
+all 3 nodes) formed a healthy 3-node cluster without incident, using this
+exact same `docker-compose.yml` service definition.
+
+**Fix:** both scripts now explicitly bring up the full dependency set --
+all 3 OpenSearch nodes, `redact-service`, `redact-lb` -- via `docker
+compose up -d --build` immediately before the `docker compose run --rm
+logstash ...` pre-flight call, mirroring `run_floci_kafka_test.sh`'s own
+proven, explicitly-scoped invocation rather than relying on `docker
+compose run`'s implicit (and, for a multi-node service, incomplete)
+dependency resolution. By the time the pre-flight `run` executes,
+`opensearch-node1` can actually become healthy because all 3 real nodes
+already exist.
+
+**Not yet reconfirmed live:** syntax-checked (`bash -n`) in this sandbox
+only, same disclosed limitation as every other script here that needs a
+live Docker daemon to actually verify. The next `./run_5m_load_test.sh`
+attempt is what will confirm whether this specific failure is resolved --
+worth noting that a real 3-node OpenSearch cluster, a 6-container Redis
+Sentinel HA stack, `redact-service`, `redact-lb`, and Logstash all
+starting together (once the full unscoped `docker compose up --build -d`
+in `validation/load_test/run_load_test.sh` itself runs, after this
+pre-flight step passes) is real, new resource contention this project
+has not exercised before at any scale -- if the stack becomes healthy
+this time but takes meaningfully longer than the ~195s the healthcheck
+window assumes, that would be a second, separate finding worth its own
+entry, not evidence this fix was wrong.

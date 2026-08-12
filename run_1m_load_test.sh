@@ -53,6 +53,26 @@ sed 's/=.*/=<redacted>/' .env
 echo
 echo "--- Pre-flight: validating Logstash pipeline config syntax ---"
 docker compose build logstash
+
+# Real bug, found 2026-08-11 via a live run_5m_load_test.sh run (same
+# pre-flight step, copied here verbatim): `docker compose run --rm
+# logstash ...` only starts logstash's DIRECT depends_on entries
+# (opensearch-node1, redact-service, redact-lb) -- not opensearch-node2/3,
+# since nothing in that graph names them. Harmless when OpenSearch was a
+# single-node service; broken since ROADMAP item 12 made it a real 3-node
+# cluster, because opensearch-node1's own healthcheck requires all 3
+# nodes to have joined ("number_of_nodes":3) and can never pass alone.
+# This script hadn't been rerun since that change, so the bug was latent
+# here too even though it was only actually triggered via the 5M-line
+# script first. Fixed the same way: bring up the full dependency set
+# (all 3 OpenSearch nodes, redact-service, redact-lb) explicitly before
+# `docker compose run`, matching run_floci_kafka_test.sh's own proven,
+# explicitly-scoped invocation.
+echo "--- Bringing up Logstash's full dependency set first (all 3 OpenSearch"
+echo "    nodes, not just node1 -- see comment above for why) ---"
+docker compose up -d --build redact-service redact-lb \
+  opensearch-node1 opensearch-node2 opensearch-node3
+
 docker compose run --rm logstash \
   bin/logstash --config.test_and_exit -f /usr/share/logstash/pipeline/redact-pipeline.conf
 echo "Logstash config syntax OK."
