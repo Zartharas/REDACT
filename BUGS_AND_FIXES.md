@@ -3770,10 +3770,13 @@ end to end.
 
 ## Engineering upgrade 13: Task #52 (real Azure Load Balancer), first live run found two real bugs
 
-**Status:** In progress, 2026-09-06 -- two real bugs found and fixed
-from the user's live run against a real Azure for Students subscription;
-not yet confirmed fully working end to end (the fixes below are
-syntax-checked, not yet re-run).
+**Status:** In progress, 2026-09-06 -- three real issues found across
+successive live reruns against a real Azure for Students subscription;
+not yet confirmed fully working end to end. Bugs (a) and (b) below are
+confirmed fixed live (the rerun got past resource-group/VNet/NSG/
+public-IP/load-balancer/probe/rule/NIC creation using those fixes);
+bug (c) is a transient capacity restriction, fixed by making VM size
+overridable, not yet re-run with the new default.
 
 `run_azure_lb_test.sh` (added for Task #52, mirroring
 `run_floci_elbv2_test.sh`'s exact scope against floci's local ELB v2
@@ -3839,7 +3842,41 @@ NIC by name (`--nics`) instead of the VM-level `--vnet-name`/
 `--subnet`/`--nsg` flags (which become the NIC's own settings instead
 once a VM is created against an explicit NIC list).
 
-**Not yet re-verified live:** the fixed script has not yet been rerun
-against the user's real Azure for Students subscription. Next step is
-exactly that -- same standard as every other "fix applied, verification
-pending" entry in this document.
+With bugs (a) and (b) fixed, the next live rerun got all the way
+through resource group, VNet/NSG/subnet, public IP, Standard Load
+Balancer, health probe, LB rule, and the first VM's NIC creation plus
+backend-pool attachment -- confirming both fixes actually work against
+real Azure, not just syntactically. It then hit a third real, live
+issue at the VM-creation step itself.
+
+**Bug (c): `Standard_B1s` capacity unavailable in `northcentralus` at
+the time of the run.** Failed with `(SkuNotAvailable)`: "Following
+SKUs have failed for Capacity Restrictions: Standard_B1s ... currently
+not available in location 'northcentralus'. Please try another size or
+deploy to a different location or different zone." This is a real,
+transient per-region/per-time Azure capacity limit, not a
+configuration mistake or a script bug -- it can appear and disappear
+independently of anything in this repo.
+
+**Fix:** VM size is now the script's second positional argument
+(`VM_SIZE="${2:-Standard_B2s}"`, mirroring how `LOCATION` was made the
+first positional argument for Bug (a) above), defaulting to
+`Standard_B2s` instead of the previously-hardcoded `Standard_B1s`. Both
+`az vm create` calls in the per-VM loop now reference `"$VM_SIZE"`.
+If `Standard_B2s` also hits a capacity error, the fix is the same
+pattern: pass a third size, or fall back to one of the other allowed
+regions from Bug (a)'s discovery command
+(`denmarkeast`/`westus`/`belgiumcentral`/`mexicocentral`), e.g.:
+
+```
+./run_azure_lb_test.sh northcentralus Standard_B2s
+```
+
+**Not yet re-verified live:** this fix has been syntax-checked
+(`bash -n`) but not yet rerun against the user's real Azure for
+Students subscription. Next step is exactly that -- same standard as
+every other "fix applied, verification pending" entry in this
+document. If it succeeds, Parts 4 and 5 (backend health polling and a
+real `curl` through the load balancer's public IP) will finally run,
+answering this test's actual question: whether Azure's Standard Load
+Balancer does real data-plane traffic proxying.

@@ -72,6 +72,15 @@ RG="redact-lb-test"
 # then pass it as this script's first argument, e.g.:
 #   ./run_azure_lb_test.sh westus2
 LOCATION="${1:-eastus}"
+# VM_SIZE, made overridable 2026-09-06 after a second real live finding:
+# Standard_B1s hit `(SkuNotAvailable)` in northcentralus -- Azure's
+# per-region SKU capacity fluctuates over time and isn't something a
+# script can know in advance; this is a transient capacity restriction,
+# not a config mistake. Standard_B2s is the fallback tried here (still
+# a small, cheap burstable size, well within Azure for Students credit)
+# -- if that also fails, try a different size or a different one of
+# your allowed regions from Bug (a)'s discovery command above.
+VM_SIZE="${2:-Standard_B2s}"
 VNET="redact-lb-vnet"
 SUBNET="redact-lb-subnet"
 NSG="redact-lb-nsg"
@@ -189,9 +198,9 @@ for i in 1 2; do
         --lb-name "$LB" --address-pool "$BACKEND_POOL" \
         --output none
 
-    echo "Creating ${VM_NAME}..."
+    echo "Creating ${VM_NAME} (size: ${VM_SIZE})..."
     az vm create --resource-group "$RG" --name "$VM_NAME" \
-        --image Ubuntu2204 --size Standard_B1s \
+        --image Ubuntu2204 --size "$VM_SIZE" \
         --nics "$NIC_NAME" \
         --custom-data "$CLOUD_INIT_FILE" \
         --generate-ssh-keys \
