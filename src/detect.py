@@ -70,13 +70,62 @@ def _is_aws_account_id_context(text: str, start: int) -> bool:
                 or _AWS_ACCOUNT_ID_KEY_RE.search(prefix))
 
 
+# Second real collision found, this time via the Zookeeper real-data
+# condition (validation/real_data/download_loghub.sh's IP_ONLY_DATASETS,
+# run for the first time 2026-09 after that script's own missing-file gap
+# was fixed -- see BUGS_AND_FIXES.md "Engineering upgrade 14"): P=0.476,
+# FP=1557 against only 1413 real IP ground-truth spans. Root-caused via
+# direct inspection (Grep, not a dedicated diagnostic script this time):
+# Zookeeper's SendWorker/RecvWorker thread names embed a recurring
+# 12-digit internal worker ID, "188978561024" -- confirmed present in
+# 1,128 of the file's 2,000 lines, i.e. the large majority of the false
+# positives, an incidental collision with CREDIT_CARD's \d{12,19} range,
+# same class of bug as the AWS account ID collision above but a
+# genuinely different context (a Java thread name, not JSON or an ARN) --
+# the existing _is_aws_account_id_context() exclusion correctly does NOT
+# suppress it, because it isn't the AWS shape; this is a new instance of
+# the general problem, not a bug in that fix.
+#
+# Adding a THIRD narrow, source-specific exclusion for "look like a
+# ZooKeeper thread ID" would repeat the same mistake in a different
+# place -- every new log format with an incidental 12+-digit constant
+# would need its own hand-written carve-out forever. A Luhn checksum is
+# the general fix instead: real (and Faker-synthetic -- Faker's card
+# provider computes a real Luhn check digit, standard practice for
+# generating realistic-looking test data) credit card numbers are
+# Luhn-valid by construction; most incidental long integers (thread IDs,
+# zxids, session IDs) are not. Verified by hand for this exact case:
+# 188978561024 sums to 56 under the standard Luhn doubling procedure,
+# not a multiple of 10 -- fails the check, would be correctly excluded.
+#
+# NOT YET VERIFIED LIVE against this project's own synthetic corpus --
+# this session's sandbox shell is unavailable (see BUGS_AND_FIXES.md),
+# so `pytest tests/` and `validate.py` could not be re-run here to
+# confirm this doesn't regress synthetic CREDIT_CARD recall the way
+# narrowing the digit range would have. Needs that confirmation before
+# being treated as settled, same standard as every other "fix applied,
+# not yet confirmed live" entry in this project.
+def _luhn_valid(digits: str) -> bool:
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        d = int(ch)
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return total % 10 == 0
+
+
 def scan_regex(text: str) -> list[dict]:
     hits = []
     for label, pattern in REGEX_PATTERNS.items():
         for m in pattern.finditer(text):
-            if (label == "CREDIT_CARD" and m.end() - m.start() == 12
-                    and _is_aws_account_id_context(text, m.start())):
-                continue
+            if label == "CREDIT_CARD":
+                if m.end() - m.start() == 12 and _is_aws_account_id_context(text, m.start()):
+                    continue
+                if not _luhn_valid(m.group()):
+                    continue
             hits.append({"type": label, "start": m.start(), "end": m.end(), "method": "regex"})
     return hits
 
