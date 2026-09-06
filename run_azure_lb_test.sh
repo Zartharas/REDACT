@@ -311,25 +311,33 @@ done
 echo "Both VMs created and attached to the load balancer's backend pool."
 
 echo ""
-echo "=== Part 4: waiting for health probes to pass (up to 3 minutes) ==="
-# Cloud-init needs real time to run on first boot -- not instantaneous
-# the way floci's local containers are. `az network lb show-backend-health`
-# is the direct Azure-CLI equivalent of run_floci_elbv2_test.sh's own
-# `aws elbv2 describe-target-health` check -- real per-target probe
-# state, not just static backend-pool membership, which is exactly the
-# distinction that mattered when floci's targets showed "registered"
-# but stuck at "initial" forever. Printed raw rather than parsed to a
-# single number -- this project's own discipline is to not invent an
-# unverified JSON field-path shape for a command whose exact output
-# structure hasn't been checked against a live Azure account; read the
-# printed JSON yourself each poll rather than trust a parse that could
-# be silently wrong.
-for i in $(seq 1 6); do
-    echo "  --- poll $i (look for \"Healthy\" in the output below) ---"
-    az network lb show-backend-health --resource-group "$RG" --name "$LB" \
-        --output json 2>/dev/null || echo "  (not ready yet)"
-    sleep 15
-done
+echo "=== Part 4: waiting for backend instances to finish booting (up to 90s) ==="
+# Real bug, found live 2026-09-06 (Bug (e), BUGS_AND_FIXES.md): this
+# step used to call `az network lb show-backend-health`, which does
+# not exist in the current Azure CLI -- confirmed against the
+# official, complete `az network lb` command list
+# (learn.microsoft.com/cli/azure/network/lb), which has no
+# `show-backend-health` entry. I'd invented it by pattern-matching
+# run_floci_elbv2_test.sh's `aws elbv2 describe-target-health` without
+# checking the real Azure CLI surface first -- same class of mistake
+# as Bug (b) above. It "worked" only in the sense that this loop's own
+# `|| echo "(not ready yet)"` swallowed the resulting error silently on
+# every single poll, so it never surfaced as a failure -- it also
+# never told you anything real.
+#
+# The actual documented mechanism (Microsoft Learn, "Manage Azure Load
+# Balancer health status") is a per-rule REST call (POST
+# .../loadBalancingRules/<rule>/health, async via a Location header
+# in the response) or the Azure portal's own "Load balancing rules ->
+# View details" panel -- not a single synchronous CLI command, and not
+# something worth inventing an unverified REST flow for here. Part 5
+# below already gives a stronger, more direct answer than a probe
+# state label would: a real HTTP response through the LB's public IP.
+# This step is now just a fixed wait for cloud-init to finish booting.
+sleep 90
+echo "(For per-instance probe reason codes, not just pass/fail: Azure portal ->"
+echo "your load balancer -> Load balancing rules -> View details, or see"
+echo "learn.microsoft.com/azure/load-balancer/load-balancer-manage-health-status)"
 
 echo ""
 echo "=== Part 5: data-plane test -- does the LB's public IP actually proxy real traffic? ==="

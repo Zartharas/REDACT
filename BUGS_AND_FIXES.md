@@ -3768,15 +3768,13 @@ end to end.
 
 ---
 
-## Engineering upgrade 13: Task #52 (real Azure Load Balancer), first live run found two real bugs
+## Engineering upgrade 13: Task #52 (real Azure Load Balancer), five real bugs found and fixed across successive live reruns
 
-**Status:** In progress, 2026-09-06 -- three real issues found across
-successive live reruns against a real Azure for Students subscription;
-not yet confirmed fully working end to end. Bugs (a) and (b) below are
-confirmed fixed live (the rerun got past resource-group/VNet/NSG/
-public-IP/load-balancer/probe/rule/NIC creation using those fixes);
-bug (c) is a transient capacity restriction, fixed by making VM size
-overridable, not yet re-run with the new default.
+**Status:** Done, confirmed live 2026-09-06. Five real, live bugs
+(a)-(e) below were found and fixed across successive reruns against a
+real Azure for Students subscription; the final rerun confirmed
+Azure's Standard Load Balancer does real data-plane traffic
+proxying, closing Task #52.
 
 `run_azure_lb_test.sh` (added for Task #52, mirroring
 `run_floci_elbv2_test.sh`'s exact scope against floci's local ELB v2
@@ -3965,14 +3963,60 @@ under `set -euo pipefail`, so an all-restricted `az vm list-skus`
 response could otherwise have crashed the pre-flight step itself
 rather than degrading to "just try `$VM_SIZE`."
 
-**Not yet re-verified live:** this fix has been syntax-checked
-(`bash -n`) but not yet rerun against the user's real Azure for
-Students subscription. Next step is exactly that -- same standard as
-every other "fix applied, verification pending" entry in this
-document. If VM creation succeeds, Parts 4 and 5 (backend health
-polling and a real `curl` through the load balancer's public IP) will
-finally run, answering this test's actual question: whether Azure's
-Standard Load Balancer does real data-plane traffic proxying.
+**Confirmed live, 2026-09-06.** With Bug (d) fixed, the rerun's
+auto-fallback loop tried `Standard_B2s`, `Standard_B16als_v2`, and
+`Standard_B16as_v2` (all three failed -- the first two `Not
+AvailableForSubscription`, matching Bug (c)'s finding; the CLI's own
+already-noted `RuntimeError: The content for this response was
+already consumed` cosmetic bug fired for each, but the loop correctly
+read the real exit code underneath it and moved on regardless), then
+succeeded on `Standard_B2als_v2` for both backend VMs.
+
+**Bug (e), found on this same rerun: `az network lb
+show-backend-health` does not exist.** All 6 polls in the health-probe
+step printed only `(not ready yet)` -- the command itself was failing
+silently every time (its stderr was redirected to `/dev/null`), not
+reporting an actual unhealthy state. Checked against the complete,
+official `az network lb` command reference
+(learn.microsoft.com/cli/azure/network/lb) -- no `show-backend-health`
+subcommand exists there or anywhere else in the current Azure CLI. I'd
+invented it by pattern-matching `run_floci_elbv2_test.sh`'s `aws elbv2
+describe-target-health` without checking the real Azure CLI surface --
+the same class of mistake as Bug (b), just one this project caught a
+step later because its failure was accidentally swallowed by the
+loop's own error handling instead of surfacing immediately.
+
+**Fix:** replaced the fake health-probe poll with a plain 90-second
+wait for cloud-init to finish booting, plus a pointer to the real
+mechanism (Microsoft Learn, "Manage Azure Load Balancer health
+status": a per-rule REST call, async via a Location header, or the
+Azure portal's own health panel -- not a single synchronous CLI
+command, and not worth inventing an unverified REST flow for here when
+Part 5 already gives a stronger, more direct answer).
+
+**Part 5 (the test's actual point) passed on the very first attempt:**
+a real `curl` through the load balancer's public IP
+(`64.236.128.11:8080/health`) returned `"OK from redact-backend-1"`.
+**This closes Task #52.** Azure's Standard Load Balancer does real
+data-plane traffic proxying -- both the control plane (resource
+creation, backend-pool attachment) and the data plane (actual request
+forwarding to a live backend) are now confirmed against a real cloud
+account, the exact question `run_floci_elbv2_test.sh` could not answer
+for floci's local emulation.
+
+**Five real, live bugs found and fixed across this one Task #52 test
+script**, none of which showed up in this sandbox's own syntax
+checking, each documented above as it was found rather than glossed
+over: (a) subscription-specific region restrictions, (b) invented
+`az vm create` flags, (c) a real subscription-level size restriction
+initially mistaken for transient capacity, (d) a macOS bash 3.2
+portability gap (`mapfile`), and (e) an invented, nonexistent Azure CLI
+subcommand. Cleanup reminder from the script itself, restated here
+since these resources bill by the hour until removed:
+
+```
+az group delete --resource-group redact-lb-test --yes --no-wait
+```
 
 Sources:
 - [SKU not available errors - Azure Resource Manager](https://learn.microsoft.com/en-us/azure/azure-resource-manager/troubleshooting/error-sku-not-available)
