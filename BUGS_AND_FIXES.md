@@ -3913,6 +3913,29 @@ possibility of another `SkuNotAvailable` -- nothing can, by Microsoft's
 own admission -- but it replaces blind guessing with the documented
 diagnostic path.
 
+**Update, same day, live rerun:** with the pre-flight check in place,
+`Standard_B2s` failed identically to `Standard_B1s` -- but this time
+the pre-flight's own `az vm list-skus --all` output showed exactly
+why: both sizes are listed as `NotAvailableForSubscription, type:
+Location, locations: northcentralus` for this specific Azure for
+Students subscription. That's a documented subscription/region
+restriction, not the transient-capacity theory assumed after the
+first failure. Guessing a third size by hand would have cost another
+full manual rerun to find out the same way.
+
+**Fix, escalated:** rather than keep guessing one size at a time,
+the script now builds a real candidate list from the sizes its own
+pre-flight check reports as unrestricted in `$LOCATION` (ARM64
+"p"-suffixed B-series sizes filtered out, since `--image Ubuntu2204`
+resolves to x64 and isn't guaranteed compatible with Ampere Altra/
+Cobalt silicon), and the VM-creation loop tries them in order,
+falling through to the next candidate on failure instead of stopping
+at the first `SkuNotAvailable`. The size that succeeds for the first
+VM is reused as the first candidate for the second, so both backends
+land on the same size. If every candidate fails, the script now exits
+with a pointer to try a different allowed region from Bug (a)'s
+discovery command, rather than a bare stack trace.
+
 **Not yet re-verified live:** this fix has been syntax-checked
 (`bash -n`) but not yet rerun against the user's real Azure for
 Students subscription. Next step is exactly that -- same standard as

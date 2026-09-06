@@ -184,9 +184,41 @@ echo ""
 echo "Pre-flight: checking which VM sizes have no known restriction in ${LOCATION}..."
 az vm list-skus --location "$LOCATION" --size "$VM_SIZE" --all --output table || true
 echo ""
-echo "First 15 unrestricted sizes in ${LOCATION} (informational; doesn't guarantee live capacity):"
-az vm list-skus --location "$LOCATION" --resource-type virtualMachines \
-    --query "[?length(restrictions)==\`0\`].name" --output tsv 2>/dev/null | head -15 || true
+echo "Unrestricted sizes in ${LOCATION} (informational; doesn't guarantee live capacity):"
+
+# Real finding, 2026-09-06: this pre-flight check itself showed
+# Standard_B1s AND Standard_B2s both listed as
+# "NotAvailableForSubscription, type: Location" for this specific
+# subscription in northcentralus -- an actual documented restriction,
+# not just transient capacity as first assumed. Rather than cost
+# another manual round-trip guessing a third size by hand, build a
+# real candidate list from the sizes this check reports as genuinely
+# unrestricted, and try them in order automatically below. ARM64
+# sizes (Azure's "p"-suffixed B-series, e.g. Standard_Bpls_v2 --
+# Ampere Altra/Cobalt silicon) are filtered out since `--image
+# Ubuntu2204` resolves to an x64 image and isn't guaranteed
+# architecture-compatible with them.
+mapfile -t UNRESTRICTED_SIZES < <(
+    az vm list-skus --location "$LOCATION" --resource-type virtualMachines \
+        --query "[?length(restrictions)==\`0\`].name" --output tsv 2>/dev/null \
+        | grep -vE '^Standard_B[0-9]+p' \
+        | head -20
+)
+printf '%s\n' "${UNRESTRICTED_SIZES[@]}"
+echo ""
+
+# Candidate list this run will actually try, in order: the
+# user-requested/default $VM_SIZE first (respects an explicit
+# override), then the unrestricted sizes above, de-duplicated.
+CANDIDATE_SIZES=()
+for s in "$VM_SIZE" "${UNRESTRICTED_SIZES[@]}"; do
+    dup=false
+    for existing in "${CANDIDATE_SIZES[@]:-}"; do
+        [ "$existing" = "$s" ] && dup=true && break
+    done
+    [ "$dup" = false ] && CANDIDATE_SIZES+=("$s")
+done
+echo "Will try, in order: ${CANDIDATE_SIZES[*]}"
 echo ""
 
 # Real bug, found live 2026-09-06: `az vm create` has no `--lb`/
@@ -222,13 +254,47 @@ for i in 1 2; do
         --lb-name "$LB" --address-pool "$BACKEND_POOL" \
         --output none
 
-    echo "Creating ${VM_NAME} (size: ${VM_SIZE})..."
-    az vm create --resource-group "$RG" --name "$VM_NAME" \
-        --image Ubuntu2204 --size "$VM_SIZE" \
-        --nics "$NIC_NAME" \
-        --custom-data "$CLOUD_INIT_FILE" \
-        --generate-ssh-keys \
-        --output none
+    # Try each candidate size in order (see the pre-flight block above)
+    # instead of a single hardcoded/overridden size -- added 2026-09-06
+    # after Standard_B1s and Standard_B2s both came back
+    # NotAvailableForSubscription in northcentralus on consecutive live
+    # runs, which cost two separate manual reruns to discover one at a
+    # time. `az vm create` failing is caught here (not fatal under
+    # `set -e`, since a failing command inside an `if` condition
+    # doesn't trigger it) so the loop can fall through to the next
+    # candidate.
+    VM_CREATED=false
+    for SIZE_TRY in "${CANDIDATE_SIZES[@]}"; do
+        echo "Creating ${VM_NAME} (size: ${SIZE_TRY})..."
+        if az vm create --resource-group "$RG" --name "$VM_NAME" \
+            --image Ubuntu2204 --size "$SIZE_TRY" \
+            --nics "$NIC_NAME" \
+            --custom-data "$CLOUD_INIT_FILE" \
+            --generate-ssh-keys \
+            --output none 2>/tmp/redact_vm_create_err.log; then
+            echo "Succeeded with size ${SIZE_TRY}."
+            # Lock this size in as the first candidate for the next VM
+            # in the loop, so both backends end up the same size
+            # rather than re-negotiating from scratch each time.
+            VM_SIZE="$SIZE_TRY"
+            CANDIDATE_SIZES=("$SIZE_TRY" "${CANDIDATE_SIZES[@]}")
+            VM_CREATED=true
+            break
+        else
+            echo "Size ${SIZE_TRY} failed -- trying next candidate. Error tail:"
+            tail -5 /tmp/redact_vm_create_err.log
+        fi
+    done
+    rm -f /tmp/redact_vm_create_err.log
+    if [ "$VM_CREATED" = false ]; then
+        echo ""
+        echo "All candidate sizes failed for ${VM_NAME} in ${LOCATION}. This region may be"
+        echo "genuinely capacity- or quota-constrained for this subscription right now."
+        echo "Next step: try a different allowed region from Bug (a)'s discovery command"
+        echo "in BUGS_AND_FIXES.md, e.g.:"
+        echo "  ./run_azure_lb_test.sh westus"
+        exit 1
+    fi
 done
 echo "Both VMs created and attached to the load balancer's backend pool."
 
