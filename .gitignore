@@ -84,3 +84,11 @@ wasm/layer1_4/node_modules/
 wasm/layer1_4/build/
 wasm/layer1_4/tests/_equivalence_corpus.txt
 wasm/layer1_4/tests/_real_data_equivalence_corpus.txt
+
+# PIIBench evaluation output (validation/piibench/evaluate_piibench.py) --
+# a per-run results JSON against a large third-party benchmark file that
+# isn't itself committed here either (fetched fresh via the PIIBench repo's
+# own data pipeline / HuggingFace, see validation/piibench/README.md), same
+# "generated, not hand-authored" policy as every other results artifact
+# above.
+validation/piibench/results.json
