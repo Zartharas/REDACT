@@ -152,6 +152,22 @@ KAFKA_BROKERS = [b.strip() for b in os.environ.get("KAFKA_BROKERS", "").split(",
 KAFKA_TOPIC = os.environ.get("KAFKA_TOPIC", "redact-raw-events")
 KAFKA_GROUP_ID = os.environ.get("KAFKA_GROUP_ID", "redact-queue-consumer")
 
+# SASL_SSL auth, added 2026-09-05 (Task #53) for validating against a
+# REAL managed Kafka (Confluent Cloud's Basic tier, tested live) rather
+# than floci's local, unauthenticated Redpanda emulation. Every value
+# here defaults to "off" (KAFKA_SECURITY_PROTOCOL defaults to
+# PLAINTEXT, the others to empty strings) so run_floci_kafka_test.sh's
+# existing, already-confirmed-live local path is completely unaffected --
+# this is purely additive, opt-in configuration, the same backward-
+# compatible pattern as REDIS_SENTINELS/KAFKA_BROKERS themselves above.
+# kafka-python's SASL PLAIN mechanism needs no extra system dependency
+# (unlike GSSAPI/Kerberos), so no new requirements file entry is needed
+# for this specifically.
+KAFKA_SECURITY_PROTOCOL = os.environ.get("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
+KAFKA_SASL_MECHANISM = os.environ.get("KAFKA_SASL_MECHANISM", "")
+KAFKA_SASL_USERNAME = os.environ.get("KAFKA_SASL_USERNAME", "")
+KAFKA_SASL_PASSWORD = os.environ.get("KAFKA_SASL_PASSWORD", "")
+
 
 def call_redact_service(text: str, log_type: str | None) -> dict:
     """Mirrors redact-pipeline.conf's http filter block exactly: same URL
@@ -347,14 +363,23 @@ def _run_kafka_consumer():
                                        # kafka-python installed.
     from kafka.errors import KafkaError  # noqa: E402
 
-    consumer = KafkaConsumer(
-        KAFKA_TOPIC,
+    # kafka_kwargs built as a dict (not inline in the constructor call)
+    # specifically so the SASL_SSL keys can be added conditionally --
+    # kafka-python's KafkaConsumer accepts sasl_mechanism/sasl_plain_
+    # username/sasl_plain_password, but passing an empty sasl_mechanism
+    # string (this module's own default, for the floci/PLAINTEXT path)
+    # is NOT the same as omitting the kwargs entirely, and has been
+    # observed elsewhere to behave differently across client library
+    # versions -- simplest to just not pass them at all when unset,
+    # rather than rely on an empty string being silently ignored.
+    kafka_kwargs = dict(
         bootstrap_servers=KAFKA_BROKERS,
         group_id=KAFKA_GROUP_ID,
         enable_auto_commit=False,
         auto_offset_reset="earliest",
         value_deserializer=lambda v: v.decode("utf-8"),
         consumer_timeout_ms=BLPOP_TIMEOUT_SECONDS * 1000,
+        security_protocol=KAFKA_SECURITY_PROTOCOL,
         # max_poll_records, added 2026-08-11 alongside the doc_id_base fix
         # above (Bug 23, BUGS_AND_FIXES.md) -- a probable CONTRIBUTING
         # cause of the live 3x over-processing found running this against
@@ -388,9 +413,17 @@ def _run_kafka_consumer():
         # out to be the true cause or not.
         max_poll_records=10,
     )
+    if KAFKA_SASL_MECHANISM:
+        kafka_kwargs.update(
+            sasl_mechanism=KAFKA_SASL_MECHANISM,
+            sasl_plain_username=KAFKA_SASL_USERNAME,
+            sasl_plain_password=KAFKA_SASL_PASSWORD,
+        )
+    consumer = KafkaConsumer(KAFKA_TOPIC, **kafka_kwargs)
     print(
         f"queue_consumer: polling topic '{KAFKA_TOPIC}' via Kafka brokers "
-        f"{KAFKA_BROKERS} (group: {KAFKA_GROUP_ID})",
+        f"{KAFKA_BROKERS} (group: {KAFKA_GROUP_ID}, security_protocol="
+        f"{KAFKA_SECURITY_PROTOCOL})",
         flush=True,
     )
 

@@ -3657,3 +3657,77 @@ closing caveats in `ROADMAP.md`, restated here rather than re-argued.
 
 ROADMAP.md item 9 updated with the full 5,000,000-line result; Task #47
 marked complete.
+
+---
+
+## Engineering upgrade 12: SASL_SSL support added for real managed Kafka (Task #53)
+
+**Status:** Implemented and syntax/unit-tested, 2026-09-05; not yet
+live-confirmed (needs the user's Confluent Cloud cluster and their
+machine to actually run against it).
+
+Task #53 needs the Kafka-shaped queue path (already confirmed live
+against floci's local, unauthenticated Redpanda emulation -- see "Bug
+23/24 CLOSED" above) validated against a real managed Kafka too. Real
+managed Kafka services -- Confluent Cloud specifically, per
+`CLOUD_SETUP.md`'s reasoning for why it's a better fit here than real
+AWS MSK (MSK has no free tier and bills per broker-hour immediately) --
+require SASL_SSL authentication, which neither `src/queue_consumer.py`'s
+Kafka consumer nor `logstash/redact-pipeline-kafka.conf`'s Kafka
+producer previously supported at all -- both were written only against
+floci's PLAINTEXT-only local broker.
+
+**Added, both sides of the queue:**
+- `src/queue_consumer.py`: `KAFKA_SECURITY_PROTOCOL` (default
+  `PLAINTEXT`, unchanged from before), `KAFKA_SASL_MECHANISM`,
+  `KAFKA_SASL_USERNAME`, `KAFKA_SASL_PASSWORD` -- all opt-in, all empty/
+  off by default. `_run_kafka_consumer()` now builds its `KafkaConsumer`
+  kwargs as a dict and only adds the `sasl_*` keys when
+  `KAFKA_SASL_MECHANISM` is actually set, rather than always passing an
+  empty string for it -- deliberate, since an empty-but-present
+  `sasl_mechanism` kwarg is not guaranteed to behave identically to the
+  kwarg being absent across client library versions, and this project
+  has already been burned once (Bug 22) by assuming an empty/default
+  value would be silently harmless without checking.
+- `logstash/redact-pipeline-kafka.conf`: matching `security_protocol`/
+  `sasl_mechanism`/`sasl_jaas_config` fields on the `kafka` output
+  block, same default-to-PLAINTEXT-and-empty pattern via Logstash's own
+  `${VAR:default}` interpolation.
+- `docker-compose.yml`: both `logstash-kafka` and `queue-consumer-kafka`
+  service blocks gained the matching environment passthrough
+  (`KAFKA_SECURITY_PROTOCOL`, `KAFKA_SASL_MECHANISM`,
+  `KAFKA_SASL_USERNAME`/`KAFKA_SASL_JAAS_CONFIG` as appropriate to each
+  side) -- without this, exporting the right values in a shell before
+  `docker compose up` would have done nothing, since Compose only passes
+  through environment variables a service's own `environment:` block
+  actually references.
+- `run_confluent_kafka_test.sh` (new, repo root): the real-cluster
+  counterpart to `run_floci_kafka_test.sh`. Checks for
+  `CONFLUENT_BOOTSTRAP_SERVERS`/`CONFLUENT_API_KEY`/
+  `CONFLUENT_API_SECRET` in `.env` (real secrets from the user's own
+  Confluent Cloud console -- never invented or defaulted the way this
+  project's own five internal `REDACT_*_KEY` values are), exports the
+  SASL_SSL wiring, and reuses `run_floci_kafka_test.sh`'s already-proven
+  clean-slate teardown and 3-consecutive-stable-polls reconciliation
+  logic rather than rewriting it. Uses a smaller corpus (2,000 lines,
+  vs. floci's 20,000) specifically because this run has a real, if
+  small, per-GB Confluent Cloud data-transfer and storage cost --
+  confirming the architecture works against real infrastructure doesn't
+  need re-measuring throughput floci's local test already covered.
+  Ends with an explicit cleanup reminder to delete the Confluent
+  cluster/topic afterward, since it keeps existing (and could keep
+  costing something) until the user does that themselves.
+
+**Verified so far:** syntax-checked (`bash -n` on the new script,
+`python3 -m py_compile` on `queue_consumer.py`), and the full existing
+`tests/test_queue_consumer.py` suite (13 tests, all mocking the network
+layer) still passes unchanged -- the SASL additions are purely additive
+kwargs, nothing about the existing PLAINTEXT/floci code path changed.
+
+**Not yet verified:** an actual live run against a real Confluent Cloud
+Basic cluster. The user has already created one (`Redact_1`, Basic
+tier, AWS us-east-2, topic `redact-raw-events`) and has the bootstrap
+server address and API key/secret in hand -- next step is running
+`run_confluent_kafka_test.sh` and reconciling the real result, the same
+standard every other "implemented, not yet confirmed" entry in this
+document is held to.
