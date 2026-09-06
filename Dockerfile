@@ -72,6 +72,18 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /app
 
 COPY src/ ./src/
+# config/ added 2026-09 (Phase 1 of DETECTION_POLICY_DECOUPLING_SCOPING.md,
+# "Engineering upgrade 18", BUGS_AND_FIXES.md): ships the default
+# pseudonymize/tokenize/redact policy (config/policy.json) so a fresh
+# container has a valid, fail-closed-checked policy without requiring an
+# operator to supply one. anonymize.py's DEFAULT_POLICY_PATH resolves this
+# to /app/config/policy.json via __file__ (not cwd), so it resolves
+# correctly regardless of gunicorn's `--chdir src` below. docker-compose.yml
+# bind-mounts the host's own ./config/policy.json over this path read-only,
+# so an operator can change policy by editing that host file and restarting
+# the container -- the actual decoupling this build step exists to support
+# -- without needing to rebuild this image at all.
+COPY config/ ./config/
 
 ENV REDACT_TOKEN_STORE_PATH=/app/output/token_store.json
 # REDACT_PSEUDO_KEY and REDACT_AUDIT_KEY are intentionally NOT baked in here.

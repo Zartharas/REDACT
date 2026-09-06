@@ -1,0 +1,7 @@
+{
+  "_comment": "REDACT anonymization policy. Every type src/detect.py can produce (PERSON, EMAIL, IP, SSN, CREDIT_CARD, MRN) must appear in exactly one of the three lists below -- anonymize.load_policy() refuses to start otherwise (fail closed). See DETECTION_POLICY_DECOUPLING_SCOPING.md for why this file exists and BUGS_AND_FIXES.md 'Engineering upgrade 18' for how it was verified.",
+  "_legal_note": "pseudonymize_types and tokenize_types are NOT interchangeable in law, only in mechanics. Pseudonymized data remains personal data in full GDPR scope (Article 29 WP 2014 opinion; EDPB Guidelines 01/2025) -- HMAC pseudonymization here is one-way, but a value in a small enough candidate space can still be verified against a token by an investigator holding the key. Moving a type from tokenize_types to redact_types is a ONE-WAY DOOR for every future occurrence: past tokenized values stay resolvable via the existing TokenStore, but new occurrences of that type will never be tokenized again, so there is nothing left to resolve going forward. Read README.md's anonymization-actions section before changing this file, not just this comment.",
+  "pseudonymize_types": ["IP", "PERSON"],
+  "tokenize_types": ["EMAIL", "MRN", "CREDIT_CARD", "SSN"],
+  "redact_types": []
+}

@@ -224,8 +224,30 @@ services:
       # this default was chosen to survive the OOM this project actually
       # hit, not benchmarked as an optimal throughput number.
       - GUNICORN_WORKERS=${GUNICORN_WORKERS:-2}
+      # REDACT_POLICY_FILE, added 2026-09 (Phase 1 of
+      # DETECTION_POLICY_DECOUPLING_SCOPING.md, "Engineering upgrade 18",
+      # BUGS_AND_FIXES.md). Defaults to the path the bind mount below
+      # populates -- set here explicitly (rather than relying only on
+      # anonymize.py's own DEFAULT_POLICY_PATH) so the actual path in use is
+      # visible in `docker compose config`/`docker inspect` without having
+      # to go read anonymize.py to find it. :- (optional, has a fallback),
+      # not :? (required) -- an operator who removes this line entirely
+      # still gets a working, valid policy from the image's own
+      # /app/config/policy.json (see Dockerfile), just without host-editable
+      # override.
+      - REDACT_POLICY_FILE=${REDACT_POLICY_FILE:-/app/config/policy.json}
     volumes:
       - redact-output:/app/output
+      # Bind-mounts the HOST's config/policy.json over the image's own
+      # baked-in copy, read-only. This is what makes Phase 1's decoupling
+      # real rather than theoretical: an operator edits ./config/policy.json
+      # on the host and restarts this service (`docker compose restart
+      # redact-service`) to change policy -- no image rebuild, no `docker
+      # compose build`. anonymize.load_policy() re-validates the file at
+      # every startup (fail-closed on an invalid edit -- see
+      # PolicyConfigError in anonymize.py), so a bad edit fails the restart
+      # loudly rather than silently running with broken protection.
+      - ./config/policy.json:/app/config/policy.json:ro
     # No host port mapping (see comment above) -- reachable only over
     # redact-net now, from logstash, redact-lb, and queue-consumer.
     networks:

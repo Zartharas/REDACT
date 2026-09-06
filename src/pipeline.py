@@ -19,6 +19,18 @@ import detect      # noqa: E402
 import anonymize   # noqa: E402
 import audit        # noqa: E402
 
+# Phase 1 of DETECTION_POLICY_DECOUPLING_SCOPING.md (2026-09), "Engineering
+# upgrade 18" in BUGS_AND_FIXES.md -- same call, same placement reasoning,
+# as src/service.py's copy of this line: load config/policy.json (or
+# REDACT_POLICY_FILE) before anything else in this module runs, so an
+# invalid policy file fails this script at startup (anonymize.PolicyConfigError)
+# rather than partway through processing a file. Unlike service.py this
+# module doesn't have a "must run outside __main__" constraint (pipeline.py
+# always runs as __main__ via argparse, never imported by a WSGI server),
+# but keeping it at the same import-time spot avoids two different
+# conventions for what is otherwise the identical call.
+anonymize.load_policy()
+
 POLICY_VERSION = "redact-v0.1"
 PSEUDO_KEY = "demo-pseudonymization-key-do-not-use-in-prod"
 AUDIT_KEY = "demo-audit-signing-key-do-not-use-in-prod"

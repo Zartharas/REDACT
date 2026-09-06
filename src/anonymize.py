@@ -1080,6 +1080,23 @@ def detokenize(text: str, store: TokenStore) -> str:
 # Decision matrix implementation: routes each detected span to redact,
 # pseudonymize, or tokenize based on the field type, matching the table in
 # Section 3.6 of the chapter.
+#
+# Phase 1 of DETECTION_POLICY_DECOUPLING_SCOPING.md (2026-09), "Engineering
+# upgrade 18" in BUGS_AND_FIXES.md: these three sets used to be the ONLY
+# form this policy took -- hardcoded module constants, changeable only by
+# editing this file and rebuilding/redeploying. load_policy() below is the
+# actual decoupling: it optionally overrides these three sets from an
+# external JSON file at process startup (see config/policy.json), following
+# the AnonShield `--entities-to-preserve`/`fields_to_exclude` pattern the
+# scoping doc describes -- an operator edits a file and restarts the
+# service; no code change, no rebuild.
+#
+# The literal values below remain the BUILT-IN DEFAULT -- what's used if no
+# policy file is found at the resolved path (see load_policy()'s own
+# docstring for exactly when that is). They are not dead code: every
+# existing caller of this module that never calls load_policy() (validate.py,
+# every test that imports anonymize directly, anything run before this
+# change) keeps working identically, unchanged.
 # ---------------------------------------------------------------------------
 
 # High-cardinality identifiers where correlation across events matters more
@@ -1097,6 +1114,158 @@ TOKENIZE_TYPES = {"EMAIL", "MRN", "CREDIT_CARD", "SSN"}
 # empty here but the routing function still supports it for fields that do
 # (e.g. free-text password-reset bodies, as discussed in the chapter).
 REDACT_TYPES: set[str] = set()
+
+# The six types src/detect.py's ensemble actually claims to detect (see
+# validation/piibench/evaluate_piibench.py's PIIBENCH_TO_REDACT comments and
+# README.md's own scope statement for where this list comes from). Every
+# canonical type MUST end up in exactly one of the three policy sets above --
+# this is the fail-closed invariant DETECTION_POLICY_DECOUPLING_SCOPING.md's
+# devil's-advocate section demands: a policy file that silently omits a type
+# (mapping it to none of the three sets) would turn off that type's
+# protection with no visible error, which is exactly the kind of unenforced
+# control a GDPR Article 32 audit would flag. load_policy() refuses to start
+# rather than accept that silently.
+CANONICAL_TYPES = frozenset({"PERSON", "EMAIL", "IP", "SSN", "CREDIT_CARD", "MRN"})
+
+# __file__-relative, not cwd-relative: this needs to resolve to the same
+# real path (<repo root>/config/policy.json) regardless of whether this
+# module is imported with cwd=<repo root> (validate.py, pytest, pipeline.py
+# run directly) or cwd=<repo root>/src (gunicorn's `--chdir src`, see
+# Dockerfile's CMD comment) -- a cwd-relative "config/policy.json" would
+# silently resolve to two different files depending on which of those
+# invoked it, exactly the kind of environment-dependent surprise this
+# project's own standing discipline tries to avoid.
+DEFAULT_POLICY_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "config", "policy.json")
+)
+
+
+class PolicyConfigError(Exception):
+    """Raised by load_policy() when a policy file exists but is invalid --
+    malformed JSON, wrong shape, a type assigned to more than one bucket, or
+    (the case the scoping doc calls out explicitly) a canonical type left
+    out of all three buckets entirely. Deliberately NOT caught anywhere in
+    this module: the whole point of "fail closed" is that this propagates
+    up and stops service.py/pipeline.py from starting at all, rather than
+    running with a silently-incomplete policy. A missing file is NOT this
+    error -- see load_policy()'s docstring for why that case is handled
+    differently (fail open to the built-in default, not fail closed)."""
+
+
+def load_policy(path: "str | None" = None) -> tuple[set[str], set[str], set[str]]:
+    """Load PSEUDONYMIZE_TYPES/TOKENIZE_TYPES/REDACT_TYPES from an external
+    JSON file, overriding this module's built-in defaults, and return the
+    three resulting sets (also written back to this module's own globals,
+    so existing callers that read anonymize.PSEUDONYMIZE_TYPES etc. directly
+    -- service.py, pipeline.py, anonymize_by_policy() itself -- see the
+    update without any change on their end).
+
+    Path resolution, in order: the `path` argument if given, else the
+    REDACT_POLICY_FILE environment variable if set, else DEFAULT_POLICY_PATH
+    (<repo root>/config/policy.json).
+
+    Two distinct failure modes, deliberately handled differently:
+
+    - File does not exist at the resolved path: FAIL OPEN to this module's
+      built-in defaults (the literals above), with a note to stderr. This is
+      not a security regression -- "no policy file configured yet" is
+      exactly today's behavior (hardcoded constants, no file at all), and
+      the built-in defaults already cover every canonical type. Every
+      existing caller that never touches this feature (validate.py, tests
+      that import anonymize without a config/ directory alongside them) is
+      unaffected.
+
+    - File exists but is invalid (malformed JSON, wrong shape, a type in
+      two buckets, or a canonical type in none) -- FAIL CLOSED: raises
+      PolicyConfigError rather than falling back to any default. An
+      operator who edited the file and got it wrong should see their
+      service refuse to start, not silently run with different protection
+      than they intended. This is the specific mitigation
+      DETECTION_POLICY_DECOUPLING_SCOPING.md's Phase 1 devil's-advocate
+      section calls for.
+
+    Expected JSON shape (see config/policy.json for the shipped default):
+        {"pseudonymize_types": [...], "tokenize_types": [...], "redact_types": [...]}
+    Any of the three keys may be omitted (treated as an empty list). Any
+    other top-level key is ignored, not rejected -- e.g. a "_comment" field
+    documenting the pseudonymize/tokenize legal distinction inline, per the
+    scoping doc's cross-cutting recommendation.
+    """
+    global PSEUDONYMIZE_TYPES, TOKENIZE_TYPES, REDACT_TYPES
+
+    resolved_path = path or os.environ.get("REDACT_POLICY_FILE") or DEFAULT_POLICY_PATH
+
+    if not os.path.exists(resolved_path):
+        import sys
+        print(
+            f"anonymize.load_policy(): no policy file at {resolved_path!r} -- "
+            f"using built-in defaults (PSEUDONYMIZE_TYPES={sorted(PSEUDONYMIZE_TYPES)}, "
+            f"TOKENIZE_TYPES={sorted(TOKENIZE_TYPES)}, REDACT_TYPES={sorted(REDACT_TYPES)})",
+            file=sys.stderr,
+        )
+        return set(PSEUDONYMIZE_TYPES), set(TOKENIZE_TYPES), set(REDACT_TYPES)
+
+    try:
+        with open(resolved_path) as f:
+            raw = json.load(f)
+    except json.JSONDecodeError as e:
+        raise PolicyConfigError(f"policy file {resolved_path!r} is not valid JSON: {e}") from e
+
+    if not isinstance(raw, dict):
+        raise PolicyConfigError(
+            f"policy file {resolved_path!r} must contain a JSON object at the top "
+            f"level, got {type(raw).__name__}"
+        )
+
+    def _extract(key: str) -> set[str]:
+        value = raw.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise PolicyConfigError(
+                f"policy file {resolved_path!r}: {key!r} must be a list of strings, got {value!r}"
+            )
+        return {v.upper() for v in value}
+
+    new_pseudonymize = _extract("pseudonymize_types")
+    new_tokenize = _extract("tokenize_types")
+    new_redact = _extract("redact_types")
+
+    # A type in more than one bucket is ambiguous (anonymize_by_policy()'s
+    # transform() checks REDACT_TYPES, then PSEUDONYMIZE_TYPES, then
+    # TOKENIZE_TYPES in that order, so a type in two buckets would silently
+    # always take whichever comes first -- not an error today, but exactly
+    # the kind of "works, but not the way the operator who wrote the file
+    # probably intended" gap this validator exists to catch before it ships).
+    overlaps = {
+        "pseudonymize_types & tokenize_types": new_pseudonymize & new_tokenize,
+        "pseudonymize_types & redact_types": new_pseudonymize & new_redact,
+        "tokenize_types & redact_types": new_tokenize & new_redact,
+    }
+    bad_overlaps = {k: v for k, v in overlaps.items() if v}
+    if bad_overlaps:
+        detail = "; ".join(f"{k}: {sorted(v)}" for k, v in bad_overlaps.items())
+        raise PolicyConfigError(
+            f"policy file {resolved_path!r}: type(s) assigned to more than one "
+            f"bucket ({detail}) -- each type must appear in exactly one of "
+            f"pseudonymize_types/tokenize_types/redact_types"
+        )
+
+    # The fail-closed check the scoping doc calls out by name: a canonical
+    # type left out of ALL three buckets would silently fall through to
+    # anonymize_by_policy()'s transform()'s `return original` (unknown type:
+    # leave untouched) -- i.e. that type's PII would pass through
+    # unanonymized, with no error anywhere. Refuse to start instead.
+    covered = new_pseudonymize | new_tokenize | new_redact
+    missing = CANONICAL_TYPES - covered
+    if missing:
+        raise PolicyConfigError(
+            f"policy file {resolved_path!r}: canonical type(s) {sorted(missing)} "
+            f"are not assigned to pseudonymize_types, tokenize_types, or "
+            f"redact_types -- every type detect.py can produce must be "
+            f"explicitly routed, refusing to start with an incomplete policy"
+        )
+
+    PSEUDONYMIZE_TYPES, TOKENIZE_TYPES, REDACT_TYPES = new_pseudonymize, new_tokenize, new_redact
+    return set(PSEUDONYMIZE_TYPES), set(TOKENIZE_TYPES), set(REDACT_TYPES)
 
 
 def anonymize_by_policy(text: str, spans: list[dict], key: str, store: TokenStore) -> str:

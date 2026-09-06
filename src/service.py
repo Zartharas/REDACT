@@ -30,6 +30,22 @@ import detect      # noqa: E402
 import anonymize   # noqa: E402
 import audit        # noqa: E402
 
+# Phase 1 of DETECTION_POLICY_DECOUPLING_SCOPING.md (2026-09), "Engineering
+# upgrade 18" in BUGS_AND_FIXES.md: load the pseudonymize/tokenize/redact
+# policy from config/policy.json (overridable via REDACT_POLICY_FILE) here,
+# at module import time -- same placement rule as detect._get_analyzer()'s
+# warmup call below (must run unconditionally at import, NOT inside
+# `if __name__ == "__main__":`, since gunicorn imports this module directly
+# and never executes that block; see that call's own comment). A malformed
+# or incomplete policy file raises anonymize.PolicyConfigError here, which
+# propagates up and fails this worker's startup -- the deliberate fail-closed
+# behavior the scoping doc's Phase 1 devil's-advocate section requires,
+# rather than silently serving with an incomplete policy. A missing file
+# (nothing configured yet) is not an error -- see load_policy()'s own
+# docstring -- and falls back to anonymize.py's built-in defaults, so this
+# call is a safe no-op for any deployment that hasn't opted into this yet.
+anonymize.load_policy()
+
 from flask import Flask, request, jsonify, Response  # noqa: E402
 from prometheus_client import (  # noqa: E402
     Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST,
