@@ -213,6 +213,49 @@ def _could_contain_ner_entity(text: str) -> bool:
     return bool(_LETTER_RUN_RE.search(text) or _DIGIT_RUN_RE.search(text))
 
 
+# Real, live-quantified bug found via Zookeeper's real-IP validation
+# condition (see BUGS_AND_FIXES.md "Engineering upgrade 16"): after the
+# Luhn fix above closed the CREDIT_CARD collision, 140 false positives
+# remained -- ALL of type PERSON, and 130 of the 140 (93%) were the exact
+# same recurring string, "QuorumPeer[myid=1]/0:0:0:0:0:0:0:0:2181" -- a
+# Log4j-style bracketed logger/thread context tag (class name + config +
+# an IPv6 zero-address + a port), not natural language, that spaCy's NER
+# misreads as a person's name.
+#
+# Fixed with a general structural filter, not a literal-string match
+# (which would only ever catch this one exact recurring value): a PERSON
+# hit is discarded if its matched text contains any of `[ ] / : $ @` --
+# punctuation that never appears inside a real name or username under
+# ANY of this project's own supported conventions (a spaced "First
+# Last", or a flat concatenated "firstlast", including Faker-generated
+# usernames that sometimes append digits -- digits were deliberately
+# NOT added to this exclusion set, since a username containing a digit
+# is a real, legitimate case this project's own synthetic corpus
+# produces, and this project's sandbox currently has no way to run
+# Faker/spaCy to re-verify that empirically; these six punctuation
+# characters carry no equivalent risk, since no name-generation
+# convention this project uses has ever produced one).
+#
+# Confirmed by hand against the diagnostic's own output
+# (diagnose_zookeeper_false_positives.py): of the 140 residual false
+# positives, 136 (97%) contain at least one of these six characters
+# (the dominant QuorumPeer string, several `0x...` session IDs, and one
+# `/10.10.34.13:47234` connection-request fragment). The remaining 4
+# ("sessionid" x2, "Linux" x2) are plain alphabetic words with none of
+# these characters -- a genuinely diffuse NER weakness on ordinary
+# technical vocabulary this filter cannot and should not try to catch,
+# disclosed as an accepted residual rather than chased with an
+# increasingly narrow, overfit rule.
+#
+# NOT YET VERIFIED LIVE: this session has no working shell (see the
+# standing note in BUGS_AND_FIXES.md). Needs `pytest tests/`,
+# `validate.py`, and a rerun of `inject_and_evaluate.py` to confirm this
+# doesn't regress real PERSON recall anywhere else -- same standard as
+# every other "fix applied, not yet confirmed live" entry in this
+# project.
+_PERSON_STRUCTURAL_EXCLUSION_RE = re.compile(r"[\[\]/:$@]")
+
+
 def scan_ner(text: str, min_score: float = 0.5) -> list[dict]:
     if not _could_contain_ner_entity(text):
         return []
@@ -228,6 +271,8 @@ def scan_ner(text: str, min_score: float = 0.5) -> list[dict]:
             continue
         canonical = _PRESIDIO_TO_CANONICAL.get(r.entity_type)
         if canonical is None:
+            continue
+        if canonical == "PERSON" and _PERSON_STRUCTURAL_EXCLUSION_RE.search(text[r.start:r.end]):
             continue
         hits.append({
             "type": canonical, "start": r.start, "end": r.end,

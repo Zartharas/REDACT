@@ -4069,8 +4069,28 @@ The `validate.py` drift-detection failures seen in this same run ("3 fields inco
 
 Committed: `src/detect.py`, `validation/aws_account_id_credit_card_exclusion_test.py`, this file. Pushed (`6aaa30b`).
 
-**Zookeeper's remaining 140 false positives are not yet root-caused.** Wrote `validation/real_data/diagnose_zookeeper_false_positives.py` (mirrors `diagnose_cloudtrail_false_positives.py`'s existing pattern) to find out rather than guess -- it runs the real `scan_regex()`+`scan_ner()` ensemble against `Zookeeper_2k.log` and buckets every false positive by (type, matched text). Two live hypotheses stated in the script's own docstring, neither confirmed yet: NER misfiring on Zookeeper's dense camelCase Java class/method names (QuorumPeer, FastLeaderElection, NIOServerCnxnFactory -- exactly the shape that trips up general-purpose NER), or a second, rarer regex collision not yet found by inspection (checked: session IDs in this dataset are hex-formatted with letters mixed in, `0x34ed9ac1c1e00a9`, so they can't be the cause -- no consecutive 12+ decimal-digit run exists inside them). Needs a live run (`cd validation/real_data && python3 diagnose_zookeeper_false_positives.py`) to actually answer this rather than continuing to guess.
+**Zookeeper's remaining 140 false positives: root-caused and fixed, see "Engineering upgrade 16" below.**
 
 **`data/confluent_kafka_test_corpus_2000.jsonl` found untracked in `git status`.** Same synthetic, fixed-seed-generated shape as every other corpus this project already gitignores (`data/kafka_queue_test_corpus_*.jsonl` etc.) -- `run_confluent_kafka_test.sh` was added after those `.gitignore` rules and never got its own line. Added `data/confluent_kafka_test_corpus_*.jsonl` to `.gitignore`, matching the existing convention exactly.
 
 **n2c2/i2b2 PHI de-identification corpus: access path documented, not yet obtained.** This one genuinely can't be completed by this project's tooling or an assistant -- it requires an individual data use agreement through Harvard DBMI tied to the requester's own identity, not a direct download. Wrote `validation/real_data/PHI_DATASET_ACCESS.md` with the current portal URL, DUA link, and a disclosed caveat (at least one source reported the dataset "temporarily unavailable" via this portal as recently as mid-2026). Deliberately did NOT write a `prepare_n2c2_dataset.py` parser against a remembered/assumed file format -- this project's own repeated lesson (Bug 17, the Azure `show-backend-health` mistake) is to confirm a real file's actual structure before building a parser against it, not before. That script gets written once a real n2c2 sample is actually in hand.
+
+## Engineering upgrade 16: Zookeeper's residual false positives root-caused -- Log4j-style logger-context tags misread as PERSON
+
+**Status:** Fix applied, NOT yet verified live (same standing sandbox-shell limitation as Engineering upgrade 15).
+
+`diagnose_zookeeper_false_positives.py` (written for exactly this purpose, see the note above) was run live by the user against `Zookeeper_2k.log`: all 140 remaining false positives were type PERSON, and 130 of them (93%) were the exact same recurring string, `QuorumPeer[myid=1]/0:0:0:0:0:0:0:0:2181` -- a Log4j-style bracketed logger/thread context tag (class name, `[myid=1]` config, an IPv6 zero-address, and a port number), not natural language, that spaCy's NER misreads as a person's name. A handful of other hits shared the same shape (`0x14ed93111f20005`-style session IDs, one `/10.10.34.13:47234` connection fragment); the remaining 4 (`sessionid` x2, `Linux` x2) were plain alphabetic words with no distinguishing structure -- a genuinely diffuse NER weakness, not something a targeted fix should chase.
+
+**Fix:** `scan_ner()` in `src/detect.py` now discards a PERSON hit if its matched text contains any of `[ ] / : $ @`. Deliberately general (a character-class filter, not a match against the one literal string this bug happened to surface) and deliberately scoped to punctuation, not digits -- a username containing a digit is a real, legitimate case this project's own synthetic corpus produces (Faker's `user_name()` provider), and this session has no way to run Faker/spaCy to re-verify that empirically, so digits were left alone rather than risk a regression that couldn't be checked. None of the six excluded punctuation characters appear in any name or username this project generates or has ever seen in real data, under either of its two supported PERSON conventions (spaced "First Last" or flat "firstlast").
+
+Added `validation/person_structural_exclusion_test.py` and wired it into `tests/test_fast_validation.py::test_person_structural_exclusion`: checks the real Zookeeper string is excluded, a *different* bracketed logger-context tag is also excluded (guards against overfitting to the one literal value), and an ordinary spaced person name ("John Smith") is unaffected -- the actual regression risk being guarded against, not just "does it catch the bug."
+
+**Not yet verified live:** needs
+
+```
+python3 -m pytest tests/
+python3 validate.py
+cd validation/real_data && python3 inject_and_evaluate.py
+```
+
+Expect: the new test passes, `validate.py`'s PERSON recall numbers are unchanged (this filter only removes hits that were never real names to begin with), and Zookeeper's precision improves further from 0.910 toward something close to OpenStack's 0.998-0.989 range, with the 4 diffuse "sessionid"/"Linux" false positives as an accepted, disclosed residual. If PERSON recall drops anywhere else, this fix is wrong as written and needs to be reverted or scoped differently -- report back either way, same standard as every other entry in this document.

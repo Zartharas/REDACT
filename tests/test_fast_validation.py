@@ -127,3 +127,14 @@ def test_aws_account_id_credit_card_exclusion():
     result = run_script("validation/aws_account_id_credit_card_exclusion_test.py", timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ALL CHECKS PASSED" in result.stdout
+
+
+def test_person_structural_exclusion():
+    """Engineering upgrade 16 regression guard: Log4j-style bracketed
+    logger/thread context tags (e.g. Zookeeper's real
+    "QuorumPeer[myid=1]/0:0:0:0:0:0:0:0:2181") must not be reported as
+    PERSON, while an ordinary spaced person name is unaffected. See
+    BUGS_AND_FIXES.md 'Engineering upgrade 16'."""
+    result = run_script("validation/person_structural_exclusion_test.py", timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL CHECKS PASSED" in result.stdout
