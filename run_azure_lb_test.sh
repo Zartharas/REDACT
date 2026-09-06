@@ -59,7 +59,19 @@ if ! az account show >/dev/null 2>&1; then
 fi
 
 RG="redact-lb-test"
-LOCATION="eastus"
+# LOCATION, made overridable 2026-09-06 after a real live run: "eastus"
+# is disallowed for at least some Azure for Students subscriptions --
+# Azure enforces a per-subscription "Allowed resource deployment
+# regions" policy on these accounts (confirmed via live error:
+# `RequestDisallowedByAzure`, "This policy maintains a set of best
+# available regions where your subscription can deploy resources"),
+# and the actual allowed list is subscription-specific, not a fixed
+# public list. Find yours with:
+#   az policy assignment list --output json | python3 -c \
+#     "import sys,json; [print(a['displayName'], a.get('parameters',{}).get('listOfAllowedLocations',{}).get('value')) for a in json.load(sys.stdin) if 'listOfAllowedLocations' in a.get('parameters',{})]"
+# then pass it as this script's first argument, e.g.:
+#   ./run_azure_lb_test.sh westus2
+LOCATION="${1:-eastus}"
 VNET="redact-lb-vnet"
 SUBNET="redact-lb-subnet"
 NSG="redact-lb-nsg"
