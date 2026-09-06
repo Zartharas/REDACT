@@ -37,34 +37,40 @@
 # actually been run.
 set -euo pipefail
 
+git pull origin main   # pick up this session's changes (this script,
+                        # the SASL_SSL support in queue_consumer.py/
+                        # redact-pipeline-kafka.conf/docker-compose.yml)
+                        # before running anything against them.
+
 # Real secrets (bootstrap server, API key, API secret) that only the
 # user has -- deliberately NOT auto-generated the way the five
 # REDACT_*_KEY values below are (those are this project's own internal
-# keys; these three are Confluent Cloud's actual credentials). Checked
-# for presence, not invented -- see the error message below for exactly
-# what to add and where.
+# keys; these three are Confluent Cloud's actual credentials this
+# script was never given and must never invent). If .env doesn't
+# already have them, prompt for them interactively instead of just
+# failing -- API key and bootstrap server aren't secret-shaped (fine to
+# echo back so you can check for typos), but the API secret is read
+# with `read -s` (silent, no terminal echo) the same way a password
+# prompt would be, and is never printed anywhere by this script,
+# including in the "wire REDACT" step below.
 touch .env
-MISSING_KEYS=()
-for key in CONFLUENT_BOOTSTRAP_SERVERS CONFLUENT_API_KEY CONFLUENT_API_SECRET; do
-  if ! grep -q "^${key}=" .env; then
-    MISSING_KEYS+=("$key")
-  fi
-done
-if [ "${#MISSING_KEYS[@]}" -ne 0 ]; then
-  echo "ERROR: .env is missing: ${MISSING_KEYS[*]}" >&2
-  echo "" >&2
-  echo "Add these to .env before running this script (from the Confluent" >&2
-  echo "Cloud console -- Cluster Overview for the bootstrap server, API" >&2
-  echo "keys tab for the key/secret pair):" >&2
-  echo "" >&2
-  echo '  CONFLUENT_BOOTSTRAP_SERVERS=pkc-xxxxx.us-east-2.aws.confluent.cloud:9092' >&2
-  echo '  CONFLUENT_API_KEY=<your API key>' >&2
-  echo '  CONFLUENT_API_SECRET=<your API secret>' >&2
-  echo "" >&2
-  echo "Never commit .env or paste these values into chat -- .gitignore" >&2
-  echo "already excludes it, same as this project's other secrets." >&2
-  exit 1
+if ! grep -q "^CONFLUENT_BOOTSTRAP_SERVERS=" .env; then
+  read -r -p "Confluent Cloud bootstrap server (e.g. pkc-921jm.us-east-2.aws.confluent.cloud:9092): " CONFLUENT_BOOTSTRAP_SERVERS_INPUT
+  echo "CONFLUENT_BOOTSTRAP_SERVERS=${CONFLUENT_BOOTSTRAP_SERVERS_INPUT}" >> .env
 fi
+if ! grep -q "^CONFLUENT_API_KEY=" .env; then
+  read -r -p "Confluent Cloud API key: " CONFLUENT_API_KEY_INPUT
+  echo "CONFLUENT_API_KEY=${CONFLUENT_API_KEY_INPUT}" >> .env
+fi
+if ! grep -q "^CONFLUENT_API_SECRET=" .env; then
+  read -r -s -p "Confluent Cloud API secret (input hidden): " CONFLUENT_API_SECRET_INPUT
+  echo   # read -s eats the newline the user's Enter key would normally
+         # produce -- print one explicitly so the next echo below
+         # doesn't run into the prompt text.
+  echo "CONFLUENT_API_SECRET=${CONFLUENT_API_SECRET_INPUT}" >> .env
+fi
+echo "Confluent Cloud credentials confirmed in .env (never echoed above beyond what you typed)."
+echo "Reminder: .env is already .gitignore'd in this project -- never commit it or paste its contents into chat."
 
 # This project's own five internal keys -- same bootstrap this project's
 # other scripts already do, only adding what's not already present.
