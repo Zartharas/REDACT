@@ -33,6 +33,8 @@ flowchart LR
 
 *N = 1 by default (`docker compose up`); scales to N replicas with `docker compose up --scale redact-service=N` — `redact-lb` is what makes that scaling actually distribute requests instead of every one landing on whichever replica Docker's DNS first resolved. See "Docker Compose stack" below for the confirmed-live numbers and the queue-decoupled alternative to this synchronous path.*
 
+*A naming note up front: "anonymized" above (the index name, the diagram, "anonymize.py") is REDACT's pipeline-stage name, following the same convention as Presidio's own "anonymizer" module — it is not a legal claim that the output is anonymized in GDPR's stricter sense. See "Correction: pseudonymization is not reversible" below for exactly which strategy produces what: `PSEUDO_KEY` output (PERSON/IP) is pseudonymized personal data, still in GDPR scope; `TOKEN_KEY` output (EMAIL/SSN/CREDIT_CARD/MRN) is reversible tokenization, also in scope by design.*
+
 Every number in this README came out of an actual executed run, not a projection — run `validate.py` yourself and check. There's no real data anywhere in this repository; the entire corpus is synthetic, generated with a fixed seed.
 
 <img src="assets/redact_demo.gif" alt="Real terminal output: tokenize/detokenize round trip and the syslog coverage test suite passing" width="520">
@@ -250,6 +252,8 @@ The first version of this README and the chapter text both described keyed HMAC 
 This matters beyond code correctness. For low-entropy fields like IP addresses (≈4.3 billion possible IPv4 values) and person names (an enumerable population), an attacker holding the key doesn't need to invert the hash — brute-forcing candidates against a fast hash is entirely tractable. The Article 29 Working Party's 2014 opinion on anonymization techniques flags exactly this as a weakness of keyed-hash pseudonymization for guessable inputs. So pseudonymized IP/PERSON fields stay classified as personal data under GDPR not because a formal reversal mechanism exists, but because of this residual re-identification risk — a different, more specific reason than what was originally written here.
 
 `anonymize.py` and the chapter have both been corrected. Where an investigation genuinely needs the original value back, the pipeline routes to `tokenize()` instead, which uses an explicit stored mapping rather than leaning on any property of a hash function.
+
+**Citation update, 2026-09:** the EDPB's own Guidelines 01/2025 on Pseudonymisation (adopted January 2025, the current authoritative EU-level guidance, superseding reliance on the 2014 opinion alone) reinforces this same conclusion rather than changing it: pseudonymized data remains personal data in full GDPR scope, subject to the same singling-out/linkability/inference identifiability test the 2014 opinion already established. Worth citing directly since it's the guidance a real compliance review would check against first — but it doesn't alter anything above; `PSEUDO_KEY`-based output (PERSON/IP) was already correctly treated as in-scope personal data, and `TOKEN_KEY`-based output (EMAIL/SSN/CREDIT_CARD/MRN) was already correctly treated as reversible, not anonymized. The distinction that would actually change something — a transform strong enough to cross into true anonymization (all three of singling-out, linkability, and inference genuinely failing) — is not what any of REDACT's current strategies claim to provide, and nothing in this repo should be read as claiming it.
 
 ## Service layer and Logstash integration
 
