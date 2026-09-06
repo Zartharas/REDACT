@@ -156,14 +156,43 @@ CLOUD_INIT_FILE=$(mktemp)
 echo "$CLOUD_INIT" > "$CLOUD_INIT_FILE"
 trap 'rm -f "$CLOUD_INIT_FILE"' EXIT
 
+# Real bug, found live 2026-09-06: `az vm create` has no `--lb`/
+# `--backend-pool-name` flags at all -- those exist only on
+# `az vmss create` (scale sets), not single VMs. I misremembered/
+# invented this shape without checking it against the real, documented
+# `az vm create` parameter list first, which is exactly the kind of
+# mistake this project's own discipline (BUGS_AND_FIXES.md) exists to
+# catch and record rather than paper over. The correct, documented
+# pattern for a single VM: create its NIC explicitly in the target
+# subnet, attach that NIC's IP configuration to the LB's backend pool
+# via `az network nic ip-config address-pool add`, THEN create the VM
+# referencing the NIC by name (`--nics`) instead of `--vnet-name`/
+# `--subnet`/`--nsg` (those become the NIC's settings instead, since a
+# VM created with an explicit `--nics` list takes its networking from
+# the NIC(s), not from separate VM-level networking flags).
 for i in 1 2; do
     VM_NAME="redact-backend-${i}"
+    NIC_NAME="redact-backend-${i}-nic"
+
+    echo "Creating NIC ${NIC_NAME}..."
+    az network nic create --resource-group "$RG" --name "$NIC_NAME" \
+        --vnet-name "$VNET" --subnet "$SUBNET" \
+        --network-security-group "$NSG" \
+        --output none
+
+    echo "Attaching ${NIC_NAME} to the load balancer's backend pool..."
+    # ipconfig1 is the default IP-configuration name `az network nic
+    # create` assigns -- not invented, this is Azure CLI's own
+    # documented default for a NIC's first (and here, only) IP config.
+    az network nic ip-config address-pool add --resource-group "$RG" \
+        --nic-name "$NIC_NAME" --ip-config-name ipconfig1 \
+        --lb-name "$LB" --address-pool "$BACKEND_POOL" \
+        --output none
+
     echo "Creating ${VM_NAME}..."
     az vm create --resource-group "$RG" --name "$VM_NAME" \
         --image Ubuntu2204 --size Standard_B1s \
-        --vnet-name "$VNET" --subnet "$SUBNET" --nsg "$NSG" \
-        --public-ip-address "" \
-        --lb "$LB" --backend-pool-name "$BACKEND_POOL" \
+        --nics "$NIC_NAME" \
         --custom-data "$CLOUD_INIT_FILE" \
         --generate-ssh-keys \
         --output none

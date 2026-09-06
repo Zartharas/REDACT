@@ -3765,3 +3765,81 @@ above) and now a real external managed Kafka control plane have
 confirmed the same Kafka-shaped queue path -- producer, consumer group,
 offset-commit redelivery guarantee, doc_id_base idempotency (Bug 23) --
 end to end.
+
+---
+
+## Engineering upgrade 13: Task #52 (real Azure Load Balancer), first live run found two real bugs
+
+**Status:** In progress, 2026-09-06 -- two real bugs found and fixed
+from the user's live run against a real Azure for Students subscription;
+not yet confirmed fully working end to end (the fixes below are
+syntax-checked, not yet re-run).
+
+`run_azure_lb_test.sh` (added for Task #52, mirroring
+`run_floci_elbv2_test.sh`'s exact scope against floci's local ELB v2
+emulation) hit two real, live issues on its first run, neither of
+which showed up in this sandbox's syntax-check (no Azure account
+available here to test against).
+
+**Bug (a): Azure for Students subscriptions are region-restricted by
+policy, and the restricted list is subscription-specific.** The
+script's hardcoded `LOCATION="eastus"` failed with
+`(RequestDisallowedByAzure)`: "This policy maintains a set of best
+available regions where your subscription can deploy resources."
+There is no fixed public list of allowed regions -- it varies per
+subscription. Found the real list for this subscription via:
+
+```
+az policy assignment list --output json | python3 -c \
+  "import sys,json; [print(a['displayName'], a.get('parameters',{}).get('listOfAllowedLocations',{}).get('value')) for a in json.load(sys.stdin) if 'listOfAllowedLocations' in a.get('parameters',{})]"
+```
+
+which returned `['northcentralus', 'denmarkeast', 'westus',
+'belgiumcentral', 'mexicocentral']` for this specific subscription.
+**Fix:** `LOCATION` is now the script's first positional argument
+(default `eastus` preserved for accounts without this restriction)
+instead of hardcoded, with the discovery command above documented
+directly in the script's own comment so this doesn't need rediscovering
+from scratch on a different subscription.
+
+**Follow-on gotcha, also found live:** a resource group's location is
+fixed at creation and cannot be changed by rerunning `az group create`
+with a different `--location` -- the second attempt (now with the
+correct region argument) failed with `(InvalidResourceGroupLocation)`
+because the first attempt had already created `redact-lb-test` in the
+disallowed `eastus` region before the VNet step (the actual
+region-restricted resource) failed. Resolved by deleting the empty
+resource group (`az group delete --resource-group redact-lb-test
+--yes`) and rerunning clean -- not a script bug per se, just a real
+consequence of Bug (a) above that's worth recording so a future rerun
+under different circumstances isn't surprised by it.
+
+**Bug (b): `az vm create` has no `--lb`/`--backend-pool-name` flags.**
+The script's original VM-creation step invoked
+`az vm create ... --lb "$LB" --backend-pool-name "$BACKEND_POOL"`,
+which failed with `unrecognized arguments`. Root cause: I wrote this
+by pattern-matching against `az vmss create` (Virtual Machine Scale
+Sets), which genuinely does have `--load-balancer`/`--backend-pool-
+name` flags for wiring a whole scale set into a backend pool at
+creation time, without checking `az vm create`'s own actual parameter
+list first for a plain single VM. This is exactly the class of mistake
+this document exists to catch and record rather than paper over --
+same shape as Bug 22's "invented shell invocation instead of checking
+real syntax," just for the Azure CLI instead of `docker compose`.
+
+**Fix:** the documented, correct pattern for attaching a single VM to
+an existing Standard Load Balancer's backend pool: create the VM's NIC
+explicitly first (`az network nic create`, in the target subnet),
+attach that NIC's IP configuration to the backend pool
+(`az network nic ip-config address-pool add --nic-name ... --ip-
+config-name ipconfig1 --lb-name ... --address-pool ...` --
+`ipconfig1` is Azure CLI's own documented default IP-config name for a
+newly created NIC, not invented), then create the VM referencing the
+NIC by name (`--nics`) instead of the VM-level `--vnet-name`/
+`--subnet`/`--nsg` flags (which become the NIC's own settings instead
+once a VM is created against an explicit NIC list).
+
+**Not yet re-verified live:** the fixed script has not yet been rerun
+against the user's real Azure for Students subscription. Next step is
+exactly that -- same standard as every other "fix applied, verification
+pending" entry in this document.
