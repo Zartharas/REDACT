@@ -46,6 +46,9 @@ import audit        # noqa: E402
 # call is a safe no-op for any deployment that hasn't opted into this yet.
 anonymize.load_policy()
 
+import policy_watcher  # noqa: E402
+import policy_audit    # noqa: E402
+
 from flask import Flask, request, jsonify, Response  # noqa: E402
 from prometheus_client import (  # noqa: E402
     Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST,
@@ -132,6 +135,40 @@ STORE_SAVE_TOTAL = _metric(
     "save-every-N debounce ('skipped').",
     ["outcome"],
 )
+# Phase 2, "Engineering upgrade 19": without these, a policy_watcher poller
+# thread that silently stopped updating (see that module's own comment on
+# why its poll loop can't be allowed to die silently either) would be
+# invisible from the outside -- these are what let an operator's own
+# alerting notice "this worker's last successful policy check was N minutes
+# ago" rather than assuming the poller is fine because nothing crashed.
+POLICY_LAST_RELOAD_TIMESTAMP = _metric(
+    Gauge, "redact_policy_last_reload_timestamp_seconds",
+    "Unix timestamp of this worker's last successful policy reload "
+    "(outcome='reloaded'). Does NOT update on 'unchanged' checks -- a "
+    "flat value here across a long window is expected and healthy if the "
+    "policy file simply hasn't changed, not itself a sign of a stuck "
+    "poller; cross-check against redact_policy_last_check_timestamp_seconds "
+    "below to distinguish the two.",
+)
+POLICY_LAST_CHECK_TIMESTAMP = _metric(
+    Gauge, "redact_policy_last_check_timestamp_seconds",
+    "Unix timestamp of this worker's last policy check attempt, "
+    "regardless of outcome. This SHOULD advance roughly every "
+    "REDACT_POLICY_POLL_INTERVAL_S seconds continuously -- if it stops "
+    "advancing, the poller thread has died (see policy_watcher.py's own "
+    "comment on why its poll loop is guarded against that, and alert on "
+    "this metric as the independent, outside confirmation that guard "
+    "actually worked).",
+)
+POLICY_RELOAD_TOTAL = _metric(
+    Counter, "redact_policy_reload_total",
+    "Policy check outcomes on this worker, labeled 'reloaded' / "
+    "'unchanged' / 'rejected'. A nonzero and growing 'rejected' count "
+    "means someone keeps editing config/policy.json into an invalid "
+    "state -- see policy_audit_log.jsonl for the specific validation "
+    "error each time.",
+    ["outcome"],
+)
 
 POLICY_VERSION = "redact-v0.1"
 # Engineering upgrade, added after the original build-and-verify pass:
@@ -194,13 +231,60 @@ os.makedirs(os.path.dirname(TOKEN_STORE_PATH) or ".", exist_ok=True)
 _store = anonymize.TokenStore(TOKEN_STORE_PATH, token_key=TOKEN_KEY,
                                save_every_n_calls=TOKEN_STORE_SAVE_EVERY)
 
+# Phase 2 of DETECTION_POLICY_DECOUPLING_SCOPING.md (2026-09), "Engineering
+# upgrade 19" in BUGS_AND_FIXES.md: a SEPARATE key from SERVICE_API_KEY, per
+# that doc's own Phase 2 devil's-advocate requirement ("its own
+# authentication, separate from anything else REDACT exposes today"). A
+# caller with only the ordinary /anonymize key should not also be able to
+# read or change this deployment's PII-handling policy -- the blast radius
+# of these two keys leaking is not the same (one processes a log line, the
+# other decides what protection every future log line gets), so they should
+# not be the same secret.
+POLICY_ADMIN_KEY = os.environ.get(
+    "REDACT_POLICY_ADMIN_KEY", "demo-policy-admin-key-do-not-use-in-prod"
+)
+POLICY_AUDIT_LOG_PATH = os.environ.get(
+    "REDACT_POLICY_AUDIT_LOG_PATH", "output/policy_audit_log.jsonl"
+)
+# Default 10s: fast enough that an operator watching /admin/policy after an
+# edit sees convergence within a few polls, slow enough not to make
+# _file_hash()'s per-poll file read (cheap, but not free at high frequency
+# across many replicas x workers) a meaningful cost. Not validated against
+# any specific production SLA -- a starting point, same disclosure this
+# project already applies to TOKEN_STORE_SAVE_EVERY's default above.
+POLICY_POLL_INTERVAL_S = float(os.environ.get("REDACT_POLICY_POLL_INTERVAL_S", "10"))
+
+_policy_watcher = policy_watcher.PolicyWatcher(
+    resolved_path=anonymize.resolve_policy_path(),
+    audit_key=AUDIT_KEY,
+    audit_log_path=POLICY_AUDIT_LOG_PATH,
+    poll_interval_s=POLICY_POLL_INTERVAL_S,
+    on_result=lambda outcome: POLICY_RELOAD_TOTAL.labels(outcome=outcome).inc(),
+)
+# Started unconditionally at module level, same placement rule as
+# anonymize.load_policy() and detect._get_analyzer() below -- gunicorn
+# imports this module directly and never runs `if __name__ ==
+# "__main__":`, so anything that needs to be true for every real worker
+# must be triggered here, not there.
+_policy_watcher.start()
+
 
 @app.before_request
 def _require_api_key():
     # /health stays open (no key needed) so container healthchecks and
     # uptime probes don't need to know a secret just to ask "are you up."
-    # Every other route requires a matching X-Redact-Api-Key header.
-    if request.path == "/health":
+    # /admin/* routes are EXEMPT from this check, not because they're
+    # unauthenticated -- see _require_policy_admin_key below, which gates
+    # them on a completely separate key (REDACT_POLICY_ADMIN_KEY). This is
+    # the actual "its own authentication, separate from anything else
+    # REDACT exposes today" requirement from
+    # DETECTION_POLICY_DECOUPLING_SCOPING.md's Phase 2 section: a caller
+    # holding only SERVICE_API_KEY (meant for /anonymize traffic, e.g.
+    # Logstash) gets no access to /admin/policy at all, and a caller
+    # holding only POLICY_ADMIN_KEY gets no access to /anonymize -- two
+    # non-overlapping authorization domains, not one check with two valid
+    # keys.
+    if request.path == "/health" or request.path.startswith("/admin/"):
         return None
     provided = request.headers.get("X-Redact-Api-Key", "")
     # compare_digest needs equal-length inputs to be meaningfully constant-
@@ -210,6 +294,19 @@ def _require_api_key():
     # against.
     if not hmac.compare_digest(provided, SERVICE_API_KEY):
         return jsonify({"error": "missing or invalid X-Redact-Api-Key header"}), 401
+    return None
+
+
+def _require_policy_admin_key():
+    """Called explicitly at the top of each /admin/policy* route (NOT a
+    second @app.before_request hook) -- Flask runs all before_request
+    hooks for every matching route regardless of path, so a second
+    unconditional hook here would need its own path-based exemption logic
+    duplicating _require_api_key's own, for no real benefit over just
+    calling this directly from the two routes that need it."""
+    provided = request.headers.get("X-Redact-Policy-Admin-Key", "")
+    if not hmac.compare_digest(provided, POLICY_ADMIN_KEY):
+        return jsonify({"error": "missing or invalid X-Redact-Policy-Admin-Key header"}), 401
     return None
 
 
@@ -232,7 +329,63 @@ def metrics():
     # same disclosure as everything else here that needs a real running
     # stack to fully verify.
     TOKEN_STORE_SIZE.set(len(_store._forward))
+    # Set lazily at scrape time from the watcher's own status, same pattern
+    # as TOKEN_STORE_SIZE above -- these are Gauges (a snapshot of current
+    # state), unlike POLICY_RELOAD_TOTAL (a Counter, incremented once per
+    # real event via the on_result callback at construction time above),
+    # so recomputing them here on every scrape is correct, not redundant.
+    status = _policy_watcher.get_status()
+    if status["last_reload_ts"] is not None:
+        POLICY_LAST_RELOAD_TIMESTAMP.set(status["last_reload_ts"])
+    if status["last_check_ts"] is not None:
+        POLICY_LAST_CHECK_TIMESTAMP.set(status["last_check_ts"])
     return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+
+@app.route("/admin/policy", methods=["GET"])
+def admin_policy_status():
+    """Read-only status for THIS worker process -- current policy sets,
+    the resolved file path, and this worker's own last-check/last-reload
+    timestamps. Behind a load balancer with multiple gunicorn workers
+    and/or replicas, repeated calls can and will land on different
+    workers and show slightly different last_check_ts values (each
+    worker's poller runs on its own independent schedule, not
+    synchronized to any other worker's) -- that's expected, not a bug;
+    see policy_watcher.py's own module docstring for why per-worker
+    polling is Phase 2's actual propagation mechanism."""
+    auth_error = _require_policy_admin_key()
+    if auth_error is not None:
+        return auth_error
+    return jsonify(_policy_watcher.get_status())
+
+
+@app.route("/admin/policy/reload", methods=["POST"])
+def admin_policy_reload():
+    """Manually trigger an immediate policy check on THIS worker,
+    short-circuiting the wait for its next scheduled poll tick. Explicitly
+    scoped in the response body, not just this docstring, since this is
+    the single easiest thing about Phase 2 to misunderstand operationally:
+    calling this once does NOT guarantee every worker/replica in a
+    deployment has picked up a change -- it only forces the ONE worker
+    process that happens to handle this specific HTTP request (gunicorn
+    routes each request to exactly one worker) to check right now. Every
+    other worker still converges independently via its own background
+    poller, within REDACT_POLICY_POLL_INTERVAL_S seconds. A caller wanting
+    to confirm cluster-wide convergence should poll GET /admin/policy
+    against each replica (or via a load balancer, repeatedly, to sample
+    different workers) rather than trust a single 200 from this route."""
+    auth_error = _require_policy_admin_key()
+    if auth_error is not None:
+        return auth_error
+    result = _policy_watcher.check_now(triggered_by="admin_endpoint")
+    result["scope"] = (
+        "this worker process only (pid={}); other gunicorn workers and/or "
+        "replicas converge independently via their own background poller "
+        "within REDACT_POLICY_POLL_INTERVAL_S seconds -- see GET "
+        "/admin/policy on each to confirm cluster-wide convergence"
+    ).format(os.getpid())
+    status_code = 200 if result["outcome"] != "rejected" else 422
+    return jsonify(result), status_code
 
 
 @app.route("/anonymize", methods=["POST"])

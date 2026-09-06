@@ -92,3 +92,14 @@ wasm/layer1_4/tests/_real_data_equivalence_corpus.txt
 # "generated, not hand-authored" policy as every other results artifact
 # above.
 validation/piibench/results.json
+
+# Policy hot-reload audit trail (Phase 2, "Engineering upgrade 19",
+# policy_audit.py) and its sibling flock lock file -- a real, runtime-
+# generated artifact of running service.py locally or in Docker, same
+# "generated, not hand-authored" category as token_store.json (which has
+# never needed its own line here only because it's never been accidentally
+# staged so far -- added proactively for this new file rather than waiting
+# for the same near-miss the CloudTrail/Kafka-corpus entries above
+# document).
+output/policy_audit_log.jsonl
+output/policy_audit_log.jsonl.lock

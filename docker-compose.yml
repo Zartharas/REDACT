@@ -236,6 +236,18 @@ services:
       # /app/config/policy.json (see Dockerfile), just without host-editable
       # override.
       - REDACT_POLICY_FILE=${REDACT_POLICY_FILE:-/app/config/policy.json}
+      # Phase 2 of DETECTION_POLICY_DECOUPLING_SCOPING.md ("Engineering
+      # upgrade 19", BUGS_AND_FIXES.md), added 2026-09. REDACT_POLICY_ADMIN_KEY
+      # is REQUIRED (:?, same as the other secrets above) and deliberately a
+      # SEPARATE secret from REDACT_SERVICE_API_KEY -- see
+      # _require_policy_admin_key's own comment in service.py for why these
+      # are two non-overlapping authorization domains, not one check with
+      # two valid keys. REDACT_POLICY_POLL_INTERVAL_S is optional (:-,
+      # matching GUNICORN_WORKERS's own convention above) since it's an
+      # operational tuning knob, not a secret whose absence is a security
+      # gap the way a missing key would be.
+      - REDACT_POLICY_ADMIN_KEY=${REDACT_POLICY_ADMIN_KEY:?set a real key in .env, do not use a default}
+      - REDACT_POLICY_POLL_INTERVAL_S=${REDACT_POLICY_POLL_INTERVAL_S:-10}
     volumes:
       - redact-output:/app/output
       # Bind-mounts the HOST's config/policy.json over the image's own

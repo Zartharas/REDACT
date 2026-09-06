@@ -1152,6 +1152,16 @@ class PolicyConfigError(Exception):
     differently (fail open to the built-in default, not fail closed)."""
 
 
+def resolve_policy_path(path: "str | None" = None) -> str:
+    """The exact same path-resolution rule load_policy() uses internally,
+    exposed separately so a caller that needs to know WHICH file is in
+    play without loading it (policy_watcher.py's PolicyWatcher needs this
+    at construction time, before the first load_policy() call) doesn't
+    have to duplicate this three-way precedence rule and risk it silently
+    drifting out of sync with load_policy()'s own copy."""
+    return path or os.environ.get("REDACT_POLICY_FILE") or DEFAULT_POLICY_PATH
+
+
 def load_policy(path: "str | None" = None) -> tuple[set[str], set[str], set[str]]:
     """Load PSEUDONYMIZE_TYPES/TOKENIZE_TYPES/REDACT_TYPES from an external
     JSON file, overriding this module's built-in defaults, and return the
@@ -1193,7 +1203,7 @@ def load_policy(path: "str | None" = None) -> tuple[set[str], set[str], set[str]
     """
     global PSEUDONYMIZE_TYPES, TOKENIZE_TYPES, REDACT_TYPES
 
-    resolved_path = path or os.environ.get("REDACT_POLICY_FILE") or DEFAULT_POLICY_PATH
+    resolved_path = resolve_policy_path(path)
 
     if not os.path.exists(resolved_path):
         import sys
