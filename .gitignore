@@ -53,6 +53,14 @@ data/redis_failover_test_corpus_*.jsonl
 # (see Bug 22/23/24's own corpus-gitignore-gap history above).
 data/kafka_queue_test_corpus_*.jsonl
 
+# Generated corpus for run_confluent_kafka_test.sh (Task #53, real
+# Confluent Cloud validation) -- same pattern as kafka_queue_test_corpus
+# above, just never got its own line when that script was added. Found
+# sitting untracked in `git status` during the 2026-09 dataset-research
+# pass; not a data leak (it's synthetic, fixed-seed-generated, same as
+# every other corpus here), just a missing gitignore entry.
+data/confluent_kafka_test_corpus_*.jsonl
+
 # CloudTrailFlaws_raw.jsonl (validation/real_data/prepare_cloudtrail_dataset.py)
 # -- regenerable from the public flaws.cloud release, same pattern as the
 # Loghub *.log files above (already covered by *.log; this one is .jsonl
