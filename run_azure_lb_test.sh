@@ -198,7 +198,18 @@ echo "Unrestricted sizes in ${LOCATION} (informational; doesn't guarantee live c
 # Ampere Altra/Cobalt silicon) are filtered out since `--image
 # Ubuntu2204` resolves to an x64 image and isn't guaranteed
 # architecture-compatible with them.
-mapfile -t UNRESTRICTED_SIZES < <(
+# Real gap, found live 2026-09-06: `mapfile` (aka `readarray`) is a
+# bash 4+ builtin. macOS ships bash 3.2 as /bin/bash (Apple stopped
+# updating it at the GPLv2/GPLv3 license boundary), and this script's
+# shebang (`#!/bin/bash`) resolves to that system bash on the user's
+# Mac regardless of a newer bash being available via Homebrew. Using a
+# portable `while read` loop instead works on both bash 3.2 and any
+# newer bash, without requiring the user to install/invoke a different
+# shell.
+UNRESTRICTED_SIZES=()
+while IFS= read -r size_name; do
+    [ -n "$size_name" ] && UNRESTRICTED_SIZES+=("$size_name")
+done < <(
     az vm list-skus --location "$LOCATION" --resource-type virtualMachines \
         --query "[?length(restrictions)==\`0\`].name" --output tsv 2>/dev/null \
         | grep -vE '^Standard_B[0-9]+p' \
@@ -211,7 +222,8 @@ echo ""
 # user-requested/default $VM_SIZE first (respects an explicit
 # override), then the unrestricted sizes above, de-duplicated.
 CANDIDATE_SIZES=()
-for s in "$VM_SIZE" "${UNRESTRICTED_SIZES[@]}"; do
+for s in "$VM_SIZE" "${UNRESTRICTED_SIZES[@]:-}"; do
+    [ -z "$s" ] && continue
     dup=false
     for existing in "${CANDIDATE_SIZES[@]:-}"; do
         [ "$existing" = "$s" ] && dup=true && break

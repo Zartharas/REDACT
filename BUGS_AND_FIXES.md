@@ -3936,6 +3936,35 @@ land on the same size. If every candidate fails, the script now exits
 with a pointer to try a different allowed region from Bug (a)'s
 discovery command, rather than a bare stack trace.
 
+**Bug (d), found on the very next live rerun: `mapfile` doesn't exist
+on macOS's system bash.** The auto-fallback fix above used `mapfile
+-t` to build the candidate-size array. Failed immediately with
+`mapfile: command not found`. Root cause: `mapfile` (aka `readarray`)
+was added in bash 4.0, but macOS ships bash 3.2 as `/bin/bash` and has
+since Apple stopped updating it years ago (a licensing choice, not an
+oversight -- bash moved to GPLv3 after 3.2, which Apple won't ship).
+The user's Mac has a newer bash available via Homebrew (installed
+earlier in this same session for `az`), but this script's own
+`#!/bin/bash` shebang resolves to the system one regardless. This
+sandbox's own bash is 5.1, which is exactly why `bash -n` here didn't
+catch it -- a syntax check doesn't verify that every builtin the
+syntax uses actually exists in the shell that will run it. Genuinely
+useful lesson for this repo generally: **any script meant to run on
+the user's own Mac needs checking against bash 3.2 features, not just
+against this sandbox's newer bash.**
+
+**Fix:** replaced `mapfile -t UNRESTRICTED_SIZES < <(...)` with a
+portable `while IFS= read -r size_name; do ... done < <(...)` loop,
+which works identically on bash 3.2 and any newer bash. While auditing
+for this, also hardened `"${UNRESTRICTED_SIZES[@]}"` (and the
+`CANDIDATE_SIZES` array built from it) with a `:-` empty-array
+fallback and an explicit empty-string skip, since old bash versions
+(pre-4.4) are known to throw an unbound-variable error under `set -u`
+when expanding an empty array without one -- this script already runs
+under `set -euo pipefail`, so an all-restricted `az vm list-skus`
+response could otherwise have crashed the pre-flight step itself
+rather than degrading to "just try `$VM_SIZE`."
+
 **Not yet re-verified live:** this fix has been syntax-checked
 (`bash -n`) but not yet rerun against the user's real Azure for
 Students subscription. Next step is exactly that -- same standard as
