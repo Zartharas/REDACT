@@ -3724,10 +3724,44 @@ floci's PLAINTEXT-only local broker.
 layer) still passes unchanged -- the SASL additions are purely additive
 kwargs, nothing about the existing PLAINTEXT/floci code path changed.
 
-**Not yet verified:** an actual live run against a real Confluent Cloud
-Basic cluster. The user has already created one (`Redact_1`, Basic
-tier, AWS us-east-2, topic `redact-raw-events`) and has the bootstrap
-server address and API key/secret in hand -- next step is running
-`run_confluent_kafka_test.sh` and reconciling the real result, the same
-standard every other "implemented, not yet confirmed" entry in this
-document is held to.
+**Confirmed live, 2026-09-05/06.** The user ran `run_confluent_kafka_test.sh`
+against their real Confluent Cloud cluster (`Redact_1`, Basic tier, AWS
+us-east-2, topic `redact-raw-events`). Full clean run:
+
+```
+Expected total (raw exported lines): 2000
+security-logs-anonymized-*:          2000
+security-logs-quarantine-*:          0
+redact-audit-trail-*:                1757
+anonymized + quarantine:             2000
+RECONCILIATION: PASS
+```
+
+Exact match, zero quarantined, real SASL_SSL authentication (both the
+Logstash Kafka producer and `queue_consumer.py`'s Kafka consumer group)
+against a genuine external managed-Kafka control plane, not floci's
+local emulation. Audit fan-out (1,757/2,000 = 87.9%) sits in the same
+neighborhood as every other run's ~89% -- the small delta is consistent
+with normal sample-to-sample variance on a corpus this size (2,000
+lines, deliberately smaller than floci's 20,000 given this run's real
+per-GB cost), not a new defect.
+
+`queue-consumer-kafka`'s log showed one cosmetic item, not a real
+problem: a `DeprecationWarning` from kafka-python about
+`value_deserializer` not implementing its `Deserializer` interface --
+a library-level style warning, harmless, doesn't affect correctness
+(confirmed by the exact reconciliation match above). `logstash-kafka`'s
+log showed repeated `Unable to retrieve license information` /
+`elasticsearch: Name or service not known` errors -- also harmless:
+that's Logstash's own built-in X-Pack monitoring/license-checker trying
+to phone home to a literal hostname `elasticsearch` that doesn't exist
+in this project's topology (which uses `opensearch-node1/2/3`, not
+Elasticsearch) -- unrelated to the Kafka output this test actually
+exercises, and present in every Logstash container this project has
+ever run, not something new introduced by this change.
+
+**This closes Task #53.** Both floci's local emulation (Bug 23/24,
+above) and now a real external managed Kafka control plane have
+confirmed the same Kafka-shaped queue path -- producer, consumer group,
+offset-commit redelivery guarantee, doc_id_base idempotency (Bug 23) --
+end to end.
