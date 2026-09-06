@@ -165,6 +165,30 @@ CLOUD_INIT_FILE=$(mktemp)
 echo "$CLOUD_INIT" > "$CLOUD_INIT_FILE"
 trap 'rm -f "$CLOUD_INIT_FILE"' EXIT
 
+# Pre-flight SKU check, added 2026-09-06 after Standard_B1s AND
+# Standard_B2s both hit (SkuNotAvailable) in northcentralus back to
+# back. Per Microsoft's own troubleshooting doc
+# (learn.microsoft.com/azure/azure-resource-manager/troubleshooting/
+# error-sku-not-available), `az vm list-skus` is the documented way to
+# check whether a size is usable in a region/subscription BEFORE
+# calling `az vm create` -- but that same doc is explicit that this
+# only reports subscription/region-level restrictions, NOT real-time
+# capacity: "there is no Azure API that exposes real-time VM capacity
+# availability prior to deployment." So this check narrows the search
+# to sizes with zero *known* restrictions -- it cannot guarantee the
+# create call will succeed, only rule out sizes guaranteed to fail.
+# Also checks quota via `az vm list-usage`, since a zero-quota VM
+# family produces a similarly-worded failure that isn't a capacity
+# issue at all and needs a different fix (a quota increase request).
+echo ""
+echo "Pre-flight: checking which VM sizes have no known restriction in ${LOCATION}..."
+az vm list-skus --location "$LOCATION" --size "$VM_SIZE" --all --output table || true
+echo ""
+echo "First 15 unrestricted sizes in ${LOCATION} (informational; doesn't guarantee live capacity):"
+az vm list-skus --location "$LOCATION" --resource-type virtualMachines \
+    --query "[?length(restrictions)==\`0\`].name" --output tsv 2>/dev/null | head -15 || true
+echo ""
+
 # Real bug, found live 2026-09-06: `az vm create` has no `--lb`/
 # `--backend-pool-name` flags at all -- those exist only on
 # `az vmss create` (scale sets), not single VMs. I misremembered/

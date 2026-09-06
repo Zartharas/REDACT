@@ -3872,11 +3872,56 @@ regions from Bug (a)'s discovery command
 ./run_azure_lb_test.sh northcentralus Standard_B2s
 ```
 
+**Update, same day:** the live rerun with `Standard_B2s` hit the exact
+same `(SkuNotAvailable)` error, still in `northcentralus`. Confirms
+this is genuinely a transient regional capacity issue rather than
+anything specific to `Standard_B1s` -- consistent with Microsoft's own
+documented behavior for this error (see below), not something a
+different single guessed size was ever guaranteed to fix.
+
+**Researched against official Microsoft documentation** (Microsoft
+Learn, "SKU not available errors - Azure Resource Manager":
+learn.microsoft.com/azure/azure-resource-manager/troubleshooting/
+error-sku-not-available) rather than continuing to guess sizes one at
+a time:
+
+- The documented command to check whether a size is usable in a
+  region/subscription is `az vm list-skus --location <region> --size
+  <size> --all --output table`, and to list every size with zero known
+  restrictions: `az vm list-skus --location <region> --resource-type
+  virtualMachines --query "[?length(restrictions)==\`0\`]"`.
+- Critically, Microsoft's own doc only promises this reports
+  subscription/region-level *restrictions* (things like
+  `NotAvailableForSubscription`) -- it explicitly does not expose
+  real-time capacity. There is no documented Azure API that does. A
+  size can show zero restrictions and still fail at the moment of
+  `az vm create` if that region's physical capacity for that size is
+  temporarily exhausted, which is exactly what's been happening here.
+- A separate, real failure mode with an easily-confused symptom: zero
+  quota for a VM family produces a similarly-worded failure that has
+  nothing to do with capacity and needs a quota increase instead
+  (`az vm list-usage --location <region> --output table` to check).
+
+**Fix:** added a pre-flight step before VM creation that runs both
+`az vm list-skus` commands above against `$LOCATION`/`$VM_SIZE` and
+prints the result -- informational only (explicitly documented in the
+script's own comment as non-blocking and non-guaranteeing, per
+Microsoft's own caveat above), so a rerun surfaces genuinely-viable
+candidate sizes before spending another full `az vm create` attempt on
+one likely to fail the same way. This doesn't eliminate the
+possibility of another `SkuNotAvailable` -- nothing can, by Microsoft's
+own admission -- but it replaces blind guessing with the documented
+diagnostic path.
+
 **Not yet re-verified live:** this fix has been syntax-checked
 (`bash -n`) but not yet rerun against the user's real Azure for
 Students subscription. Next step is exactly that -- same standard as
 every other "fix applied, verification pending" entry in this
-document. If it succeeds, Parts 4 and 5 (backend health polling and a
-real `curl` through the load balancer's public IP) will finally run,
-answering this test's actual question: whether Azure's Standard Load
-Balancer does real data-plane traffic proxying.
+document. If VM creation succeeds, Parts 4 and 5 (backend health
+polling and a real `curl` through the load balancer's public IP) will
+finally run, answering this test's actual question: whether Azure's
+Standard Load Balancer does real data-plane traffic proxying.
+
+Sources:
+- [SKU not available errors - Azure Resource Manager](https://learn.microsoft.com/en-us/azure/azure-resource-manager/troubleshooting/error-sku-not-available)
+- [Backend Pool Management - Azure Load Balancer](https://learn.microsoft.com/en-us/azure/load-balancer/backend-pool-management) (confirms the NIC-based backend-pool attach pattern used in Bug (b)'s fix above matches Microsoft's own documented CLI example)
