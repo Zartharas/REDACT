@@ -765,3 +765,154 @@ def detect_all_field_gated(text: str, log_type: str | None = None,
     if use_flattened:
         hits += scan_flattened(text)
     return hits
+
+
+def _splice_excising(text: str, merged_ranges: list[tuple[int, int]]) -> tuple[str, list[tuple[int, int]]]:
+    """Removes each (start, end) range in merged_ranges (sorted,
+    non-overlapping) from text, returning the shorter spliced string plus
+    (candidate_start, original_start) segments for remap_hit() to translate
+    hits found in the result back to text's own coordinates. Deliberately
+    a standalone copy of the exact splicing logic build_ner_candidate uses
+    internally (detect.py lines ~682-698), not a call into that function --
+    build_ner_candidate is specifically about excising REGEX-COVERED spans
+    for NER-candidate purposes and carries its own docstring/contract
+    around that; this helper excises SCHEMA-TRUST-DECLARED spans for a
+    materially different caller (detect_all_schema_aware below), and
+    keeping them separate avoids coupling two independently-reasoned-about
+    pieces of logic just because their string-splicing mechanics happen to
+    coincide."""
+    parts = []
+    segments = []
+    cursor = 0
+    candidate_len = 0
+    for s, e in merged_ranges:
+        if cursor < s:
+            chunk = text[cursor:s]
+            segments.append((candidate_len, cursor))
+            parts.append(chunk)
+            candidate_len += len(chunk)
+        cursor = e
+    if cursor < len(text):
+        chunk = text[cursor:]
+        segments.append((candidate_len, cursor))
+        parts.append(chunk)
+    return "".join(parts), segments
+
+
+def detect_all_schema_aware(text: str, log_type: "str | None" = None,
+                             use_flattened: bool = True,
+                             on_schema_trust_span=None) -> list[dict]:
+    """Phase 3 of DETECTION_POLICY_DECOUPLING_SCOPING.md ("Engineering
+    upgrade 20", BUGS_AND_FIXES.md). Wraps detect_all_field_gated(): for
+    each field schema_trust.SCHEMA_TRUST declares for this log_type, emits
+    a span of the declared type directly, WITHOUT running scan_regex/
+    scan_ner/scan_entropy/scan_flattened against that field's value at
+    all, then runs the normal field-gated pipeline on everything else.
+
+    Scoped to `windows_event`/`syslog` only (schema_trust.py's own
+    SUPPORTED_LOG_TYPES) -- see that module's docstring and
+    DETECTION_POLICY_DECOUPLING_SCOPING.md's Phase 3 section for why
+    CloudTrail (JSON) cannot safely use this excise-and-recurse mechanism:
+    splicing a value out of JSON text breaks json.loads() for the
+    remainder, silently disabling field-gating for every OTHER field on
+    the same line. This function doesn't special-case that itself --
+    schema_trust.SCHEMA_TRUST simply never contains a `cloudtrail` key
+    (schema_trust.load_schema_trust() refuses to load a file that
+    declares one), so `declared` below is always empty for that log_type
+    and this degrades to detect_all_field_gated() unchanged.
+
+    WITH AN EMPTY (default) schema_trust config, this function's output is
+    byte-identical to detect_all_field_gated()'s own -- see
+    tests/test_schema_trust.py's dedicated regression test for this, which
+    is the actual proof this feature changes nothing until an operator
+    opts in, not just an assertion in this docstring.
+
+    on_schema_trust_span: optional callable(log_type, field_name,
+    declared_type, field_value) invoked once per schema-trust span emitted
+    -- this is the hook service.py uses to feed
+    schema_trust_sampler.SchemaTrustSampler.maybe_sample() without this
+    module needing to import or know anything about the sampler at all
+    (same on_result-callback pattern policy_watcher.PolicyWatcher already
+    uses for its own Prometheus-metric hook). Any exception the callback
+    raises is swallowed here -- sampling is a best-effort side channel
+    that must never be able to affect detection itself.
+    """
+    import schema_trust
+
+    # Defense in depth, not solely relying on schema_trust.load_schema_trust()
+    # having refused a "cloudtrail" key at load time: this explicit check
+    # means even a directly-mutated schema_trust.SCHEMA_TRUST (a test, a
+    # future bug, a caller that bypasses the loader) can never cause this
+    # function to attempt excision against an unsupported log_type. Found
+    # by writing the "cloudtrail is always a no-op" test FIRST and having
+    # it fail against an earlier version of this function that relied only
+    # on the loader-side guarantee -- the discipline this project applies
+    # throughout: a claim in a docstring isn't trusted until a test that
+    # could catch it being wrong actually passes.
+    if log_type not in schema_trust.SUPPORTED_LOG_TYPES:
+        return detect_all_field_gated(text, log_type=log_type, use_flattened=use_flattened)
+
+    declared = schema_trust.SCHEMA_TRUST.get(log_type, {})
+    if not declared:
+        return detect_all_field_gated(text, log_type=log_type, use_flattened=use_flattened)
+
+    import fields
+
+    extracted = fields.extract_fields(log_type, text) if log_type else {}
+    if not extracted:
+        return detect_all_field_gated(text, log_type=log_type, use_flattened=use_flattened)
+
+    # Same search-cursor-with-fallback technique as build_ner_candidate's
+    # own field-location logic above (detect.py ~line 610), and the same
+    # disclosed limitation: fields.py returns values, not offsets, so a
+    # field whose value isn't unique within the line could in principle
+    # match the wrong occurrence. Not re-litigated here -- see that
+    # function's own docstring for the full reasoning, which applies
+    # identically to this use.
+    search_cursor = 0
+    schema_spans = []
+    excise_ranges = []
+    for field_name, value in extracted.items():
+        if field_name not in declared or not value:
+            continue
+        idx = text.find(value, search_cursor)
+        if idx == -1:
+            idx = text.find(value)
+        if idx == -1:
+            # Can't locate this declared field's value verbatim in the
+            # text -- refuse to trust a guessed span. Falls through to
+            # ordinary detection for this field (it simply isn't excised
+            # below), the same "don't trust what can't be honestly
+            # located" standard this project applied throughout the
+            # PIIBench span-anchoring work.
+            continue
+        end = idx + len(value)
+        search_cursor = end
+        declared_type = declared[field_name]
+        schema_spans.append({
+            "start": idx, "end": end, "type": declared_type,
+            "source": "schema_trust", "field_name": field_name,
+        })
+        excise_ranges.append((idx, end))
+        if on_schema_trust_span is not None:
+            try:
+                on_schema_trust_span(log_type, field_name, declared_type, value)
+            except Exception:
+                pass
+
+    if not schema_spans:
+        return detect_all_field_gated(text, log_type=log_type, use_flattened=use_flattened)
+
+    excise_ranges.sort()
+    merged: list[tuple[int, int]] = []
+    for s, e in excise_ranges:
+        if merged and s <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+        else:
+            merged.append((s, e))
+
+    remainder, segments = _splice_excising(text, merged)
+    remainder_hits = detect_all_field_gated(remainder, log_type=log_type, use_flattened=use_flattened)
+    remapped_hits = [remap_hit(h, segments) for h in remainder_hits] if segments else remainder_hits
+
+    return schema_spans + remapped_hits

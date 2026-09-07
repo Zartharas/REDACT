@@ -103,3 +103,9 @@ validation/piibench/results.json
 # document).
 output/policy_audit_log.jsonl
 output/policy_audit_log.jsonl.lock
+
+# Schema-trust sampling audit trail (Phase 3, "Engineering upgrade 20",
+# schema_trust_audit.py) -- same runtime-generated-artifact category as
+# policy_audit_log.jsonl immediately above.
+output/schema_trust_audit_log.jsonl
+output/schema_trust_audit_log.jsonl.lock

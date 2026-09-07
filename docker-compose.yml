@@ -248,6 +248,13 @@ services:
       # gap the way a missing key would be.
       - REDACT_POLICY_ADMIN_KEY=${REDACT_POLICY_ADMIN_KEY:?set a real key in .env, do not use a default}
       - REDACT_POLICY_POLL_INTERVAL_S=${REDACT_POLICY_POLL_INTERVAL_S:-10}
+      # Phase 3 of DETECTION_POLICY_DECOUPLING_SCOPING.md ("Engineering
+      # upgrade 20", BUGS_AND_FIXES.md), added 2026-09. No :? required-key
+      # syntax here -- schema_trust.json ships empty (fully inert) by
+      # default and is NOT a secret the way the keys above are, so a
+      # missing/default value is safe, not a security gap.
+      - REDACT_SCHEMA_TRUST_FILE=${REDACT_SCHEMA_TRUST_FILE:-/app/config/schema_trust.json}
+      - REDACT_SCHEMA_TRUST_SAMPLE_RATE=${REDACT_SCHEMA_TRUST_SAMPLE_RATE:-0.01}
     volumes:
       - redact-output:/app/output
       # Bind-mounts the HOST's config/policy.json over the image's own
@@ -260,6 +267,16 @@ services:
       # PolicyConfigError in anonymize.py), so a bad edit fails the restart
       # loudly rather than silently running with broken protection.
       - ./config/policy.json:/app/config/policy.json:ro
+      # Same bind-mount convenience as policy.json above, but NOTE the
+      # real difference: schema_trust.json has NO hot-reload mechanism
+      # (unlike Phase 2's PolicyWatcher) -- Phase 3's own devil's-advocate
+      # concern was the schema-trust bypass risk itself, not config
+      # hot-reload, so schema_trust.load_schema_trust() only ever runs
+      # once, at module-import time. Editing this host file requires a
+      # container restart (`docker compose restart redact-service`) to
+      # take effect, not just a wait for the next poll -- disclosed here
+      # so this isn't assumed to behave like policy.json's own mount.
+      - ./config/schema_trust.json:/app/config/schema_trust.json:ro
     # No host port mapping (see comment above) -- reachable only over
     # redact-net now, from logstash, redact-lb, and queue-consumer.
     networks:

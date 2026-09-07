@@ -1,0 +1,6 @@
+{
+  "_comment": "REDACT Phase 3 schema-trust declarations (DETECTION_POLICY_DECOUPLING_SCOPING.md). Ships EMPTY by default -- declaring a field here means REDACT trusts it as the given type WITHOUT running detection on its value at all, so this is opt-in only, never a silent default. Only 'windows_event' and 'syslog' are accepted top-level keys -- a 'cloudtrail' key is REJECTED (fail-closed) because excising a JSON field's value breaks the JSON structure for every other field on that line; see the scoping doc's Phase 3 section for the full finding. Every declared type must be one of anonymize.py's CANONICAL_TYPES. Every declared field is periodically re-checked asynchronously by schema_trust_sampler.py -- see REDACT_SCHEMA_TRUST_SAMPLE_RATE.",
+  "_example_not_active": "To declare a field, add it under windows_event or syslog, e.g.: \"windows_event\": {\"TargetUserName\": \"PERSON\"} -- left out of this shipped default deliberately, so installing this file changes nothing until an operator makes that choice explicitly.",
+  "windows_event": {},
+  "syslog": {}
+}

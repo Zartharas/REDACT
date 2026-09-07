@@ -49,6 +49,19 @@ anonymize.load_policy()
 import policy_watcher  # noqa: E402
 import policy_audit    # noqa: E402
 
+# Phase 3 of DETECTION_POLICY_DECOUPLING_SCOPING.md (2026-09), "Engineering
+# upgrade 20" in BUGS_AND_FIXES.md: load the schema-trust declarations
+# (windows_event/syslog only -- see schema_trust.py's own module docstring
+# for why CloudTrail/JSON can't safely use this) from config/schema_trust.json.
+# Same fail-closed-on-invalid/fail-open-on-missing split as Phase 1's
+# anonymize.load_policy() above, and the same "must run at unconditional
+# module-import time" placement rule.
+import schema_trust           # noqa: E402
+import schema_trust_sampler   # noqa: E402
+import schema_trust_audit     # noqa: E402
+
+schema_trust.load_schema_trust()
+
 from flask import Flask, request, jsonify, Response  # noqa: E402
 from prometheus_client import (  # noqa: E402
     Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST,
@@ -169,6 +182,37 @@ POLICY_RELOAD_TOTAL = _metric(
     "error each time.",
     ["outcome"],
 )
+# Phase 3, "Engineering upgrade 20": the actual, monitored answer to "what
+# if a schema-trust declaration turns out to be wrong" -- a nonzero and
+# growing 'drift_detected' count means independent re-detection is finding
+# a DIFFERENT type than what config/schema_trust.json declares for some
+# field, the concrete signal DETECTION_POLICY_DECOUPLING_SCOPING.md's
+# Phase 3 devil's-advocate section required before shipping any
+# skip-detection mechanism.
+SCHEMA_TRUST_SAMPLE_TOTAL = _metric(
+    Counter, "redact_schema_trust_sample_total",
+    "Async schema-trust re-check outcomes on this worker, labeled "
+    "'consistent' / 'no_signal' / 'drift_detected'. See "
+    "schema_trust_audit_log.jsonl for which specific field and what "
+    "type was actually found on each 'drift_detected' event.",
+    ["outcome"],
+)
+SCHEMA_TRUST_QUEUE_DEPTH = _metric(
+    Gauge, "redact_schema_trust_sample_queue_depth",
+    "Current depth of this worker's schema-trust sampling queue. A "
+    "queue that's consistently near its cap (1000 by default) means "
+    "samples are being dropped (see redact_schema_trust_samples_dropped_total) "
+    "-- the background sampler can't keep up with the enqueue rate.",
+)
+SCHEMA_TRUST_SAMPLES_DROPPED_TOTAL = _metric(
+    Gauge, "redact_schema_trust_samples_dropped_total",
+    "Cumulative samples dropped by this worker because the sampling "
+    "queue was full at enqueue time (see SchemaTrustSampler.maybe_sample()). "
+    "A Gauge, not a Counter, because the underlying value "
+    "(SchemaTrustSampler._samples_dropped) is read from a snapshot at "
+    "scrape time rather than incremented at the exact moment each drop "
+    "happens -- see the /metrics route for where this is set.",
+)
 
 POLICY_VERSION = "redact-v0.1"
 # Engineering upgrade, added after the original build-and-verify pass:
@@ -268,6 +312,33 @@ _policy_watcher = policy_watcher.PolicyWatcher(
 # must be triggered here, not there.
 _policy_watcher.start()
 
+# Phase 3, "Engineering upgrade 20": the mandatory async drift-sampling
+# safety net for schema-trust-skipped fields (see schema_trust_sampler.py's
+# own module docstring for why this MUST be async/queued rather than a
+# synchronous double-check on the request path -- doing it synchronously
+# would defeat the entire point of skipping detection in the first place).
+# Deliberately reuses AUDIT_KEY, same reasoning as policy_audit.py's own
+# choice not to mint a new key for policy-change events.
+SCHEMA_TRUST_AUDIT_LOG_PATH = os.environ.get(
+    "REDACT_SCHEMA_TRUST_AUDIT_LOG_PATH", "output/schema_trust_audit_log.jsonl"
+)
+# 1% default: frequent enough to catch sustained drift within a reasonable
+# number of requests for any field seeing real traffic, infrequent enough
+# that the (off-hot-path, but still real) background re-detection cost
+# stays a small fraction of total request volume. Not validated against
+# any specific production SLA -- same disclosure this project already
+# applies to every other interval/rate default (TOKEN_STORE_SAVE_EVERY,
+# REDACT_POLICY_POLL_INTERVAL_S above).
+SCHEMA_TRUST_SAMPLE_RATE = float(os.environ.get("REDACT_SCHEMA_TRUST_SAMPLE_RATE", "0.01"))
+
+_schema_trust_sampler = schema_trust_sampler.SchemaTrustSampler(
+    audit_key=AUDIT_KEY,
+    audit_log_path=SCHEMA_TRUST_AUDIT_LOG_PATH,
+    sample_rate=SCHEMA_TRUST_SAMPLE_RATE,
+    on_result=lambda outcome: SCHEMA_TRUST_SAMPLE_TOTAL.labels(outcome=outcome).inc(),
+)
+_schema_trust_sampler.start()
+
 
 @app.before_request
 def _require_api_key():
@@ -339,6 +410,9 @@ def metrics():
         POLICY_LAST_RELOAD_TIMESTAMP.set(status["last_reload_ts"])
     if status["last_check_ts"] is not None:
         POLICY_LAST_CHECK_TIMESTAMP.set(status["last_check_ts"])
+    sampler_status = _schema_trust_sampler.get_status()
+    SCHEMA_TRUST_QUEUE_DEPTH.set(sampler_status["queue_depth"])
+    SCHEMA_TRUST_SAMPLES_DROPPED_TOTAL.set(sampler_status["samples_dropped"])
     return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 
@@ -388,6 +462,27 @@ def admin_policy_reload():
     return jsonify(result), status_code
 
 
+@app.route("/admin/schema_trust", methods=["GET"])
+def admin_schema_trust_status():
+    """Read-only status for THIS worker's schema-trust configuration and
+    sampler -- reuses the same POLICY_ADMIN_KEY auth domain as
+    /admin/policy* (both are "operator visibility into detection/policy
+    configuration," not two things needing separate keys). Shows the
+    currently loaded declarations (schema_trust.SCHEMA_TRUST, empty unless
+    an operator has opted in) and the async sampler's own counters --
+    samples_processed and the per-outcome breakdown are the actual,
+    concrete answer to "is the mandatory drift-sampling safety net
+    running," not just a claim that it exists."""
+    auth_error = _require_policy_admin_key()
+    if auth_error is not None:
+        return auth_error
+    return jsonify({
+        "worker_pid": os.getpid(),
+        "schema_trust": schema_trust.SCHEMA_TRUST,
+        "sampler": _schema_trust_sampler.get_status(),
+    })
+
+
 @app.route("/anonymize", methods=["POST"])
 def anonymize_endpoint():
     request_start = time.time()
@@ -423,7 +518,17 @@ def anonymize_endpoint():
     # recall than the whole-line "tiered" strategy this project also
     # evaluated. See tests/README.md's field-gate section for the honest,
     # not-yet-fully-resolved throughput comparison this claim rests on.
-    spans = detect.detect_all_field_gated(text, log_type=log_type)
+    # Phase 3, "Engineering upgrade 20": schema-aware detection, not plain
+    # field-gated detection -- with an empty (default) config/schema_trust.json
+    # this is byte-identical to detect_all_field_gated()'s own output (see
+    # detect_all_schema_aware's own docstring for the regression test this
+    # rests on), so switching this call is a safe no-op until an operator
+    # opts in. on_schema_trust_span feeds SchemaTrustSampler.maybe_sample()
+    # without detect.py needing to import or know about the sampler at all.
+    spans = detect.detect_all_schema_aware(
+        text, log_type=log_type,
+        on_schema_trust_span=_schema_trust_sampler.maybe_sample,
+    )
     typed_spans = [s for s in spans if s["type"] != "HIGH_ENTROPY"]
     typed_spans = anonymize.dedup_spans(typed_spans)
 
