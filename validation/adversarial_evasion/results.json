@@ -1,0 +1,107 @@
+{
+  "CREDIT_CARD:dashed_groups": {
+    "n": 237,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 0.5021,
+    "baseline_missed": 0,
+    "variant_missed": 119
+  },
+  "CREDIT_CARD:spaced_groups": {
+    "n": 237,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 0.5021,
+    "baseline_missed": 0,
+    "variant_missed": 119
+  },
+  "EMAIL:at_dot_obfuscation": {
+    "n": 488,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 1.0,
+    "baseline_missed": 0,
+    "variant_missed": 488
+  },
+  "EMAIL:zero_width_split": {
+    "n": 488,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 1.0,
+    "baseline_missed": 0,
+    "variant_missed": 488
+  },
+  "IP:defanged": {
+    "n": 2327,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 1.0,
+    "baseline_missed": 0,
+    "variant_missed": 2327
+  },
+  "IP:octal_padded": {
+    "n": 2327,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 0.0,
+    "baseline_missed": 0,
+    "variant_missed": 0
+  },
+  "MRN:lowercase_no_dash": {
+    "n": 242,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 1.0,
+    "baseline_missed": 0,
+    "variant_missed": 242
+  },
+  "MRN:spelled_out": {
+    "n": 242,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 1.0,
+    "baseline_missed": 0,
+    "variant_missed": 242
+  },
+  "PERSON:all_caps": {
+    "n": 2993,
+    "baseline_miss_rate": 0.3191,
+    "variant_miss_rate": 0.3378,
+    "baseline_missed": 955,
+    "variant_missed": 1011
+  },
+  "PERSON:flattened_digit_insertion": {
+    "n": 2005,
+    "baseline_miss_rate": 0.4698,
+    "variant_miss_rate": 0.992,
+    "baseline_missed": 942,
+    "variant_missed": 1989
+  },
+  "PERSON:leetspeak": {
+    "n": 2993,
+    "baseline_miss_rate": 0.3191,
+    "variant_miss_rate": 0.9359,
+    "baseline_missed": 955,
+    "variant_missed": 2801
+  },
+  "PERSON:unicode_homoglyph": {
+    "n": 2993,
+    "baseline_miss_rate": 0.3191,
+    "variant_miss_rate": 0.6839,
+    "baseline_missed": 955,
+    "variant_missed": 2047
+  },
+  "SSN:dotted": {
+    "n": 250,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 0.0,
+    "baseline_missed": 0,
+    "variant_missed": 0
+  },
+  "SSN:no_dashes": {
+    "n": 250,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 1.0,
+    "baseline_missed": 0,
+    "variant_missed": 250
+  },
+  "SSN:spaced": {
+    "n": 250,
+    "baseline_miss_rate": 0.0,
+    "variant_miss_rate": 0.0,
+    "baseline_missed": 0,
+    "variant_missed": 0
+  }
+}
