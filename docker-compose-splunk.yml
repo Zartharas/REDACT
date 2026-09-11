@@ -26,15 +26,17 @@ services:
       # after the container reports healthy, which works regardless of
       # role and doesn't depend on that disputed env var.
     ports:
-      # Host port 8000 changed to 8001 -- found live that 8000 was already
-      # bound to something else on the test machine. Splunk Web isn't
-      # needed by run_splunk_siem_test.sh itself (only HEC on 8088 and the
-      # management REST API on 8089 are used programmatically), so this is
-      # a safe remap rather than something requiring the conflicting
-      # process to be tracked down and stopped.
+      # Host ports 8000 and 8089 remapped to 8001/8091 -- found live that
+      # an entirely unrelated, already-running Splunk container from a
+      # different project (opencti8431lab-splunk-1) was already bound to
+      # both of Splunk's own default ports on the test machine. Not a
+      # REDACT conflict, just two Splunk instances wanting the same
+      # well-known ports -- remapped rather than asking that unrelated
+      # project's container to be stopped. 8088 (HEC) was confirmed free
+      # (that other container doesn't publish it) and left as-is.
       - "8001:8000"   # Splunk Web (host 8001 -> container's own 8000)
       - "8088:8088"   # HTTP Event Collector (data-plane ingestion)
-      - "8089:8089"   # Management REST API (used for setup + search)
+      - "8091:8089"   # Management REST API (host 8091 -> container's own 8089)
     healthcheck:
       test: ["CMD", "curl", "-sk", "https://localhost:8089/services/server/info"]
       interval: 15s

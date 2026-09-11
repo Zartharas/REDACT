@@ -46,7 +46,10 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 ADMIN_PASSWORD="Redact-Test-Pw1"   # matches docker-compose-splunk.yml's SPLUNK_PASSWORD
-BASE_URL="https://localhost:8089"
+# Host port 8091, not Splunk's default 8089 -- see docker-compose-splunk.yml's
+# port mapping comment for why (an unrelated already-running Splunk
+# container on the test machine had claimed 8000/8089).
+BASE_URL="https://localhost:8091"
 HEC_URL="https://localhost:8088/services/collector"
 INDEX="main"
 HEC_TOKEN=$(python3 -c "import uuid; print(uuid.uuid4())")
