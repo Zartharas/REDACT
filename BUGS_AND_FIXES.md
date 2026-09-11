@@ -1660,12 +1660,19 @@ pass, clearing two "Node.js 20 is deprecated" warnings that showed up
 alongside the real failure (both were warnings, not failures, but no
 reason to leave them once the workflow file was already open for a fix).
 
-**Not yet re-confirmed live** -- this needs the next real push to `main`
-to show a green `container-scan` job on GitHub's actual runners, the
-same "syntax-checked here, confirmed there" bar every other CI/Docker
-change in this document is held to. `python3 -c "import yaml;
-yaml.safe_load(...)"` confirms the file parses as valid YAML, which is
-not the same thing as the workflow actually running clean.
+**Confirmed live, 2026-09-11 (sanity-check pass), superseding the "not
+yet re-confirmed" note this paragraph used to end with.** Checked
+GitHub's own Actions tab directly rather than assuming the fix held:
+`container-scan` shows `Success` on the most recent run (#59, commit
+`2b5bcec`, 1m 11s) and every run visible in the current history shows no
+failures at all -- the SHA-pin fix has held across dozens of pushes
+since it landed, not just the one push right after the fix. One
+non-blocking annotation showing up on recent runs, unrelated to this
+fix: a Node.js 20 deprecation warning surfacing from `actions/cache`, a
+dependency nested *inside* the pinned `aquasecurity/trivy-action` SHA
+itself, not something this workflow references directly -- a warning,
+not a failure, and outside this project's control until upstream
+updates that pinned commit.
 
 **Incident scope, checked directly rather than assumed: this repo was never exposed.**
 The user asked whether this needed reporting anywhere -- checked GitHub's
