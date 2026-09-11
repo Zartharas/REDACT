@@ -65,9 +65,11 @@ python3 src/pipeline.py --in data/synthetic_logs.jsonl \
 ./run_splunk_siem_test.sh
 ```
 
-Splunk Web is reachable at `http://localhost:8000` (`admin` /
-`Redact-Test-Pw1`, matching `docker-compose-splunk.yml`) while the
-container is running, if you want to look at the indexed events directly.
+Splunk Web is reachable at `http://localhost:8001` (`admin` /
+`Redact-Test-Pw1`, matching `docker-compose-splunk.yml` -- host port 8001
+maps to the container's own 8000, remapped after a live run found 8000
+already bound to something else on the test machine) while the container
+is running, if you want to look at the indexed events directly.
 
 ## Expected result, set in advance
 

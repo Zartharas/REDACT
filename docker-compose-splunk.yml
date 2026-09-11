@@ -26,7 +26,13 @@ services:
       # after the container reports healthy, which works regardless of
       # role and doesn't depend on that disputed env var.
     ports:
-      - "8000:8000"   # Splunk Web
+      # Host port 8000 changed to 8001 -- found live that 8000 was already
+      # bound to something else on the test machine. Splunk Web isn't
+      # needed by run_splunk_siem_test.sh itself (only HEC on 8088 and the
+      # management REST API on 8089 are used programmatically), so this is
+      # a safe remap rather than something requiring the conflicting
+      # process to be tracked down and stopped.
+      - "8001:8000"   # Splunk Web (host 8001 -> container's own 8000)
       - "8088:8088"   # HTTP Event Collector (data-plane ingestion)
       - "8089:8089"   # Management REST API (used for setup + search)
     healthcheck:

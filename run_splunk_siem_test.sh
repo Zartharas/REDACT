@@ -115,7 +115,7 @@ set -e
 
 echo ""
 echo "=== IMPORTANT: cleanup (not run automatically) ==="
-echo "Splunk Web (if you want to look around first): http://localhost:8000 (admin / $ADMIN_PASSWORD)"
+echo "Splunk Web (if you want to look around first): http://localhost:8001 (admin / $ADMIN_PASSWORD)"
 echo ""
 echo "Stop and remove the container + its volume:"
 echo ""
