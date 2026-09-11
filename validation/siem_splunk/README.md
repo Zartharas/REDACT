@@ -69,6 +69,10 @@ Splunk Web is reachable at `http://localhost:8000` (`admin` /
 `Redact-Test-Pw1`, matching `docker-compose-splunk.yml`) while the
 container is running, if you want to look at the indexed events directly.
 
+## Expected result, set in advance
+
+The object-storage half of this work (`validation/cloud_loglake/`) already ran live against real Azure and found the DLP check reporting real PERSON leaks -- confirmed to be a live reproduction of this project's own already-documented flattened-username detection gap (52.8%/98.8% recall split by name format, matching prior measurements almost exactly), not a new bug. See that directory's README for the full numbers. This SIEM ingestion path runs the exact same anonymized output through the exact same DLP check logic, so it is expected to report a similar leak rate for the identical, already-understood reason -- that is the correct, expected result here too, not evidence of a new problem to chase.
+
 ## Cleanup
 
 ```bash

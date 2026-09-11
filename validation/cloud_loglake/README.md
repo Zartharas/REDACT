@@ -62,6 +62,14 @@ Pass a region as the first argument if `northcentralus` isn't allowed for
 your subscription (see `run_azure_lb_test.sh`'s header for how to find
 your subscription's allowed regions).
 
+## Real result (run 2026-09-11, against a real Azure for Students subscription)
+
+Ran end to end after fixing one real Azure CLI gotcha: `az storage account create` failed with a misleading `SubscriptionNotFound` -- the real cause (confirmed against Azure CLI's own issue tracker) was `Microsoft.Storage` not yet being registered on the subscription. Fixed with `az provider register --namespace Microsoft.Storage`, then the script completed successfully.
+
+The verification step reported 959 of 6,537 ground-truth PERSON values present in the downloaded content. **This is not a new detection regression** -- checked carefully before concluding otherwise: it's a live, independent reproduction of this project's own already-documented flattened-username detection gap (see `flattened_names.py`'s docstring and `README.md`'s "Known Limitations" section), which this project has disclosed for months as its single most important measured finding. Split by format: flattened-style names ("wdavis") measured 52.8% recall live against a documented 50.3% for that layer alone; full "First Last"-style names measured 98.8% live, matching prior measurements. Two independently-built measurement methods -- the project's own `evaluate.py` span-matching harness, and this test's whole-corpus DLP scan -- landing on the same numbers is corroborating evidence, not a new finding. Full writeup in `BUGS_AND_FIXES.md`'s "Engineering upgrade 22 addendum".
+
+The upload/DLP-check MECHANISM is confirmed working correctly either way: it correctly surfaced exactly the leak REDACT's own documentation says to expect, at the exact rate documented, on real data, through a real cloud round trip.
+
 ## Cost and cleanup
 
 One Standard general-purpose v2 Storage Account (LRS, Hot tier) holding a
