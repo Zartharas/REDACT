@@ -1,0 +1,37 @@
+# Standalone compose file, deliberately separate from docker-compose.yml --
+# this test doesn't need REDACT's own service stack (it ingests
+# already-produced output/anonymized.jsonl, see run_splunk_siem_test.sh),
+# and keeping it separate means it can be brought up/down without touching
+# the main stack's state at all.
+#
+# Splunk Enterprise's official image runs as a 60-day Enterprise trial that
+# reverts to Splunk Free (500MB/day) automatically -- no signup, no license
+# key, no cost, matching this project's open-source/free-tooling
+# constraint for a short-lived local test. Free-tier index size limits
+# don't matter at the volume this test uses (a few hundred KB).
+services:
+  splunk:
+    image: splunk/splunk:latest
+    hostname: redact-splunk
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=Redact-Test-Pw1
+      # Deliberately NOT relying on SPLUNK_HEC_TOKEN here: splunk-ansible's
+      # own HEC-provisioning role (set_as_hec_receiver.yml) is documented,
+      # per a real long-standing upstream issue (splunk/docker-splunk#40),
+      # as applying to forwarder/indexer roles, not the standalone role
+      # this single-container test uses -- so this env var may silently do
+      # nothing here. run_splunk_siem_test.sh instead enables HEC and
+      # creates the token itself via the management REST API (port 8089)
+      # after the container reports healthy, which works regardless of
+      # role and doesn't depend on that disputed env var.
+    ports:
+      - "8000:8000"   # Splunk Web
+      - "8088:8088"   # HTTP Event Collector (data-plane ingestion)
+      - "8089:8089"   # Management REST API (used for setup + search)
+    healthcheck:
+      test: ["CMD", "curl", "-sk", "https://localhost:8089/services/server/info"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
