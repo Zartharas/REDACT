@@ -1,0 +1,245 @@
+{
+  "methodology_note": "Measured against ground-truth spans in scenario_corpus.jsonl, not detector output -- isolates the anonymization methods' own properties from detection accuracy (a separate, already-measured axis; see this directory's README.md).",
+  "by_type": {
+    "CREDIT_CARD": {
+      "total_mentions": 23,
+      "unique_values": 7,
+      "correlation": {
+        "same_entity_pairs_examined": 53,
+        "different_entity_pairs_examined": 200,
+        "redact": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 1.0
+        },
+        "pseudonymize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        },
+        "tokenize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        }
+      },
+      "reversibility": {
+        "redact": {
+          "direct_reversal_rate": 0.0,
+          "note": "all 7 values map to 1 distinct placeholder(s); the original value is not present in the output in any form."
+        },
+        "pseudonymize": {
+          "direct_reversal_rate": 0.0,
+          "note": "one-way HMAC-SHA256, no reverse map is ever stored -- blind reversal is not computationally attempted here because a correctly implemented keyed hash has no feasible inversion to demonstrate failing; this is a structural property, not a measured one.",
+          "candidate_list_verification": {
+            "description": "given a candidate list of 5 plausible values (1 true + 4 decoys) and the pseudonymization key, can an investigator correctly identify which candidate produced the observed pseudonym?",
+            "trials": 7,
+            "correct_identification_rate": 1.0,
+            "caveat": "requires possession of the pseudonymization key -- the same privileged-access assumption this project's TokenStore/audit design already requires elsewhere, not a weaker one."
+          }
+        },
+        "tokenize": {
+          "direct_reversal_rate": 1.0,
+          "note": "via the real TokenStore.resolve() path, given store access."
+        }
+      }
+    },
+    "EMAIL": {
+      "total_mentions": 54,
+      "unique_values": 22,
+      "correlation": {
+        "same_entity_pairs_examined": 153,
+        "different_entity_pairs_examined": 1278,
+        "redact": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 1.0
+        },
+        "pseudonymize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        },
+        "tokenize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        }
+      },
+      "reversibility": {
+        "redact": {
+          "direct_reversal_rate": 0.0,
+          "note": "all 22 values map to 1 distinct placeholder(s); the original value is not present in the output in any form."
+        },
+        "pseudonymize": {
+          "direct_reversal_rate": 0.0,
+          "note": "one-way HMAC-SHA256, no reverse map is ever stored -- blind reversal is not computationally attempted here because a correctly implemented keyed hash has no feasible inversion to demonstrate failing; this is a structural property, not a measured one.",
+          "candidate_list_verification": {
+            "description": "given a candidate list of 5 plausible values (1 true + 4 decoys) and the pseudonymization key, can an investigator correctly identify which candidate produced the observed pseudonym?",
+            "trials": 22,
+            "correct_identification_rate": 1.0,
+            "caveat": "requires possession of the pseudonymization key -- the same privileged-access assumption this project's TokenStore/audit design already requires elsewhere, not a weaker one."
+          }
+        },
+        "tokenize": {
+          "direct_reversal_rate": 1.0,
+          "note": "via the real TokenStore.resolve() path, given store access."
+        }
+      }
+    },
+    "IP": {
+      "total_mentions": 255,
+      "unique_values": 71,
+      "correlation": {
+        "same_entity_pairs_examined": 2350,
+        "different_entity_pairs_examined": 30035,
+        "redact": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 1.0
+        },
+        "pseudonymize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        },
+        "tokenize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        }
+      },
+      "reversibility": {
+        "redact": {
+          "direct_reversal_rate": 0.0,
+          "note": "all 71 values map to 1 distinct placeholder(s); the original value is not present in the output in any form."
+        },
+        "pseudonymize": {
+          "direct_reversal_rate": 0.0,
+          "note": "one-way HMAC-SHA256, no reverse map is ever stored -- blind reversal is not computationally attempted here because a correctly implemented keyed hash has no feasible inversion to demonstrate failing; this is a structural property, not a measured one.",
+          "candidate_list_verification": {
+            "description": "given a candidate list of 5 plausible values (1 true + 4 decoys) and the pseudonymization key, can an investigator correctly identify which candidate produced the observed pseudonym?",
+            "trials": 30,
+            "correct_identification_rate": 1.0,
+            "caveat": "requires possession of the pseudonymization key -- the same privileged-access assumption this project's TokenStore/audit design already requires elsewhere, not a weaker one."
+          }
+        },
+        "tokenize": {
+          "direct_reversal_rate": 1.0,
+          "note": "via the real TokenStore.resolve() path, given store access."
+        }
+      }
+    },
+    "MRN": {
+      "total_mentions": 24,
+      "unique_values": 9,
+      "correlation": {
+        "same_entity_pairs_examined": 52,
+        "different_entity_pairs_examined": 224,
+        "redact": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 1.0
+        },
+        "pseudonymize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        },
+        "tokenize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        }
+      },
+      "reversibility": {
+        "redact": {
+          "direct_reversal_rate": 0.0,
+          "note": "all 9 values map to 1 distinct placeholder(s); the original value is not present in the output in any form."
+        },
+        "pseudonymize": {
+          "direct_reversal_rate": 0.0,
+          "note": "one-way HMAC-SHA256, no reverse map is ever stored -- blind reversal is not computationally attempted here because a correctly implemented keyed hash has no feasible inversion to demonstrate failing; this is a structural property, not a measured one.",
+          "candidate_list_verification": {
+            "description": "given a candidate list of 5 plausible values (1 true + 4 decoys) and the pseudonymization key, can an investigator correctly identify which candidate produced the observed pseudonym?",
+            "trials": 9,
+            "correct_identification_rate": 1.0,
+            "caveat": "requires possession of the pseudonymization key -- the same privileged-access assumption this project's TokenStore/audit design already requires elsewhere, not a weaker one."
+          }
+        },
+        "tokenize": {
+          "direct_reversal_rate": 1.0,
+          "note": "via the real TokenStore.resolve() path, given store access."
+        }
+      }
+    },
+    "PERSON": {
+      "total_mentions": 344,
+      "unique_values": 82,
+      "correlation": {
+        "same_entity_pairs_examined": 3179,
+        "different_entity_pairs_examined": 55772,
+        "redact": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 1.0
+        },
+        "pseudonymize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        },
+        "tokenize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        }
+      },
+      "reversibility": {
+        "redact": {
+          "direct_reversal_rate": 0.0,
+          "note": "all 82 values map to 1 distinct placeholder(s); the original value is not present in the output in any form."
+        },
+        "pseudonymize": {
+          "direct_reversal_rate": 0.0,
+          "note": "one-way HMAC-SHA256, no reverse map is ever stored -- blind reversal is not computationally attempted here because a correctly implemented keyed hash has no feasible inversion to demonstrate failing; this is a structural property, not a measured one.",
+          "candidate_list_verification": {
+            "description": "given a candidate list of 5 plausible values (1 true + 4 decoys) and the pseudonymization key, can an investigator correctly identify which candidate produced the observed pseudonym?",
+            "trials": 30,
+            "correct_identification_rate": 1.0,
+            "caveat": "requires possession of the pseudonymization key -- the same privileged-access assumption this project's TokenStore/audit design already requires elsewhere, not a weaker one."
+          }
+        },
+        "tokenize": {
+          "direct_reversal_rate": 1.0,
+          "note": "via the real TokenStore.resolve() path, given store access."
+        }
+      }
+    },
+    "SSN": {
+      "total_mentions": 22,
+      "unique_values": 9,
+      "correlation": {
+        "same_entity_pairs_examined": 35,
+        "different_entity_pairs_examined": 196,
+        "redact": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 1.0
+        },
+        "pseudonymize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        },
+        "tokenize": {
+          "correlation_recall": 1.0,
+          "false_linkage_rate": 0.0
+        }
+      },
+      "reversibility": {
+        "redact": {
+          "direct_reversal_rate": 0.0,
+          "note": "all 9 values map to 1 distinct placeholder(s); the original value is not present in the output in any form."
+        },
+        "pseudonymize": {
+          "direct_reversal_rate": 0.0,
+          "note": "one-way HMAC-SHA256, no reverse map is ever stored -- blind reversal is not computationally attempted here because a correctly implemented keyed hash has no feasible inversion to demonstrate failing; this is a structural property, not a measured one.",
+          "candidate_list_verification": {
+            "description": "given a candidate list of 5 plausible values (1 true + 4 decoys) and the pseudonymization key, can an investigator correctly identify which candidate produced the observed pseudonym?",
+            "trials": 9,
+            "correct_identification_rate": 1.0,
+            "caveat": "requires possession of the pseudonymization key -- the same privileged-access assumption this project's TokenStore/audit design already requires elsewhere, not a weaker one."
+          }
+        },
+        "tokenize": {
+          "direct_reversal_rate": 1.0,
+          "note": "via the real TokenStore.resolve() path, given store access."
+        }
+      }
+    }
+  }
+}

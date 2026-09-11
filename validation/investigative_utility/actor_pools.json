@@ -1,0 +1,47 @@
+{
+  "IP": [
+    "197.118.160.243",
+    "205.83.83.218",
+    "151.7.180.215",
+    "141.29.213.214",
+    "192.238.180.40",
+    "118.97.60.51",
+    "54.71.77.90",
+    "147.228.247.140"
+  ],
+  "PERSON": [
+    "Sandra Wheeler",
+    "Tyler Flynn",
+    "Michael Herman",
+    "Dennis Harris",
+    "Joseph Montgomery",
+    "Amanda Russell",
+    "lowecynthia",
+    "danielgonzalez",
+    "alexander95",
+    "oarmstrong",
+    "parsonsangela",
+    "melinda39"
+  ],
+  "EMAIL": [
+    "allisonrice@example.net",
+    "francisjane@example.net",
+    "bmcpherson@example.net",
+    "pdaniels@example.net"
+  ],
+  "SSN": [
+    "362-95-9149",
+    "818-73-4216",
+    "269-09-2138"
+  ],
+  "CREDIT_CARD": [
+    "503851378409",
+    "213165906420751",
+    "6011359433276965"
+  ],
+  "MRN": [
+    "MRN-5242440",
+    "MRN-3679763",
+    "MRN-4715210"
+  ]
+}
