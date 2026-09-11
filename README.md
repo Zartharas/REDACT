@@ -41,7 +41,7 @@ Every number in this README came out of an actual executed run, not a projection
 
 *Real output, not staged — a tokenize/detokenize round trip and the syslog coverage test suite, both run against this exact codebase.*
 
-This is the reference implementation behind two related but separately written pieces of work: a practitioner-oriented book chapter (IntechOpen, *Data Privacy in Practice*) and an empirical research paper. Check each publication for its own scope — this repo is the shared technical foundation underneath both, not a copy of either.
+This is the reference implementation behind two related but separately written pieces of work: a practitioner-oriented book chapter and an empirical research paper. Check each publication for its own scope — this repo is the shared technical foundation underneath both, not a copy of either.
 
 ## Does this actually work? Run this and see.
 
