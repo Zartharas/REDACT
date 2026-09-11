@@ -71,9 +71,11 @@ maps to the container's own 8000, remapped after a live run found 8000
 already bound to something else on the test machine) while the container
 is running, if you want to look at the indexed events directly.
 
-## Expected result, set in advance
+## Real result (run 2026-09-11, against a real local Splunk instance)
 
-The object-storage half of this work (`validation/cloud_loglake/`) already ran live against real Azure and found the DLP check reporting real PERSON leaks -- confirmed to be a live reproduction of this project's own already-documented flattened-username detection gap (52.8%/98.8% recall split by name format, matching prior measurements almost exactly), not a new bug. See that directory's README for the full numbers. This SIEM ingestion path runs the exact same anonymized output through the exact same DLP check logic, so it is expected to report a similar leak rate for the identical, already-understood reason -- that is the correct, expected result here too, not evidence of a new problem to chase.
+Ran end to end after three real, live-only fixes: two port conflicts (host 8000 and 8089 were both already bound -- 8089 turned out to belong to an entirely unrelated, already-running Splunk container from a different project on the same machine, found via `lsof`/`docker ps`; remapped to 8001/8091 rather than touching that unrelated container) and a missing `SPLUNK_GENERAL_TERMS` environment variable the currently-published `splunk/splunk:latest` image requires beyond what its own current docs show, taken directly from the container's own error text. See `docker-compose-splunk.yml`'s comments and `BUGS_AND_FIXES.md`'s closing note on "Engineering upgrade 22" for the full detail on each.
+
+Real HEC ingestion: 10,000/10,000 events accepted, 0 rejected. Count check against the live instance's own search API: 10,000/10,000 indexed and searchable, PASS. DLP check: **959 of 6,537 PERSON values found in indexed content** -- the exact same count `validation/cloud_loglake/`'s Azure run found. That's expected, not a new problem: both ingest the identical `output/anonymized.jsonl`, and the cause is REDACT's own already-documented flattened-username detection gap (see that directory's README for the full recall breakdown), a property of the anonymization output itself, not of either destination. Two independently real systems landing on the identical leak count is a second, stronger confirmation of the same already-disclosed finding.
 
 ## Cleanup
 
