@@ -15,6 +15,14 @@ services:
     hostname: redact-splunk
     environment:
       - SPLUNK_START_ARGS=--accept-license
+      # Required by the currently-published splunk/splunk:latest image,
+      # found live: it refused to start with only SPLUNK_START_ARGS,
+      # printing its own explicit instruction to also set this exact
+      # variable to indicate acceptance of the Splunk General Terms --
+      # a newer licensing gate than what splunk.github.io/docker-splunk's
+      # own current example commands show, so this was taken directly
+      # from the running container's own error message, not guessed.
+      - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
       - SPLUNK_PASSWORD=Redact-Test-Pw1
       # Deliberately NOT relying on SPLUNK_HEC_TOKEN here: splunk-ansible's
       # own HEC-provisioning role (set_as_hec_receiver.yml) is documented,
