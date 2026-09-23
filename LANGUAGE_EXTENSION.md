@@ -10,14 +10,16 @@ and exactly which existing files implement the pattern to copy.
 
 ## TL;DR
 
-Extend to **French** next, mirroring the Spanish pattern file-for-file
+Extend to **French, then Russian, then Indonesian**, in that order — one at
+a time, each mirroring the Spanish pattern file-for-file
 (`src/es_detect.py`, `src/es_ner.py`, `validation/real_data/Dockerfile.meddocan_ner`,
 `validation/real_data/run_meddocan_ner.sh`, `validation/real_data/evaluate_meddocan.py`,
 `validation/real_data/MEDDOCAN_TYPE_MAPPING.md`,
 `validation/real_data/prepare_meddocan_dataset.py`). French has the most
 mature tooling and the most promising (though not yet license-verified)
-benchmark candidates of any language surveyed. Full ranking and rationale
-below.
+benchmark candidates of any language surveyed; Russian and Indonesian are
+the next-best-ready tier after it. Full ranking, rationale, and per-language
+gotchas below — see "Scope note" for why this list stops at three.
 
 ## The pattern to mirror (already built and working, Spanish)
 
@@ -94,25 +96,66 @@ This is a validation-generalization side-track, not the project's current
 primary research focus — a separate, in-progress paper (FlatPII, on
 flattened-token PII detection in log/telemetry data specifically) is the
 priority work and should not be delayed by this. Language extension is
-worth doing for robustness, but treat it as bounded, documented follow-up
-work, not an open-ended expansion — French only, evaluated and written up
-before considering a second additional language.
+worth doing for robustness, but treat it as bounded, **sequential** work
+against a fixed shortlist, not an open-ended expansion to every language
+surveyed above. Eligible shortlist, in priority order:
+
+1. **French** — do this one first. Best tooling maturity of any language
+   surveyed, real (if not yet license-verified) clinical corpus candidates.
+2. **Russian** — mature spaCy model and Faker locale, but no PHI-specific
+   benchmark exists; the dictionary layer will need lemmatization/fuzzy
+   matching instead of the Spanish exact-string approach, since Russian is
+   heavily inflected.
+3. **Indonesian** — clean whitespace tokenization (no segmentation rewrite
+   needed) and a decent Faker locale, but no official spaCy model (needs a
+   HuggingFace IndoBERT-NER swap-in) and no benchmark found at all.
+
+Tier-3 languages (Japanese, Chinese) and everything ranked 4-5 in the table
+above are explicitly **not** in scope for this pass — they require a real
+tokenization rewrite (no whitespace) or have no usable model/benchmark at
+all, and pursuing them now would be the same scope-creep risk this
+project's own history (the "limited technical depth" desk rejection) has
+already run into once. Finish and write up French before starting Russian;
+finish and write up Russian before starting Indonesian. Do not work on more
+than one language at a time, and do not add a fourth language to this
+shortlist without re-running the same tooling/benchmark/license research
+this document is based on.
 
 ## Checklist for the next engineering session
 
-1. Verify CAS/ESSAI/QUAERO license/access terms; find a DUA-free
-   alternative if all three are blocked.
-2. Stage a real French clinical (or general) text sample once a viable
-   source is confirmed.
+Repeat this sequence once per language, in the priority order above
+(`{lang}` = `fr`/`ru`/`id`, `{XX}` = the corresponding Faker/spaCy locale
+code):
+
+1. Verify the target language's benchmark candidate's license/access terms
+   BEFORE staging data or writing code — for French, that's CAS/ESSAI/QUAERO
+   (unverified as of this writing); for Russian and Indonesian, no
+   candidate has been identified yet, so this step starts with a literature
+   search, the same kind that found MEDDOCAN as the Spanish DUA-free
+   alternative to n2c2. If nothing DUA-free/license-clear turns up, document
+   that finding and move to the next language on the shortlist rather than
+   stalling on one language indefinitely.
+2. Stage a real text sample once a viable source is confirmed, with the
+   same honest partial-coverage disclosure discipline as
+   `prepare_meddocan_dataset.py` if full coverage isn't achievable.
 3. Map the source's entity types onto REDACT's canonical vocabulary
    (PERSON/EMAIL/MRN/SSN/etc.), documenting exclusions explicitly —
    mirror `MEDDOCAN_TYPE_MAPPING.md`'s format and rationale style.
-4. Build `src/fr_detect.py` (regex + `fr_FR` Faker dictionary layer),
-   confirmed via `git status` to touch zero existing files.
-5. Build `src/fr_ner.py` + `Dockerfile.fr_ner` + `run_fr_ner.sh`
+4. Build `src/{lang}_detect.py` (regex + `{XX}` Faker dictionary layer),
+   confirmed via `git status` to touch zero existing files. For Russian
+   specifically: don't reuse the Spanish `_CAP_RUN_RE` exact-string
+   dictionary match as-is — inflection means the same name appears in
+   multiple case-declined forms, so this needs lemmatization or fuzzy
+   matching from the start, not as a fix after low recall shows up.
+5. Build `src/{lang}_ner.py` + `Dockerfile.{lang}_ner` + `run_{lang}_ner.sh`
    (mirroring the Spanish Docker workaround for the sandboxed model
-   download).
-6. Build `evaluate_fr.py` with the same 5-condition structure and
+   download). For Indonesian specifically: there's no official spaCy
+   model, so this step means wiring in a HuggingFace IndoBERT-NER model
+   instead of a `spacy.load()` call — expect the `NlpEngineProvider`
+   config to look different from the Spanish/French/Russian versions.
+6. Build `evaluate_{lang}.py` with the same 5-condition structure and
    `--diagnose` root-cause tooling as `evaluate_meddocan.py`.
 7. Run it, document results including the disjoint-false-positive-set
    check from day one, not after a surprising number appears.
+8. Update this document's shortlist status (mark the language done, note
+   final precision/recall numbers) before starting the next language.
