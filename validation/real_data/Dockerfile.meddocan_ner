@@ -1,0 +1,50 @@
+# Standalone image for the ONE thing this project's own sandbox structurally
+# cannot do: download a spaCy NER model. Everything else about MEDDOCAN
+# evaluation (regex, es_detect.py's dictionary layer, scoring) already runs
+# fine without Docker -- this image exists only to add the Spanish NER
+# condition (`es-ner` / `full`) to evaluate_meddocan.py's results, so it can
+# be compared against the dictionary-only numbers already measured and
+# written up in validation_review_summary.md Section 6.
+#
+# Why a SEPARATE Spanish model, not just "unblock the existing English one":
+# MEDDOCAN's carrier text is Spanish. Presidio's default AnalyzerEngine (used
+# everywhere else in this project, see detect.py's _get_analyzer()) loads an
+# English spaCy model -- running it against Spanish text would not error, but
+# would silently produce near-zero real PERSON recall (an English NER model
+# has no meaningful signal on Spanish sentence structure), which would look
+# like "NER doesn't help here" when the real story is "wrong model was
+# loaded." es_core_news_md is spaCy's medium Spanish pipeline (~40MB,
+# NER-capable with PER/LOC/ORG/MISC labels -- Presidio's built-in
+# SpacyRecognizer maps "PER" -> PERSON automatically, same label-mapping
+# logic it already uses for English "PERSON"/"PER").
+#
+# Usage: don't build/run this by hand -- run run_meddocan_ner.sh from the
+# repo (any working directory; it resolves paths itself). It builds this
+# image, mounts the whole repo read-only at /app (so evaluate_meddocan.py
+# sees your real src/, es_detect.py, es_ner.py, and staged MEDDOCAN data
+# exactly as they are locally), and tees results to a file.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Only what evaluate_meddocan.py + es_ner.py actually need -- not the full
+# requirements.txt (Flask/gunicorn/prometheus-client/Redis/Vault/Kafka
+# extras are irrelevant to this one evaluation script and would just slow
+# the image build down for no benefit).
+RUN pip install --no-cache-dir \
+    presidio-analyzer \
+    presidio-anonymizer \
+    faker \
+    pyahocorasick \
+    spacy
+
+# Real network access (this is the whole point of running in Docker rather
+# than this project's own sandbox) -- downloads spaCy's medium Spanish
+# pipeline directly from spaCy's own model release, not from this project's
+# blocked huggingface.co/github.com allowlist gap.
+RUN python -m spacy download es_core_news_md
+
+# Source and validation code are mounted at runtime (see run_meddocan_ner.sh)
+# rather than baked into the image, so local edits to es_detect.py /
+# evaluate_meddocan.py / es_ner.py are picked up without a rebuild.
+CMD ["python", "/app/validation/real_data/evaluate_meddocan.py", "--with-ner"]

@@ -1,0 +1,70 @@
+Loaded 520 real MEDDOCAN documents (210 train / 190 validation / 120 test).
+3626 gold spans across the 5 REDACT-mapped types (PERSON, EMAIL, MRN, SSN).
+
+=== en-only (520 documents) ===
+  overall: P=0.988 R=0.138 (TP=500 FP=6 FN=3126)
+    PERSON  : P=0.000 R=0.000 (TP=0 FP=0 FN=2085, gold=2085)
+    EMAIL   : P=0.994 R=0.992 (TP=500 FP=3 FN=4, gold=504)
+    MRN     : P=0.000 R=0.000 (TP=0 FP=0 FN=608, gold=608)
+    SSN     : P=0.000 R=0.000 (TP=0 FP=0 FN=429, gold=429)
+  timing: 520 documents in 0.20s -> 2607.2 docs/sec
+
+=== es-only (520 documents) ===
+  overall: P=0.576 R=0.791 (TP=2868 FP=2114 FN=758)
+    PERSON  : P=0.474 R=0.912 (TP=1901 FP=2110 FN=184, gold=2085)
+    EMAIL   : P=0.000 R=0.000 (TP=0 FP=0 FN=504, gold=504)
+    MRN     : P=0.996 R=0.923 (TP=561 FP=2 FN=47, gold=608)
+    SSN     : P=0.995 R=0.946 (TP=406 FP=2 FN=23, gold=429)
+  timing: 520 documents in 1.49s -> 349.6 docs/sec
+
+=== combined (520 documents) ===
+  overall: P=0.614 R=0.929 (TP=3368 FP=2120 FN=258)
+    PERSON  : P=0.474 R=0.912 (TP=1901 FP=2110 FN=184, gold=2085)
+    EMAIL   : P=0.994 R=0.992 (TP=500 FP=3 FN=4, gold=504)
+    MRN     : P=0.996 R=0.923 (TP=561 FP=2 FN=47, gold=608)
+    SSN     : P=0.995 R=0.946 (TP=406 FP=2 FN=23, gold=429)
+  timing: 520 documents in 1.65s -> 314.8 docs/sec
+
+=== es-ner (520 documents) ===
+  overall: P=0.604 R=0.467 (TP=1693 FP=1112 FN=1933)
+    PERSON  : P=0.604 R=0.812 (TP=1693 FP=1112 FN=392, gold=2085)
+    EMAIL   : P=0.000 R=0.000 (TP=0 FP=0 FN=504, gold=504)
+    MRN     : P=0.000 R=0.000 (TP=0 FP=0 FN=608, gold=608)
+    SSN     : P=0.000 R=0.000 (TP=0 FP=0 FN=429, gold=429)
+  timing: 520 documents in 38.29s -> 13.6 docs/sec
+
+=== full (520 documents) ===
+  overall: P=0.527 R=0.960 (TP=3480 FP=3127 FN=146)
+    PERSON  : P=0.392 R=0.965 (TP=2013 FP=3117 FN=72, gold=2085)
+    EMAIL   : P=0.994 R=0.992 (TP=500 FP=3 FN=4, gold=504)
+    MRN     : P=0.996 R=0.923 (TP=561 FP=2 FN=47, gold=608)
+    SSN     : P=0.995 R=0.946 (TP=406 FP=2 FN=23, gold=429)
+  timing: 520 documents in 37.42s -> 13.9 docs/sec
+
+=== PERSON false-positive root-cause diagnostic ===
+  dict-only FPs (not also flagged by NER):  1915
+  NER-only FPs (not also flagged by dict):  1007
+  FPs both layers agree on (same span):     102
+  Of 1108 NER PERSON FPs, 104 (9.4%) overlap a real gold place/institution/street span (same failure mode already root-caused for the dictionary layer).
+  Sample NER-only FP text (first 20):
+    'Varón'
+    'Pentax EG3830UX'
+    'Varón'
+    'ferroterapia oral'
+    'Varón'
+    'Antecedentes'
+    'Describe'
+    'Alport'
+    'IMC'
+    'Podocitos'
+    'Alport'
+    'Alport'
+    'Alport'
+    'Madre'
+    'Alport'
+    'SSp'
+    'SSp'
+    'Glomérulos'
+    'glomerulopatía'
+    'McArdle'
+
