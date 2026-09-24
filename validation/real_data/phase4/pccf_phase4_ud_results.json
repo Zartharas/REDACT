@@ -1,0 +1,163 @@
+{
+ "t2": {
+  "metrics": {
+   "union": {
+    "tp": 216,
+    "fp": 506,
+    "fn": 4,
+    "P": 0.29916897506925205,
+    "R": 0.9818181818181818,
+    "F1": 0.45859872611464964,
+    "F2": 0.6741573033707865
+   },
+   "LR hand cues (phase 2/3)": {
+    "tp": 216,
+    "fp": 176,
+    "fn": 4,
+    "P": 0.5510204081632653,
+    "R": 0.9818181818181818,
+    "F1": 0.7058823529411764,
+    "F2": 0.8490566037735849
+   },
+   "LR-UD (no word lists)": {
+    "tp": 163,
+    "fp": 2,
+    "fn": 57,
+    "P": 0.9878787878787879,
+    "R": 0.740909090909091,
+    "F1": 0.8467532467532467,
+    "F2": 0.7799043062200958
+   }
+  },
+  "checks": {
+   "LR hand cues (phase 2/3)": {
+    "ner": {
+     "n_true": 115,
+     "cand_recall": 1.0,
+     "kept": 270,
+     "kept_precision": 0.42592592592592593,
+     "threshold": 0.6921588744074104
+    },
+    "dict+ner": {
+     "n_true": 97,
+     "cand_recall": 1.0,
+     "kept": 98,
+     "kept_precision": 0.9897959183673469,
+     "threshold": 0.1372802828632258
+    },
+    "dict": {
+     "n_true": 4,
+     "cand_recall": 1.0,
+     "kept": 24,
+     "kept_precision": 0.16666666666666666,
+     "threshold": 0.9013121859746952
+    }
+   },
+   "LR-UD (no word lists)": {
+    "ner": {
+     "n_true": 115,
+     "cand_recall": 0.8434782608695652,
+     "kept": 99,
+     "kept_precision": 0.9797979797979798,
+     "threshold": 0.509915156525554
+    },
+    "dict+ner": {
+     "n_true": 97,
+     "cand_recall": 0.6597938144329897,
+     "kept": 64,
+     "kept_precision": 1.0,
+     "threshold": 0.018015668668672102
+    },
+    "dict": {
+     "n_true": 4,
+     "cand_recall": 0.5,
+     "kept": 2,
+     "kept_precision": 1.0,
+     "threshold": 0.5929851389290532
+    }
+   }
+  }
+ },
+ "meddocan": {
+  "metrics": {
+   "union": {
+    "tp": 467,
+    "fp": 690,
+    "fn": 15,
+    "P": 0.40363007778738114,
+    "R": 0.9688796680497925,
+    "F1": 0.5698596705308113,
+    "F2": 0.7568881685575364
+   },
+   "LR hand cues (phase 2/3)": {
+    "tp": 448,
+    "fp": 164,
+    "fn": 34,
+    "P": 0.7320261437908496,
+    "R": 0.9294605809128631,
+    "F1": 0.8190127970749543,
+    "F2": 0.8818897637795277
+   },
+   "LR-UD (no word lists)": {
+    "tp": 441,
+    "fp": 253,
+    "fn": 41,
+    "P": 0.6354466858789626,
+    "R": 0.9149377593360996,
+    "F1": 0.75,
+    "F2": 0.8409610983981693
+   }
+  },
+  "checks": {
+   "LR hand cues (phase 2/3)": {
+    "dict": {
+     "n_true": 66,
+     "cand_recall": 0.9848484848484849,
+     "kept": 181,
+     "kept_precision": 0.35911602209944754,
+     "threshold": 0.7069857789536189
+    },
+    "dict+ner": {
+     "n_true": 375,
+     "cand_recall": 0.9493333333333334,
+     "kept": 367,
+     "kept_precision": 0.9700272479564033,
+     "threshold": 0.06549235145961263
+    },
+    "ner": {
+     "n_true": 28,
+     "cand_recall": 1.0,
+     "kept": 32,
+     "kept_precision": 0.875,
+     "threshold": 0.5948497593769939
+    }
+   },
+   "LR-UD (no word lists)": {
+    "dict": {
+     "n_true": 66,
+     "cand_recall": 0.9696969696969697,
+     "kept": 243,
+     "kept_precision": 0.26337448559670784,
+     "threshold": 0.9556696200331684
+    },
+    "dict+ner": {
+     "n_true": 375,
+     "cand_recall": 0.9306666666666666,
+     "kept": 349,
+     "kept_precision": 1.0,
+     "threshold": 0.11340969584264482
+    },
+    "ner": {
+     "n_true": 28,
+     "cand_recall": 1.0,
+     "kept": 70,
+     "kept_precision": 0.4,
+     "threshold": 0.9102379214825334
+    }
+   }
+  }
+ },
+ "verdicts": {
+  "H20": false
+ }
+}

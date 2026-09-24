@@ -1,0 +1,325 @@
+{
+ "F3a": [
+  {
+   "seed": 42,
+   "held": "OpenSSH",
+   "kept": 84,
+   "P": 0.9404761904761905,
+   "R": 0.7383177570093458,
+   "cross_kept": 84,
+   "cross_P": 0.9404761904761905,
+   "cross_R": 0.7383177570093458
+  },
+  {
+   "seed": 42,
+   "held": "Linux",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0,
+   "cross_kept": 62,
+   "cross_P": 0.967741935483871,
+   "cross_R": 0.7317073170731707
+  },
+  {
+   "seed": 42,
+   "held": "Thunderbird",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0,
+   "cross_kept": 4,
+   "cross_P": 1.0,
+   "cross_R": 0.8
+  },
+  {
+   "seed": 42,
+   "held": "windows_event",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0,
+   "cross_kept": 3,
+   "cross_P": 1.0,
+   "cross_R": 1.0
+  },
+  {
+   "seed": 42,
+   "held": "cloudtrail",
+   "kept": 414,
+   "P": 1.0,
+   "R": 0.7237762237762237,
+   "cross_kept": 414,
+   "cross_P": 1.0,
+   "cross_R": 0.7237762237762237
+  },
+  {
+   "seed": 43,
+   "held": "OpenSSH",
+   "kept": 91,
+   "P": 0.967032967032967,
+   "R": 0.7457627118644068,
+   "cross_kept": 91,
+   "cross_P": 0.967032967032967,
+   "cross_R": 0.7457627118644068
+  },
+  {
+   "seed": 43,
+   "held": "Linux",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0,
+   "cross_kept": 68,
+   "cross_P": 0.9705882352941176,
+   "cross_R": 0.75
+  },
+  {
+   "seed": 43,
+   "held": "Thunderbird",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0,
+   "cross_kept": 1,
+   "cross_P": 1.0,
+   "cross_R": 0.3333333333333333
+  },
+  {
+   "seed": 43,
+   "held": "windows_event",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0,
+   "cross_kept": 3,
+   "cross_P": 1.0,
+   "cross_R": 0.75
+  },
+  {
+   "seed": 43,
+   "held": "cloudtrail",
+   "kept": 386,
+   "P": 1.0,
+   "R": 0.7018181818181818,
+   "cross_kept": 386,
+   "cross_P": 1.0,
+   "cross_R": 0.7018181818181818
+  },
+  {
+   "seed": 44,
+   "held": "OpenSSH",
+   "kept": 83,
+   "P": 0.9759036144578314,
+   "R": 0.7363636363636363,
+   "cross_kept": 90,
+   "cross_P": 0.9444444444444444,
+   "cross_R": 0.7727272727272727
+  },
+  {
+   "seed": 44,
+   "held": "Linux",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0,
+   "cross_kept": 64,
+   "cross_P": 0.96875,
+   "cross_R": 0.7294117647058823
+  },
+  {
+   "seed": 44,
+   "held": "Thunderbird",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0,
+   "cross_kept": 3,
+   "cross_P": 1.0,
+   "cross_R": 0.75
+  },
+  {
+   "seed": 44,
+   "held": "windows_event",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0,
+   "cross_kept": 4,
+   "cross_P": 1.0,
+   "cross_R": 1.0
+  },
+  {
+   "seed": 44,
+   "held": "cloudtrail",
+   "kept": 419,
+   "P": 1.0,
+   "R": 0.7249134948096886,
+   "cross_kept": 419,
+   "cross_P": 1.0,
+   "cross_R": 0.7249134948096886
+  }
+ ],
+ "F3b": [
+  {
+   "seed": 42,
+   "held": "OpenSSH",
+   "lambda0": 0.5,
+   "lambda_end": 0.3300000000000001,
+   "alerts": 160,
+   "kept_post": 60,
+   "P_post": 0.9166666666666666,
+   "true_alerts_post": 55,
+   "candidate_recall_post": 1.0
+  },
+  {
+   "seed": 42,
+   "held": "Linux",
+   "lambda0": 0.5,
+   "lambda_end": 0.4215000000000012,
+   "alerts": 99,
+   "kept_post": 0,
+   "P_post": NaN,
+   "true_alerts_post": 0,
+   "candidate_recall_post": NaN
+  },
+  {
+   "seed": 42,
+   "held": "Thunderbird",
+   "lambda0": 0.5,
+   "lambda_end": 0.476,
+   "alerts": 16,
+   "kept_post": 0,
+   "P_post": NaN,
+   "true_alerts_post": 0,
+   "candidate_recall_post": NaN
+  },
+  {
+   "seed": 42,
+   "held": "windows_event",
+   "lambda0": 0.5,
+   "lambda_end": 0.4925,
+   "alerts": 5,
+   "kept_post": 0,
+   "P_post": NaN,
+   "true_alerts_post": 0,
+   "candidate_recall_post": NaN
+  },
+  {
+   "seed": 42,
+   "held": "cloudtrail",
+   "lambda0": 0.5,
+   "lambda_end": 0.007,
+   "alerts": 626,
+   "kept_post": 526,
+   "P_post": 0.9429657794676806,
+   "true_alerts_post": 496,
+   "candidate_recall_post": 0.9860834990059643
+  },
+  {
+   "seed": 43,
+   "held": "OpenSSH",
+   "lambda0": 0.5,
+   "lambda_end": 0.2890000000000001,
+   "alerts": 174,
+   "kept_post": 74,
+   "P_post": 0.9594594594594594,
+   "true_alerts_post": 71,
+   "candidate_recall_post": 1.0
+  },
+  {
+   "seed": 43,
+   "held": "Linux",
+   "lambda0": 0.5,
+   "lambda_end": 0.4155000000000012,
+   "alerts": 103,
+   "kept_post": 3,
+   "P_post": 0.3333333333333333,
+   "true_alerts_post": 1,
+   "candidate_recall_post": 1.0
+  },
+  {
+   "seed": 43,
+   "held": "Thunderbird",
+   "lambda0": 0.5,
+   "lambda_end": 0.479,
+   "alerts": 14,
+   "kept_post": 0,
+   "P_post": NaN,
+   "true_alerts_post": 0,
+   "candidate_recall_post": NaN
+  },
+  {
+   "seed": 43,
+   "held": "windows_event",
+   "lambda0": 0.5,
+   "lambda_end": 0.494,
+   "alerts": 4,
+   "kept_post": 0,
+   "P_post": NaN,
+   "true_alerts_post": 0,
+   "candidate_recall_post": NaN
+  },
+  {
+   "seed": 43,
+   "held": "cloudtrail",
+   "lambda0": 0.5,
+   "lambda_end": 0.007,
+   "alerts": 623,
+   "kept_post": 523,
+   "P_post": 0.9407265774378585,
+   "true_alerts_post": 492,
+   "candidate_recall_post": 1.0
+  },
+  {
+   "seed": 44,
+   "held": "OpenSSH",
+   "lambda0": 0.5,
+   "lambda_end": 0.33300000000000013,
+   "alerts": 158,
+   "kept_post": 58,
+   "P_post": 0.9137931034482759,
+   "true_alerts_post": 53,
+   "candidate_recall_post": 1.0
+  },
+  {
+   "seed": 44,
+   "held": "Linux",
+   "lambda0": 0.5,
+   "lambda_end": 0.4350000000000012,
+   "alerts": 90,
+   "kept_post": 0,
+   "P_post": NaN,
+   "true_alerts_post": 0,
+   "candidate_recall_post": NaN
+  },
+  {
+   "seed": 44,
+   "held": "Thunderbird",
+   "lambda0": 0.5,
+   "lambda_end": 0.4835,
+   "alerts": 11,
+   "kept_post": 0,
+   "P_post": NaN,
+   "true_alerts_post": 0,
+   "candidate_recall_post": NaN
+  },
+  {
+   "seed": 44,
+   "held": "windows_event",
+   "lambda0": 0.5,
+   "lambda_end": 0.4925,
+   "alerts": 5,
+   "kept_post": 0,
+   "P_post": NaN,
+   "true_alerts_post": 0,
+   "candidate_recall_post": NaN
+  },
+  {
+   "seed": 44,
+   "held": "cloudtrail",
+   "lambda0": 0.5,
+   "lambda_end": 0.007,
+   "alerts": 650,
+   "kept_post": 550,
+   "P_post": 0.94,
+   "true_alerts_post": 517,
+   "candidate_recall_post": 1.0
+  }
+ ],
+ "verdicts": {
+  "H18": true,
+  "H19": true
+ }
+}

@@ -1,0 +1,458 @@
+{
+ "no_key_groups": {
+  "S2": {
+   "ner|no-key": [
+    1685,
+    1800
+   ],
+   "flat|identity-key": [
+    802,
+    802
+   ],
+   "ner|identity-key": [
+    1733,
+    1733
+   ],
+   "flat|no-key": [
+    815,
+    815
+   ],
+   "flat+ner|no-key": [
+    26,
+    26
+   ],
+   "ner|other-key": [
+    111,
+    111
+   ],
+   "flat+ner|identity-key": [
+    46,
+    46
+   ],
+   "flat|other-key": [
+    42,
+    42
+   ],
+   "flat+ner|other-key": [
+    7,
+    7
+   ]
+  },
+  "S3": {
+   "ner|no-key": [
+    940,
+    1800
+   ],
+   "flat|identity-key": [
+    802,
+    802
+   ],
+   "ner|identity-key": [
+    1733,
+    1733
+   ],
+   "flat|no-key": [
+    427,
+    815
+   ],
+   "flat+ner|no-key": [
+    26,
+    26
+   ],
+   "ner|other-key": [
+    111,
+    111
+   ],
+   "flat+ner|identity-key": [
+    46,
+    46
+   ],
+   "flat|other-key": [
+    42,
+    42
+   ],
+   "flat+ner|other-key": [
+    7,
+    7
+   ]
+  },
+  "E3": {
+   "ner|no-key": [
+    1694,
+    1800
+   ],
+   "flat|identity-key": [
+    802,
+    802
+   ],
+   "ner|identity-key": [
+    1733,
+    1733
+   ],
+   "flat|no-key": [
+    813,
+    815
+   ],
+   "flat+ner|no-key": [
+    26,
+    26
+   ],
+   "ner|other-key": [
+    111,
+    111
+   ],
+   "flat+ner|identity-key": [
+    46,
+    46
+   ],
+   "flat|other-key": [
+    42,
+    42
+   ],
+   "flat+ner|other-key": [
+    7,
+    7
+   ]
+  }
+ },
+ "pooled": {
+  "union": {
+   "tp": 5382,
+   "fp": 1234,
+   "fn": 1759,
+   "P": 0.8134824667472793,
+   "R": 0.7536759557484947,
+   "F1": 0.7824380315475759,
+   "F2": 0.7649232518476408,
+   "R_message": 0.7686753679533463,
+   "R_field": 0.7387005649717514
+  },
+  "production field-gated (raw)": {
+   "tp": 5382,
+   "fp": 1192,
+   "fn": 1759,
+   "P": 0.8186796470946152,
+   "R": 0.7536759557484947,
+   "F1": 0.7848341232227489,
+   "F2": 0.7658375547839946,
+   "R_message": 0.7686753679533463,
+   "R_field": 0.7387005649717514
+  },
+  "production field-gated (header-stripped sim.)": {
+   "tp": 5337,
+   "fp": 1114,
+   "fn": 1804,
+   "P": 0.8273135947915052,
+   "R": 0.7473743173225038,
+   "F1": 0.785314891112419,
+   "F2": 0.762101956304441,
+   "R_message": 0.7556234379339073,
+   "R_field": 0.7392655367231639
+  },
+  "S1 KV-rule, mask groups (T3 config)": {
+   "tp": 5173,
+   "fp": 746,
+   "fn": 1968,
+   "P": 0.8739651968237878,
+   "R": 0.7244083461700042,
+   "F1": 0.7921898928024502,
+   "F2": 0.7500797494417538,
+   "R_message": 0.7117467370174951,
+   "R_field": 0.7375706214689266
+  },
+  "S2 KV-rule, mask x key groups": {
+   "tp": 5267,
+   "fp": 904,
+   "fn": 1874,
+   "P": 0.8535083454869551,
+   "R": 0.7375717686598515,
+   "F1": 0.7913161057692308,
+   "F2": 0.7581689938102777,
+   "R_message": 0.7378505970563732,
+   "R_field": 0.7375706214689266
+  },
+  "S3 Hybrid, mask x key groups": {
+   "tp": 4134,
+   "fp": 565,
+   "fn": 3007,
+   "P": 0.8797616514151947,
+   "R": 0.5789105167343509,
+   "F1": 0.6983108108108107,
+   "F2": 0.6214111775847037,
+   "R_message": 0.43126909191891144,
+   "R_field": 0.7293785310734463
+  },
+  "S4 KV-LR+text, mask x key groups": {
+   "tp": 2787,
+   "fp": 439,
+   "fn": 4354,
+   "P": 0.8639181649101054,
+   "R": 0.3902814731830276,
+   "F1": 0.5376675991125687,
+   "F2": 0.43834539163258884,
+   "R_message": 0.4287697861705082,
+   "R_field": 0.35112994350282484
+  },
+  "E3 [exploratory] Hybrid without lexical features, mask x key": {
+   "tp": 5274,
+   "fp": 976,
+   "fn": 1867,
+   "P": 0.84384,
+   "R": 0.7385520235261168,
+   "F1": 0.7876932267941156,
+   "F2": 0.7574538978571838,
+   "R_message": 0.739516800888642,
+   "R_field": 0.7378531073446327
+  },
+  "E2 [exploratory] T3 model as deployed (no unkeyed names in calibration)": {
+   "tp": 2614,
+   "fp": 70,
+   "fn": 4527,
+   "P": 0.973919523099851,
+   "R": 0.3660551743453298,
+   "F1": 0.5321119592875319,
+   "F2": 0.41826676907322075,
+   "R_message": 0.009441821716189947,
+   "R_field": 0.7290960451977401
+  }
+ },
+ "recall_split": {
+  "union": {
+   "field/flattened": [
+    0.5044642857142857,
+    1792
+   ],
+   "field/spaced": [
+    0.9788329519450801,
+    1748
+   ],
+   "message/flattened": [
+    0.5413363533408834,
+    1766
+   ],
+   "message/spaced": [
+    0.987465940054496,
+    1835
+   ]
+  },
+  "production field-gated (raw)": {
+   "field/flattened": [
+    0.5044642857142857,
+    1792
+   ],
+   "field/spaced": [
+    0.9788329519450801,
+    1748
+   ],
+   "message/flattened": [
+    0.5413363533408834,
+    1766
+   ],
+   "message/spaced": [
+    0.987465940054496,
+    1835
+   ]
+  },
+  "production field-gated (header-stripped sim.)": {
+   "field/flattened": [
+    0.5055803571428571,
+    1792
+   ],
+   "field/spaced": [
+    0.9788329519450801,
+    1748
+   ],
+   "message/flattened": [
+    0.5413363533408834,
+    1766
+   ],
+   "message/spaced": [
+    0.9618528610354223,
+    1835
+   ]
+  },
+  "S1 KV-rule, mask groups (T3 config)": {
+   "field/flattened": [
+    0.5044642857142857,
+    1792
+   ],
+   "field/spaced": [
+    0.9765446224256293,
+    1748
+   ],
+   "message/flattened": [
+    0.507361268403171,
+    1766
+   ],
+   "message/spaced": [
+    0.9084468664850136,
+    1835
+   ]
+  },
+  "S2 KV-rule, mask x key groups": {
+   "field/flattened": [
+    0.5044642857142857,
+    1792
+   ],
+   "field/spaced": [
+    0.9765446224256293,
+    1748
+   ],
+   "message/flattened": [
+    0.5300113250283126,
+    1766
+   ],
+   "message/spaced": [
+    0.9378746594005449,
+    1835
+   ]
+  },
+  "S3 Hybrid, mask x key groups": {
+   "field/flattened": [
+    0.5044642857142857,
+    1792
+   ],
+   "field/spaced": [
+    0.959954233409611,
+    1748
+   ],
+   "message/flattened": [
+    0.3029445073612684,
+    1766
+   ],
+   "message/spaced": [
+    0.5547683923705722,
+    1835
+   ]
+  },
+  "S4 KV-LR+text, mask x key groups": {
+   "field/flattened": [
+    0.24888392857142858,
+    1792
+   ],
+   "field/spaced": [
+    0.4559496567505721,
+    1748
+   ],
+   "message/flattened": [
+    0.29784824462061155,
+    1766
+   ],
+   "message/spaced": [
+    0.5547683923705722,
+    1835
+   ]
+  },
+  "E3 [exploratory] Hybrid without lexical features, mask x key": {
+   "field/flattened": [
+    0.5044642857142857,
+    1792
+   ],
+   "field/spaced": [
+    0.977116704805492,
+    1748
+   ],
+   "message/flattened": [
+    0.5118912797281994,
+    1766
+   ],
+   "message/spaced": [
+    0.95858310626703,
+    1835
+   ]
+  },
+  "E2 [exploratory] T3 model as deployed (no unkeyed names in calibration)": {
+   "field/flattened": [
+    0.5044642857142857,
+    1792
+   ],
+   "field/spaced": [
+    0.9593821510297483,
+    1748
+   ],
+   "message/flattened": [
+    0.017553793884484713,
+    1766
+   ],
+   "message/spaced": [
+    0.0016348773841961854,
+    1835
+   ]
+  }
+ },
+ "groups": {
+  "ner|no-key": [
+   940,
+   1800,
+   1144,
+   2673
+  ],
+  "flat|identity-key": [
+   802,
+   802,
+   802,
+   802
+  ],
+  "ner|identity-key": [
+   1733,
+   1733,
+   1803,
+   1803
+  ],
+  "flat|no-key": [
+   427,
+   815,
+   427,
+   815
+  ],
+  "flat+ner|no-key": [
+   26,
+   26,
+   26,
+   26
+  ],
+  "ner|other-key": [
+   111,
+   111,
+   402,
+   402
+  ],
+  "flat+ner|identity-key": [
+   46,
+   46,
+   46,
+   46
+  ],
+  "flat|other-key": [
+   42,
+   42,
+   42,
+   42
+  ],
+  "flat+ner|other-key": [
+   7,
+   7,
+   7,
+   7
+  ]
+ },
+ "bootstrap": {
+  "dP_95ci": [
+   0.057495782805282,
+   0.07656282394838765
+  ],
+  "dR_95ci": [
+   -0.18335879983331027,
+   -0.1661031276415892
+  ],
+  "dF1_95ci": [
+   -0.09171281512027862,
+   -0.07609318676963683
+  ]
+ },
+ "verdicts": {
+  "H12": false,
+  "H13": false,
+  "H14": false
+ }
+}

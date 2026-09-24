@@ -1,0 +1,38 @@
+H11a (validity): test precision >= 0.85 in >= 90% of evaluation units that keep >= 20 candidates.
+H11b (utility): on MEDDOCAN CV, mean recall exceeds the intersection rule's mean recall while H11a holds.
+
+=== MEDDOCAN 5-fold CV (LR-full) ===
+  fold 0: threshold R<=0.5 kept=368 P=0.891 R=0.821 | intersection P=0.880 R=0.754
+  fold 1: threshold R<=0.5 kept=349 P=0.901 R=0.806 | intersection P=0.889 R=0.751
+  fold 2: threshold R<=0.5 kept=358 P=0.845 R=0.808 | intersection P=0.835 R=0.763
+  fold 3: threshold R<=0.5 kept=357 P=0.846 R=0.821 | intersection P=0.822 R=0.771
+  fold 4: threshold R<=0.5 kept=358 P=0.915 R=0.821 | intersection P=0.903 R=0.754
+  mean recall: alert=0.815 intersection=0.758
+
+=== All evaluation units ===
+  MEDDOCAN fold 0              kept= 368 P=0.891 R=0.821  ok
+  MEDDOCAN fold 1              kept= 349 P=0.901 R=0.806  ok
+  MEDDOCAN fold 2              kept= 358 P=0.845 R=0.808  VIOLATION
+  MEDDOCAN fold 3              kept= 357 P=0.846 R=0.821  VIOLATION
+  MEDDOCAN fold 4              kept= 358 P=0.915 R=0.821  ok
+  T2 Spanish free text         kept= 201 P=0.930 R=0.850  ok
+  T3 OpenSSH seed 42           kept= 166 P=0.916 R=0.727  ok
+  T3 Linux seed 42             kept= 101 P=0.901 R=0.746  ok
+  T3 Thunderbird seed 42       kept=  78 P=0.205 R=0.842  VIOLATION
+  T3 windows_event seed 42     kept=   5 P=1.000 R=1.000
+  T3 cloudtrail seed 42        kept=   0 P=0.000 R=0.000
+  T3 OpenSSH seed 43           kept= 178 P=0.933 R=0.755  ok
+  T3 Linux seed 43             kept= 107 P=0.897 R=0.762  ok
+  T3 Thunderbird seed 43       kept=  76 P=0.184 R=0.778  VIOLATION
+  T3 windows_event seed 43     kept=   4 P=1.000 R=0.667
+  T3 cloudtrail seed 43        kept=   0 P=0.000 R=0.000
+  T3 OpenSSH seed 44           kept= 174 P=0.868 R=0.702  ok
+  T3 Linux seed 44             kept=  91 P=0.890 R=0.653  ok
+  T3 Thunderbird seed 44       kept=  73 P=0.151 R=0.550  VIOLATION
+  T3 windows_event seed 44     kept=   5 P=1.000 R=1.000
+  T3 cloudtrail seed 44        kept=   0 P=0.000 R=0.000
+
+  eligible units (kept >= 20): 15; precision >= 0.85 in 10
+=== Verdicts (mechanical) ===
+  H11a: NOT SUPPORTED
+  H11b: NOT SUPPORTED (conditional on H11a)

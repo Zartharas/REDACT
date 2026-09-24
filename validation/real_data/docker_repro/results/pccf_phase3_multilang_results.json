@@ -1,0 +1,183 @@
+{
+ "fr": {
+  "slices": {
+   "speaker-tag": 2,
+   "free-text": 9
+  },
+  "patterns": {
+   "ner": {
+    "n": 7,
+    "true": 6,
+    "precision": 0.8571428571428571,
+    "ner_conf_mean_true": 0.9859171666666666,
+    "ner_conf_mean_false": 1.0,
+    "ner_conf_auroc_within_pattern": 0.25
+   }
+  },
+  "D1": {
+   "ner": "INFEASIBLE"
+  },
+  "baselines": {
+   "union": {
+    "tp": 6,
+    "fp": 1,
+    "fn": 5,
+    "P": 0.8571428571428571,
+    "R": 0.5454545454545454,
+    "F1": 0.6666666666666665,
+    "F2": 0.5882352941176471
+   },
+   "intersection": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 11,
+    "P": 0.0,
+    "R": 0.0,
+    "F1": 0.0,
+    "F2": 0.0
+   },
+   "dict alone": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 11,
+    "P": 0.0,
+    "R": 0.0,
+    "F1": 0.0,
+    "F2": 0.0
+   },
+   "ner alone": {
+    "tp": 6,
+    "fp": 1,
+    "fn": 5,
+    "P": 0.8571428571428571,
+    "R": 0.5454545454545454,
+    "F1": 0.6666666666666665,
+    "F2": 0.5882352941176471
+   }
+  },
+  "T4": {
+   "metrics": {
+    "tp": 6,
+    "fp": 1,
+    "fn": 5,
+    "P": 0.8571428571428571,
+    "R": 0.5454545454545454,
+    "F1": 0.6666666666666665,
+    "F2": 0.5882352941176471
+   },
+   "checks": {
+    "ner": {
+     "n_true": 6,
+     "cand_recall": 1.0,
+     "kept": 7,
+     "kept_precision": 0.8571428571428571,
+     "threshold": 0.97
+    }
+   },
+   "auroc": {
+    "dict": null,
+    "ner": 0.5,
+    "dict+ner": null
+   }
+  }
+ },
+ "ru": {
+  "slices": {
+   "free-text": 27,
+   "label-prefix": 6
+  },
+  "patterns": {
+   "dict+ner": {
+    "n": 10,
+    "true": 9,
+    "precision": 0.9,
+    "ner_conf_mean_true": 0.9747611111111111,
+    "ner_conf_mean_false": 0.92681,
+    "ner_conf_auroc_within_pattern": 0.8888888888888888
+   },
+   "ner": {
+    "n": 7,
+    "true": 5,
+    "precision": 0.7142857142857143,
+    "ner_conf_mean_true": 0.99663,
+    "ner_conf_mean_false": 0.82755,
+    "ner_conf_auroc_within_pattern": 1.0
+   }
+  },
+  "D1": {
+   "dict+ner": "INFEASIBLE",
+   "ner": "INFEASIBLE"
+  },
+  "baselines": {
+   "union": {
+    "tp": 14,
+    "fp": 3,
+    "fn": 19,
+    "P": 0.8235294117647058,
+    "R": 0.42424242424242425,
+    "F1": 0.5599999999999999,
+    "F2": 0.4697986577181208
+   },
+   "intersection": {
+    "tp": 9,
+    "fp": 1,
+    "fn": 24,
+    "P": 0.9,
+    "R": 0.2727272727272727,
+    "F1": 0.41860465116279066,
+    "F2": 0.31690140845070414
+   },
+   "dict alone": {
+    "tp": 9,
+    "fp": 1,
+    "fn": 24,
+    "P": 0.9,
+    "R": 0.2727272727272727,
+    "F1": 0.41860465116279066,
+    "F2": 0.31690140845070414
+   },
+   "ner alone": {
+    "tp": 15,
+    "fp": 3,
+    "fn": 18,
+    "P": 0.8333333333333334,
+    "R": 0.45454545454545453,
+    "F1": 0.5882352941176471,
+    "F2": 0.5
+   }
+  },
+  "T4": {
+   "metrics": {
+    "tp": 14,
+    "fp": 3,
+    "fn": 19,
+    "P": 0.8235294117647058,
+    "R": 0.42424242424242425,
+    "F1": 0.5599999999999999,
+    "F2": 0.4697986577181208
+   },
+   "checks": {
+    "dict+ner": {
+     "n_true": 9,
+     "cand_recall": 1.0,
+     "kept": 10,
+     "kept_precision": 0.9,
+     "threshold": 0.97
+    },
+    "ner": {
+     "n_true": 5,
+     "cand_recall": 1.0,
+     "kept": 7,
+     "kept_precision": 0.7142857142857143,
+     "threshold": 0.97
+    }
+   },
+   "auroc": {
+    "dict": null,
+    "ner": 0.45,
+    "dict+ner": 1.0
+   }
+  }
+ },
+ "H10": true
+}

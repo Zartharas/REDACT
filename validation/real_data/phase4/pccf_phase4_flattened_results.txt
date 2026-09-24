@@ -1,0 +1,25 @@
+(Rows tagged [exploratory] were added after the pre-registered verdicts were first computed. They are not judged.
+ field_policy.py's value-extent rule was bug-fixed after the first run: generic keys now take a single token. H16 was SUPPORTED both before and after.)
+H16: F2a raises identity-field flattened recall from 0.504 to >= 0.95 (utility cost reported).
+H17: F2b raises message-text flattened recall by >= +0.15 over the old flattened layer, pooled precision drop <= 0.02.
+H17b (descriptive): F2b recall on the real SSA/Census flattened sample (baseline 15.2%).
+
+F2b real-name lists available: True (given names >= 5000 SSA births: 1179; Census top 20000: 19936)
+
+=== Pooled (5 datasets x 3 seeds, template set B) ===
+  union (old flattened)                                        P=0.813 R=0.754  field/flattened=0.504  field/spaced=0.979  message/flattened=0.541  message/spaced=0.987
+  union (extended flattened)                                   P=0.532 R=0.954  field/flattened=0.920  field/spaced=0.980  message/flattened=0.926  message/spaced=0.987
+  policy + union (old)                                         P=0.651 R=0.883  field/flattened=1.000  field/spaced=1.000  message/flattened=0.541  message/spaced=0.987
+  policy + union (extended)                                    P=0.462 R=0.978  field/flattened=1.000  field/spaced=1.000  message/flattened=0.926  message/spaced=0.987
+  E4 [exploratory] union (ext. without initial+surname)        P=0.829 R=0.837  field/flattened=0.673  field/spaced=0.980  message/flattened=0.704  message/spaced=0.987
+  E4 [exploratory] policy + union (ext. without initial+surname) P=0.659 R=0.924  field/flattened=1.000  field/spaced=1.000  message/flattened=0.704  message/spaced=0.987
+
+  New-shape hits (F2b), gold-overlapping vs not: flattened_ext:given+digits: 637 TP / 0 FP, flattened_ext:given+surname: 193 TP / 0 FP, flattened_ext:initial+surname: 876 TP / 4805 FP
+  Most frequent F2b false-positive tokens: [('rhost', 2982), ('check', 792), ('flaws', 764), ('using', 63), ('class', 30), ('xdelay', 30), ('table', 21), ('ready', 18), ('tbird', 15), ('state', 12), ('kshell', 9), ('times', 6)]
+  F2a utility cost: 2154 non-gold identity values pseudonymized (top: [('backup', 670), ('level6', 300), ('test', 149), ('news', 139), ('cyrus', 112), ('811596193553', 93), ('authentication', 73), ('securitymokey', 69), ('self', 42), ('support', 37), ('oracle', 18), ('user', 17)]); 3261 allowlisted values left in clear
+
+H17b real SSA/Census sample (n=2000): old layer 15.2%, extended 60.9%
+
+=== Verdicts (mechanical) ===
+  H16: SUPPORTED
+  H17: NOT SUPPORTED

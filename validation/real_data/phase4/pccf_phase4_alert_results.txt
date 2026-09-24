@@ -1,0 +1,43 @@
+H18 (F3a per-source calibration): precision >= 0.85 in >= 90% of units that keep >= 20.
+H19 (F3b online ACI-style): on every held-out source with >= 50 kept after a 100-candidate burn-in,
+    post-burn-in precision >= 0.83. Recall reported alongside.
+
+=== F3a per-source calibration (30% calibrate / 70% test, in line order) | cross-source T5 for reference ===
+  seed=42 OpenSSH       per-source: kept=  84 P=0.940 R=0.738 | cross-source: kept=  84 P=0.940 R=0.738
+  seed=42 Linux         per-source: kept=   0 P=0.000 R=0.000 | cross-source: kept=  62 P=0.968 R=0.732
+  seed=42 Thunderbird   per-source: kept=   0 P=0.000 R=0.000 | cross-source: kept=   4 P=1.000 R=0.800
+  seed=42 windows_event per-source: kept=   0 P=0.000 R=0.000 | cross-source: kept=   3 P=1.000 R=1.000
+  seed=42 cloudtrail    per-source: kept= 414 P=1.000 R=0.724 | cross-source: kept= 414 P=1.000 R=0.724
+  seed=43 OpenSSH       per-source: kept=  91 P=0.967 R=0.746 | cross-source: kept=  91 P=0.967 R=0.746
+  seed=43 Linux         per-source: kept=   0 P=0.000 R=0.000 | cross-source: kept=  68 P=0.971 R=0.750
+  seed=43 Thunderbird   per-source: kept=   0 P=0.000 R=0.000 | cross-source: kept=   1 P=1.000 R=0.333
+  seed=43 windows_event per-source: kept=   0 P=0.000 R=0.000 | cross-source: kept=   3 P=1.000 R=0.750
+  seed=43 cloudtrail    per-source: kept= 386 P=1.000 R=0.702 | cross-source: kept= 386 P=1.000 R=0.702
+  seed=44 OpenSSH       per-source: kept=  83 P=0.976 R=0.736 | cross-source: kept=  90 P=0.944 R=0.773
+  seed=44 Linux         per-source: kept=   0 P=0.000 R=0.000 | cross-source: kept=  64 P=0.969 R=0.729
+  seed=44 Thunderbird   per-source: kept=   0 P=0.000 R=0.000 | cross-source: kept=   3 P=1.000 R=0.750
+  seed=44 windows_event per-source: kept=   0 P=0.000 R=0.000 | cross-source: kept=   4 P=1.000 R=1.000
+  seed=44 cloudtrail    per-source: kept= 419 P=1.000 R=0.725 | cross-source: kept= 419 P=1.000 R=0.725
+
+=== F3b online adaptive threshold (target 0.85, eta 0.01, burn-in 100 alerts) ===
+  seed=42 OpenSSH       lambda 0.50->0.33 alerts=  160 post-burn-in kept=   60 P=0.917 candidate recall=1.000
+  seed=42 Linux         lambda 0.50->0.42 alerts=   99 post-burn-in kept=    0 P=nan candidate recall=nan
+  seed=42 Thunderbird   lambda 0.50->0.48 alerts=   16 post-burn-in kept=    0 P=nan candidate recall=nan
+  seed=42 windows_event lambda 0.50->0.49 alerts=    5 post-burn-in kept=    0 P=nan candidate recall=nan
+  seed=42 cloudtrail    lambda 0.50->0.01 alerts=  626 post-burn-in kept=  526 P=0.943 candidate recall=0.986
+  seed=43 OpenSSH       lambda 0.50->0.29 alerts=  174 post-burn-in kept=   74 P=0.959 candidate recall=1.000
+  seed=43 Linux         lambda 0.50->0.42 alerts=  103 post-burn-in kept=    3 P=0.333 candidate recall=1.000
+  seed=43 Thunderbird   lambda 0.50->0.48 alerts=   14 post-burn-in kept=    0 P=nan candidate recall=nan
+  seed=43 windows_event lambda 0.50->0.49 alerts=    4 post-burn-in kept=    0 P=nan candidate recall=nan
+  seed=43 cloudtrail    lambda 0.50->0.01 alerts=  623 post-burn-in kept=  523 P=0.941 candidate recall=1.000
+  seed=44 OpenSSH       lambda 0.50->0.33 alerts=  158 post-burn-in kept=   58 P=0.914 candidate recall=1.000
+  seed=44 Linux         lambda 0.50->0.44 alerts=   90 post-burn-in kept=    0 P=nan candidate recall=nan
+  seed=44 Thunderbird   lambda 0.50->0.48 alerts=   11 post-burn-in kept=    0 P=nan candidate recall=nan
+  seed=44 windows_event lambda 0.50->0.49 alerts=    5 post-burn-in kept=    0 P=nan candidate recall=nan
+  seed=44 cloudtrail    lambda 0.50->0.01 alerts=  650 post-burn-in kept=  550 P=0.940 candidate recall=1.000
+
+  F3a eligible units: 6, precision >= 0.85: 6
+  F3b eligible units: 6, precision >= 0.83: 6
+=== Verdicts (mechanical) ===
+  H18: SUPPORTED
+  H19: SUPPORTED

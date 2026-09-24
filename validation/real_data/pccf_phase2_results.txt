@@ -1,0 +1,144 @@
+PRE-REGISTERED HYPOTHESES (fixed before the first test-split run):
+  H1 redaction tier: LR-full coverage a=0.05 reaches test recall >= 0.92 AND
+     precision >= union + 0.05, and the bootstrap 95% CI of dP vs union excludes 0.
+  H2 alert tier: LR-full precision>=0.85 reaches test precision >= 0.85 AND
+     recall above intersection, and the bootstrap 95% CI of dR vs intersection excludes 0.
+  H3 template dependence: LR-noFieldLabel coverage a=0.05 keeps >= 50% of
+     LR-full's precision gain over union (fails => gain is mostly MEDDOCAN's form header).
+  H4 guarantees: across 5-fold CV, LR-full configs violate their guarantee in
+     <= 10% of (fold, pattern) cells. Coverage is a guarantee in expectation, so a
+     cell counts as violated only when candidate recall < 1-a - 2*sqrt(a(1-a)/n_true).
+     Precision mode is a high-probability (1-delta) guarantee, so any kept precision
+     below target counts as a violation. (Amended before any test-split run: a strict
+     "< 1-a" rule would flag about half of all cells by sampling noise alone.)
+  H5 stress (expectation, not a claim): with test names lowercased or flattened,
+     candidate generation collapses for every rule, so end-to-end recall
+     collapses whatever the fusion rule.
+
+=== Scorer audit: LR-full weights (fit on train only; positive = more name-like) ===
+  bias               -3.83
+  label_name         +3.44
+  prev_place_prep    -2.13
+  label_place        -1.78
+  pat_both           +1.69
+  label_none         -1.41
+  honorific_before   +1.35
+  n_words            +1.17
+  pat_ner            -0.96
+  has_lower_word     -0.84
+  ner_conf           +0.77
+  short_caps_token   -0.75
+  has_ner_conf       +0.73
+  pat_dict           -0.73
+  has_digit          -0.45
+  line_initial       +0.31
+  label_other        -0.25
+  followed_by_colon  -0.07
+  eponym_before      -0.05
+
+=== Within-pattern AUROC on the calibration split (phase 1 beam: 0.59-0.61) ===
+  LR-full          dict=0.851  ner=0.977  dict+ner=0.713
+  LR-noFieldLabel  dict=0.690  ner=0.887  dict+ner=0.634
+  rule             dict=0.807  ner=0.828  dict+ner=0.571
+
+=== Test split (120 docs): fit=train, calibrate=validation ===
+  union                                  P=0.404 (+0.000)  R=0.969 (+0.000)  F1=0.570  F2=0.757
+  intersection (agreement only)          P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826  F2=0.797
+  beam             coverage a=0.02       P=0.404 (+0.000)  R=0.969 (+0.000)  F1=0.570  F2=0.757
+  beam             coverage a=0.05       P=0.395 (-0.008)  R=0.923 (-0.046)  F1=0.553  F2=0.729
+  beam             coverage a=0.10       P=0.414 (+0.011)  R=0.892 (-0.077)  F1=0.566  F2=0.725
+  beam             precision>=0.80       P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826  F2=0.797
+  beam             precision>=0.85       P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826  F2=0.797
+  beam             precision>=0.90       P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826  F2=0.797
+  LR-full          coverage a=0.02       P=0.520 (+0.117)  R=0.954 (-0.015)  F1=0.673  F2=0.818
+  LR-full          coverage a=0.05       P=0.732 (+0.328)  R=0.929 (-0.039)  F1=0.819  F2=0.882
+  LR-full          coverage a=0.10       P=0.731 (+0.328)  R=0.909 (-0.060)  F1=0.810  F2=0.867
+  LR-full          precision>=0.80       P=0.882 (+0.479)  R=0.778 (-0.191)  F1=0.827  F2=0.797
+  LR-full          precision>=0.85       P=0.882 (+0.479)  R=0.778 (-0.191)  F1=0.827  F2=0.797
+  LR-full          precision>=0.90       P=0.882 (+0.479)  R=0.778 (-0.191)  F1=0.827  F2=0.797
+  LR-full          tuned-F1 threshold (no cert.) P=0.888 (+0.484)  R=0.836 (-0.133)  F1=0.861  F2=0.846
+  LR-noFieldLabel  coverage a=0.02       P=0.406 (+0.002)  R=0.967 (-0.002)  F1=0.571  F2=0.757
+  LR-noFieldLabel  coverage a=0.05       P=0.442 (+0.038)  R=0.938 (-0.031)  F1=0.601  F2=0.766
+  LR-noFieldLabel  coverage a=0.10       P=0.469 (+0.065)  R=0.923 (-0.046)  F1=0.622  F2=0.773
+  LR-noFieldLabel  precision>=0.80       P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826  F2=0.797
+  LR-noFieldLabel  precision>=0.85       P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826  F2=0.797
+  LR-noFieldLabel  precision>=0.90       P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826  F2=0.797
+  LR-noFieldLabel  tuned-F1 threshold (no cert.) P=0.882 (+0.479)  R=0.793 (-0.176)  F1=0.835  F2=0.809
+  rule             coverage a=0.02       P=0.521 (+0.118)  R=0.969 (+0.000)  F1=0.678  F2=0.827
+  rule             coverage a=0.05       P=0.521 (+0.118)  R=0.969 (+0.000)  F1=0.678  F2=0.827
+  rule             coverage a=0.10       P=0.521 (+0.118)  R=0.969 (+0.000)  F1=0.678  F2=0.827
+  rule             precision>=0.80       P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826  F2=0.797
+  rule             precision>=0.85       P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826  F2=0.797
+  rule             precision>=0.90       P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826  F2=0.797
+  rule             tuned-F1 threshold (no cert.) P=0.686 (+0.283)  R=0.722 (-0.247)  F1=0.704  F2=0.715
+
+  Per-pattern test checks for LR-full (candidate recall must be >= 1-a; kept precision >= target):
+    LR-full          coverage a=0.02     dict: rec=1.000 kept=197 P=0.335 | dict+ner: rec=0.981 kept=379 P=0.971 | ner: rec=1.000 kept=273 P=0.103
+    LR-full          coverage a=0.05     dict: rec=0.985 kept=181 P=0.359 | dict+ner: rec=0.949 kept=367 P=0.970 | ner: rec=1.000 kept=32 P=0.875
+    LR-full          coverage a=0.10     dict: rec=0.985 kept=181 P=0.359 | dict+ner: rec=0.925 kept=357 P=0.972 | ner: rec=0.964 kept=30 P=0.900
+    LR-full          precision>=0.80     dict: rec=0.000 kept=0 P=0.000 | dict+ner: rec=1.000 kept=389 P=0.964 | ner: rec=0.000 kept=0 P=0.000
+    LR-full          precision>=0.85     dict: rec=0.000 kept=0 P=0.000 | dict+ner: rec=1.000 kept=389 P=0.964 | ner: rec=0.000 kept=0 P=0.000
+    LR-full          precision>=0.90     dict: rec=0.000 kept=0 P=0.000 | dict+ner: rec=1.000 kept=389 P=0.964 | ner: rec=0.000 kept=0 P=0.000
+
+  Header vs narrative slices (test). NOTE: 2,081 of MEDDOCAN's 2,085 gold PERSON spans sit on
+  'Label:' lines, so the narrative slice cannot test free-text disambiguation at all:
+    union                                header: P=0.440 R=0.969 gold=481 | narrative: P=0.010 R=1.000 gold=1
+    intersection                         header: P=0.880 R=0.778 gold=481 | narrative: P=1.000 R=1.000 gold=1
+    LR-full          coverage a=0.05     header: P=0.732 R=0.931 gold=481 | narrative: P=0.000 R=0.000 gold=1
+    LR-full          precision>=0.85     header: P=0.882 R=0.778 gold=481 | narrative: P=1.000 R=1.000 gold=1
+    LR-noFieldLabel  coverage a=0.05     header: P=0.468 R=0.940 gold=481 | narrative: P=0.000 R=0.000 gold=1
+
+  Paired bootstrap (2,000 resamples over test docs):
+    H1 LR-full cov a=0.05 vs union           dP=[+0.300,+0.358] dR=[-0.058,-0.023] dF1=[+0.227,+0.271]
+    H2 LR-full prec>=0.85 vs intersection    dP=[+0.000,+0.007] dR=[+0.000,+0.000] dF1=[+0.000,+0.003]
+    H3 LR-noFieldLabel cov a=0.05 vs union   dP=[+0.027,+0.050] dR=[-0.046,-0.017] dF1=[+0.019,+0.043]
+
+=== 5-fold document CV (seed 0; each outer-train split 50/50 into fit/calibrate) ===
+  intersection                           dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  LR-full          coverage a=0.02       dP=+0.191±0.102  dR=-0.012±0.003  dF1=+0.162±0.077
+  LR-full          coverage a=0.05       dP=+0.314±0.018  dR=-0.030±0.015  dF1=+0.247±0.017
+  LR-full          coverage a=0.10       dP=+0.313±0.017  dR=-0.059±0.023  dF1=+0.236±0.016
+  LR-full          precision>=0.80       dP=+0.474±0.042  dR=-0.198±0.028  dF1=+0.255±0.019
+  LR-full          precision>=0.85       dP=+0.474±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  LR-full          precision>=0.90       dP=+0.474±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  LR-noFieldLabel  coverage a=0.02       dP=+0.014±0.020  dR=-0.002±0.002  dF1=+0.013±0.020
+  LR-noFieldLabel  coverage a=0.05       dP=+0.055±0.015  dR=-0.036±0.013  dF1=+0.045±0.012
+  LR-noFieldLabel  coverage a=0.10       dP=+0.068±0.004  dR=-0.052±0.006  dF1=+0.054±0.005
+  LR-noFieldLabel  precision>=0.80       dP=+0.474±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  LR-noFieldLabel  precision>=0.85       dP=+0.474±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  LR-noFieldLabel  precision>=0.90       dP=+0.474±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  rule             coverage a=0.02       dP=+0.115±0.005  dR=-0.000±0.001  dF1=+0.107±0.005
+  rule             coverage a=0.05       dP=+0.115±0.005  dR=-0.000±0.001  dF1=+0.107±0.005
+  rule             coverage a=0.10       dP=+0.115±0.005  dR=-0.000±0.001  dF1=+0.107±0.005
+  rule             precision>=0.80       dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  rule             precision>=0.85       dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  rule             precision>=0.90       dP=+0.482±0.053  dR=-0.254±0.105  dF1=+0.220±0.062
+  LR-full guarantee violations: coverage 1/45 (fold,pattern) cells; precision 0/16
+
+=== E1 (exploratory, added AFTER H2 failed; not pre-registered): global alert-tier certificate ===
+  Per-pattern precision certification never kept a single-layer candidate. Does one
+  global certificate over all candidates (partition='global') recover recall?
+  LR-full global precision>=0.80         P=0.836 (+0.432)  R=0.898 (-0.071)  F1=0.866  F2=0.885
+  LR-full global precision>=0.85         P=0.893 (+0.489)  R=0.724 (-0.245)  F1=0.800  F2=0.752
+  LR-full global precision>=0.90         P=0.893 (+0.489)  R=0.724 (-0.245)  F1=0.800  F2=0.752
+  bootstrap vs intersection (global >=0.85): dP=[-0.002,+0.030] dR=[-0.075,-0.035]
+  5-fold CV vs intersection (global >=0.85): dP=+0.030±0.006 dR=-0.051±0.024; folds below 0.85 precision: 0/5
+
+=== Stress: test names lowercased / flattened; scorer + thresholds from clean data ===
+  [lowercase] candidates=947
+    union                    P=0.259 R=0.508 (TP=245 FN=237)
+    intersection             P=0.000 R=0.000 (TP=0 FN=482)
+    LR-full cov a=0.05       P=0.540 R=0.419 (TP=202 FN=280)
+    LR-full prec>=0.85       P=0.000 R=0.000 (TP=0 FN=482)
+  [flattened] candidates=749
+    union                    P=0.063 R=0.098 (TP=47 FN=435)
+    intersection             P=0.000 R=0.000 (TP=0 FN=482)
+    LR-full cov a=0.05       P=0.089 R=0.035 (TP=17 FN=465)
+    LR-full prec>=0.85       P=0.000 R=0.000 (TP=0 FN=482)
+
+=== Verdicts (mechanical) ===
+  H1: SUPPORTED
+  H2: NOT SUPPORTED
+  H3: NOT SUPPORTED
+  H4: SUPPORTED
+  H5 (expectation): NOT SUPPORTED

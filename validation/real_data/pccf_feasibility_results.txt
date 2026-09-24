@@ -1,0 +1,99 @@
+=== A. Sanity: fixed rules on all 520 docs must reproduce evaluate_meddocan.py ===
+    (recorded: full PERSON TP=2013 FP=3117 FN=72; es-only 1901/2110/184; es-ner 1693/1112/392)
+  union                            TP=2013 FP=3117 FN=72  P=0.392 R=0.965
+  dict-only (layer alone)          TP=1901 FP=2110 FN=184  P=0.474 R=0.912
+  ner-only (layer alone)           TP=1693 FP=1112 FN=392  P=0.604 R=0.812
+
+=== B. Presence-pattern diagnostic (all 520 docs, beam NER confidence) ===
+  dict      n= 2182 true=  332 precision=0.152
+  dict+ner  n= 1682 true= 1582 precision=0.941  NER conf true/false=0.944/0.792  within-pattern AUROC=0.587
+  ner       n= 1119 true=  112 precision=0.100  NER conf true/false=0.949/0.787  within-pattern AUROC=0.606
+
+=== C. PRIMARY: calibrate on train+validation (400 docs), test on test (120 docs) ===
+  union                                                P=0.404 (+0.000)  R=0.969 (+0.000)  F1=0.570 (+0.000)  F2=0.757
+  dict-only (layer alone)                              P=0.497 (+0.093)  R=0.911 (-0.058)  F1=0.643 (+0.073)  F2=0.781
+  ner-only (layer alone)                               P=0.607 (+0.203)  R=0.836 (-0.133)  F1=0.703 (+0.133)  F2=0.777
+  intersection (agreement only)                        P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF coverage a=0.05 nested=False score=presidio     P=0.404 (+0.000)  R=0.969 (+0.000)  F1=0.570 (+0.000)  F2=0.757
+  PCCF coverage a=0.10 nested=False score=presidio     P=0.404 (+0.000)  R=0.969 (+0.000)  F1=0.570 (+0.000)  F2=0.757
+  PCCF coverage a=0.20 nested=False score=presidio     P=0.404 (+0.000)  R=0.969 (+0.000)  F1=0.570 (+0.000)  F2=0.757
+  PCCF precision>=0.50 nested=False score=presidio     P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF precision>=0.60 nested=False score=presidio     P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF precision>=0.70 nested=False score=presidio     P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF precision>=0.80 nested=False score=presidio     P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF coverage a=0.05 nested=True score=presidio      P=0.404 (+0.000)  R=0.969 (+0.000)  F1=0.570 (+0.000)  F2=0.757
+  PCCF coverage a=0.10 nested=True score=presidio      P=0.404 (+0.000)  R=0.969 (+0.000)  F1=0.570 (+0.000)  F2=0.757
+  PCCF coverage a=0.20 nested=True score=presidio      P=0.404 (+0.000)  R=0.969 (+0.000)  F1=0.570 (+0.000)  F2=0.757
+  PCCF precision>=0.50 nested=True score=presidio      P=0.577 (+0.173)  R=0.836 (-0.133)  F1=0.682 (+0.113)  F2=0.767
+  PCCF precision>=0.60 nested=True score=presidio      P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF precision>=0.70 nested=True score=presidio      P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF precision>=0.80 nested=True score=presidio      P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF coverage a=0.05 nested=False score=beam         P=0.399 (-0.005)  R=0.938 (-0.031)  F1=0.559 (-0.010)  F2=0.738
+  PCCF coverage a=0.10 nested=False score=beam         P=0.414 (+0.011)  R=0.892 (-0.077)  F1=0.566 (-0.004)  F2=0.725
+  PCCF coverage a=0.20 nested=False score=beam         P=0.414 (+0.011)  R=0.892 (-0.077)  F1=0.566 (-0.004)  F2=0.725
+  PCCF precision>=0.50 nested=False score=beam         P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF precision>=0.60 nested=False score=beam         P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF precision>=0.70 nested=False score=beam         P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF precision>=0.80 nested=False score=beam         P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF coverage a=0.05 nested=True score=beam          P=0.414 (+0.011)  R=0.938 (-0.031)  F1=0.575 (+0.005)  F2=0.749
+  PCCF coverage a=0.10 nested=True score=beam          P=0.414 (+0.011)  R=0.892 (-0.077)  F1=0.566 (-0.004)  F2=0.725
+  PCCF coverage a=0.20 nested=True score=beam          P=0.414 (+0.011)  R=0.892 (-0.077)  F1=0.566 (-0.004)  F2=0.725
+  PCCF precision>=0.50 nested=True score=beam          P=0.577 (+0.173)  R=0.836 (-0.133)  F1=0.682 (+0.113)  F2=0.767
+  PCCF precision>=0.60 nested=True score=beam          P=0.614 (+0.211)  R=0.836 (-0.133)  F1=0.708 (+0.138)  F2=0.780
+  PCCF precision>=0.70 nested=True score=beam          P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+  PCCF precision>=0.80 nested=True score=beam          P=0.880 (+0.477)  R=0.778 (-0.191)  F1=0.826 (+0.256)  F2=0.797
+
+  Per-pattern thresholds and test-set recall among true candidates (coverage claims >= 1-alpha):
+    PCCF coverage a=0.05 nested=False score=presidio dict: q=0.0 recall=1.000 | dict+ner: q=0.15 recall=1.000 | ner: q=0.15 recall=1.000
+    PCCF coverage a=0.10 nested=False score=presidio dict: q=0.0 recall=1.000 | dict+ner: q=0.15 recall=1.000 | ner: q=0.15 recall=1.000
+    PCCF coverage a=0.20 nested=False score=presidio dict: q=0.0 recall=1.000 | dict+ner: q=0.15 recall=1.000 | ner: q=0.15 recall=1.000
+    PCCF coverage a=0.05 nested=False score=beam     dict: q=0.0 recall=1.000 | dict+ner: q=0.771 recall=0.960 | ner: q=1.0 recall=1.000
+    PCCF coverage a=0.10 nested=False score=beam     dict: q=0.0 recall=1.000 | dict+ner: q=0.0 recall=0.904 | ner: q=0.0 recall=0.964
+    PCCF coverage a=0.20 nested=False score=beam     dict: q=0.0 recall=1.000 | dict+ner: q=0.0 recall=0.904 | ner: q=0.0 recall=0.964
+
+  Precision-mode pattern decisions (threshold -inf = pattern dropped; test precision of kept):
+    PCCF precision>=0.50 nested=False score=beam     dict: calibP=0.154 q=-inf kept=0/458 testP=nan | dict+ner: calibP=0.934 q=1.0 kept=390/390 testP=0.962 | ner: calibP=0.099 q=-inf kept=0/273 testP=nan
+    PCCF precision>=0.60 nested=False score=beam     dict: calibP=0.154 q=-inf kept=0/458 testP=nan | dict+ner: calibP=0.934 q=1.0 kept=390/390 testP=0.962 | ner: calibP=0.099 q=-inf kept=0/273 testP=nan
+    PCCF precision>=0.70 nested=False score=beam     dict: calibP=0.154 q=-inf kept=0/458 testP=nan | dict+ner: calibP=0.934 q=1.0 kept=390/390 testP=0.962 | ner: calibP=0.099 q=-inf kept=0/273 testP=nan
+    PCCF precision>=0.80 nested=False score=beam     dict: calibP=0.154 q=-inf kept=0/458 testP=nan | dict+ner: calibP=0.934 q=1.0 kept=390/390 testP=0.962 | ner: calibP=0.099 q=-inf kept=0/273 testP=nan
+    PCCF precision>=0.50 nested=True score=beam      dict: calibP=0.488 q=-inf kept=0/458 testP=nan | dict+ner: calibP=0.934 q=1.0 kept=390/390 testP=0.962 | ner: calibP=0.604 q=1.0 kept=273/273 testP=0.103
+    PCCF precision>=0.60 nested=True score=beam      dict: calibP=0.488 q=-inf kept=0/458 testP=nan | dict+ner: calibP=0.934 q=1.0 kept=390/390 testP=0.962 | ner: calibP=0.604 q=0.961 kept=230/273 testP=0.122
+    PCCF precision>=0.70 nested=True score=beam      dict: calibP=0.488 q=-inf kept=0/458 testP=nan | dict+ner: calibP=0.934 q=1.0 kept=390/390 testP=0.962 | ner: calibP=0.604 q=-inf kept=0/273 testP=nan
+    PCCF precision>=0.80 nested=True score=beam      dict: calibP=0.488 q=-inf kept=0/458 testP=nan | dict+ner: calibP=0.934 q=1.0 kept=390/390 testP=0.962 | ner: calibP=0.604 q=-inf kept=0/273 testP=nan
+
+  Paired bootstrap over the 120 test docs (2,000 resamples), pre-specified configs vs union:
+    PCCF coverage a=0.10 nested=False score=beam     dP 95%CI=[+0.002,+0.020]  dR=[-0.100,-0.054]  dF1=[-0.016,+0.008]
+    PCCF precision>=0.70 nested=False score=beam     dP 95%CI=[+0.442,+0.512]  dR=[-0.229,-0.154]  dF1=[+0.224,+0.288]
+
+=== D. ROBUSTNESS: 5-fold document-level CV over all 520 docs (seed 0), deltas vs union ===
+  dict-only (layer alone)                              dP=+0.081±0.004  dR=-0.054±0.010  dF1=+0.066±0.004
+  ner-only (layer alone)                               dP=+0.211±0.010  dR=-0.153±0.009  dF1=+0.134±0.006
+  intersection (agreement only)                        dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF coverage a=0.05 nested=False score=presidio     dP=+0.000±0.000  dR=+0.000±0.000  dF1=+0.000±0.000
+  PCCF coverage a=0.10 nested=False score=presidio     dP=+0.000±0.000  dR=+0.000±0.000  dF1=+0.000±0.000
+  PCCF coverage a=0.20 nested=False score=presidio     dP=+0.000±0.000  dR=+0.000±0.000  dF1=+0.000±0.000
+  PCCF precision>=0.50 nested=False score=presidio     dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF precision>=0.60 nested=False score=presidio     dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF precision>=0.70 nested=False score=presidio     dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF precision>=0.80 nested=False score=presidio     dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF coverage a=0.05 nested=True score=presidio      dP=+0.000±0.000  dR=+0.000±0.000  dF1=+0.000±0.000
+  PCCF coverage a=0.10 nested=True score=presidio      dP=+0.000±0.000  dR=+0.000±0.000  dF1=+0.000±0.000
+  PCCF coverage a=0.20 nested=True score=presidio      dP=+0.000±0.000  dR=+0.000±0.000  dF1=+0.000±0.000
+  PCCF precision>=0.50 nested=True score=presidio      dP=+0.182±0.009  dR=-0.153±0.009  dF1=+0.115±0.007
+  PCCF precision>=0.60 nested=True score=presidio      dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF precision>=0.70 nested=True score=presidio      dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF precision>=0.80 nested=True score=presidio      dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF coverage a=0.05 nested=False score=beam         dP=-0.003±0.009  dR=-0.039±0.013  dF1=-0.010±0.008
+  PCCF coverage a=0.10 nested=False score=beam         dP=+0.009±0.006  dR=-0.072±0.020  dF1=-0.004±0.009
+  PCCF coverage a=0.20 nested=False score=beam         dP=+0.009±0.006  dR=-0.072±0.020  dF1=-0.004±0.009
+  PCCF precision>=0.50 nested=False score=beam         dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF precision>=0.60 nested=False score=beam         dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF precision>=0.70 nested=False score=beam         dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF precision>=0.80 nested=False score=beam         dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF coverage a=0.05 nested=True score=beam          dP=+0.008±0.003  dR=-0.040±0.013  dF1=+0.001±0.004
+  PCCF coverage a=0.10 nested=True score=beam          dP=+0.009±0.006  dR=-0.072±0.020  dF1=-0.004±0.009
+  PCCF coverage a=0.20 nested=True score=beam          dP=+0.009±0.006  dR=-0.072±0.020  dF1=-0.004±0.009
+  PCCF precision>=0.50 nested=True score=beam          dP=+0.182±0.009  dR=-0.153±0.009  dF1=+0.115±0.007
+  PCCF precision>=0.60 nested=True score=beam          dP=+0.220±0.010  dR=-0.156±0.008  dF1=+0.139±0.009
+  PCCF precision>=0.70 nested=True score=beam          dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020
+  PCCF precision>=0.80 nested=True score=beam          dP=+0.473±0.042  dR=-0.207±0.009  dF1=+0.250±0.020

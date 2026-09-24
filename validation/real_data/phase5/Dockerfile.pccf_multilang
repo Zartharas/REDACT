@@ -1,0 +1,22 @@
+# Phase 5 all-languages image: extends redact-pccf (Dockerfile.pccf) with
+# the extra spaCy models the id/ko/zh/in baseline layers need, plus the
+# Hugging Face `datasets` library for fetching. Pinned to spaCy 3.8.0
+# models, like Dockerfile.pccf.
+FROM redact-pccf
+RUN pip install --no-cache-dir "datasets>=2.19" \
+ && python -m spacy download xx_ent_wiki_sm-3.8.0 --direct \
+ && python -m spacy download ko_core_news_md-3.8.0 --direct \
+ && python -m spacy download zh_core_web_md-3.8.0 --direct
+# amendment 3: second-wave languages
+RUN for m in de_core_news_md it_core_news_md nl_core_news_md pt_core_news_md fi_core_news_md ja_core_news_md; do \
+      python -m spacy download ${m}-3.8.0 --direct || exit 1; done
+# Hugging Face NER for ar/tr/hi/te (CPU-only torch). The model weights are
+# downloaded on first use at run time, so a wrong or removed model id shows up
+# as a per-language error in TROUBLESHOOTING instead of breaking the build.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+ && pip install --no-cache-dir "transformers>=4.40" sentencepiece
+# amendment 5: protobuf is needed to read XLM-R's sentencepiece.bpe.model; without
+# it transformers fell back to a TikToken extractor and the pipeline failed to
+# build (then rebuilt for every document). Quiet the HF progress bars/log noise.
+RUN pip install --no-cache-dir protobuf
+ENV TRANSFORMERS_VERBOSITY=error HF_HUB_DISABLE_PROGRESS_BARS=1 TOKENIZERS_PARALLELISM=false

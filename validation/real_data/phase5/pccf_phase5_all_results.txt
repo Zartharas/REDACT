@@ -1,0 +1,44 @@
+Hypotheses (judged mechanically; a language counts only if it has a
+group with ≥ 19 true test candidates):**
+
+- **H22 (validity):** with fail-open fallback, the rule scorer's
+  per-group recall floor (≥ 0.95 − tol, for groups with n_true ≥ 19) holds
+  in every eligible language.
+- **H23 (utility):** LR-UD gains ≥ +0.03 precision over union with its
+  floors holding in at least half of the eligible languages.
+- **H24 (descriptive):** fail-open vs global fallback. Recall in the
+  groups that fell back.
+
+
+=== FR: 3500 docs (fit 1000 / cal 1000 / test 1500); gold person 3601; person labels ['GIVENNAME', 'SURNAME']; dict hits 145, ner hits 2213; uncached/errors 0 ===
+  test pattern dict      n=   32 true=    9 precision=0.281
+  test pattern dict+ner  n=   31 true=   28 precision=0.903
+  test pattern ner       n=  908 true=  702 precision=0.773
+  union                              P=0.754 R=0.473
+  rule                               P=0.754 (+0.000) R=0.473 (+0.000) floors=ok (eligible groups 2) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=1.00/n=9 | dict+ner: rec=1.00/n=28 | ner: rec=1.00/n=702
+  LR hand cues                       P=0.795 (+0.041) R=0.460 (-0.013) floors=ok (eligible groups 2) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=1.00/n=9 | dict+ner: rec=1.00/n=28 | ner: rec=0.97/n=702
+  LR-UD                              P=0.874 (+0.120) R=0.450 (-0.024) floors=ok (eligible groups 2) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=1.00/n=9 | dict+ner: rec=1.00/n=28 | ner: rec=0.95/n=702
+  LR-UD [fallback=global, H24]       P=0.899 (+0.145) R=0.448 (-0.026) floors=ok (eligible groups 2) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=0.56/n=9 | dict+ner: rec=1.00/n=28 | ner: rec=0.95/n=702
+
+=== RU: 2841 docs (fit 710 / cal 710 / test 1421); gold person 1264; person labels ['FIRST_NAME', 'LAST_NAME', 'MIDDLE_NAME']; dict hits 425, ner hits 693; uncached/errors 0 ===
+  test pattern dict      n=   38 true=   20 precision=0.526
+  test pattern dict+ner  n=  162 true=  158 precision=0.975
+  test pattern ner       n=  167 true=   71 precision=0.425
+  union                              P=0.679 R=0.424
+  rule                               P=0.689 (+0.010) R=0.420 (-0.003) floors=ok (eligible groups 3) fallback={'ner': False, 'dict+ner': False, 'dict': True}  dict: rec=1.00/n=20 | dict+ner: rec=0.99/n=158 | ner: rec=0.99/n=71
+  LR hand cues                       P=0.699 (+0.019) R=0.405 (-0.019) floors=ok (eligible groups 3) fallback={'ner': False, 'dict+ner': False, 'dict': True}  dict: rec=1.00/n=20 | dict+ner: rec=0.95/n=158 | ner: rec=0.96/n=71
+  LR-UD                              P=0.732 (+0.053) R=0.390 (-0.034) floors=FAIL (eligible groups 3) fallback={'ner': False, 'dict+ner': False, 'dict': True}  dict: rec=1.00/n=20 | dict+ner: rec=0.94/n=158 | ner: rec=0.86/n=71
+  LR-UD [fallback=global, H24]       P=0.747 (+0.067) R=0.390 (-0.034) floors=FAIL (eligible groups 3) fallback={'ner': False, 'dict+ner': False, 'dict': True}  dict: rec=1.00/n=20 | dict+ner: rec=0.94/n=158 | ner: rec=0.86/n=71
+
+=== id: no data file ===
+
+=== ko: no data file ===
+
+=== zh: no data file ===
+
+=== in: no data file ===
+
+eligible languages: ['fr', 'ru']; LR-UD useful+valid in: ['fr']
+=== Verdicts (mechanical) ===
+  H22: SUPPORTED
+  H23: SUPPORTED
