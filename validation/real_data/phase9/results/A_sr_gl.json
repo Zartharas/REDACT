@@ -1,0 +1,1 @@
+{"decisions": {"dict": {"n_cal": 6, "k_cal": 0, "upper": null, "drop": false}, "dict+ner": {"n_cal": 10, "k_cal": 6, "upper": null, "drop": false}}, "UNION": {"P": 0.775251189846642, "R": 0.6159663865546219}, "PCCF": {"P": 0.913302448709464, "R": 0.5798319327731093}, "NOISE-DROP": {"P": 0.913302448709464, "R": 0.5798319327731093}}
