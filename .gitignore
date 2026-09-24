@@ -122,3 +122,6 @@ validation/real_data/datasets/large/
 validation/real_data/datasets/*_raw.jsonl
 output/phase5/
 validation/real_data/phase5/docker_run/*.log
+validation/real_data/docker_repro_p5to10/new/
+validation/real_data/docker_repro_p5to10/ref/
+validation/real_data/docker_repro_p5to10/*.log

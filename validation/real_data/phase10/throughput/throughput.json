@@ -1,0 +1,60 @@
+{
+ "assumption_usd_per_vcpu_hour": 0.04,
+ "threads": 1,
+ "results": [
+  {
+   "layer": "regex / flattened dictionary (detect.scan_flattened)",
+   "lines": 2000,
+   "seconds": 0.020295723981689662,
+   "lines_per_s": 98542.92469706202,
+   "ms_per_line": 0.010147861990844831,
+   "vcpu_s_per_million": 10.14786199084483,
+   "usd_per_million": 0.00011275402212049813
+  },
+  {
+   "layer": "spaCy en_core_web_lg NER via Presidio (detect.scan_ner)",
+   "lines": 2000,
+   "seconds": 13.779878711007768,
+   "lines_per_s": 145.13915847476522,
+   "ms_per_line": 6.889939355503884,
+   "vcpu_s_per_million": 6889.939355503884,
+   "usd_per_million": 0.07655488172782093
+  },
+  {
+   "layer": "spaCy NER + beam confidence (as used by PCCF)",
+   "lines": 2000,
+   "seconds": 16.169080936000682,
+   "lines_per_s": 123.69286837738392,
+   "ms_per_line": 8.084540468000341,
+   "vcpu_s_per_million": 8084.540468000341,
+   "usd_per_million": 0.08982822742222603
+  },
+  {
+   "layer": "GLiNER multi v2.1 (zero-shot, threshold 0.3)",
+   "lines": 2000,
+   "seconds": 697.5039022910059,
+   "lines_per_s": 2.86736747053435,
+   "ms_per_line": 348.75195114550297,
+   "vcpu_s_per_million": 348751.951145503,
+   "usd_per_million": 3.875021679394478
+  },
+  {
+   "layer": "XLM-R token classification (Davlan/xlm-roberta-base-ner-hrl)",
+   "lines": 2000,
+   "seconds": 235.63656466599787,
+   "lines_per_s": 8.487647079878677,
+   "ms_per_line": 117.81828233299893,
+   "vcpu_s_per_million": 117818.28233299893,
+   "usd_per_million": 1.3090920259222105
+  },
+  {
+   "layer": "PCCF filter (candidates + KV features + rule score + threshold)",
+   "lines": 2000,
+   "seconds": 0.003928452002583072,
+   "lines_per_s": 509106.38559028896,
+   "ms_per_line": 0.001964226001291536,
+   "vcpu_s_per_million": 1.9642260012915358,
+   "usd_per_million": 2.182473334768373e-05
+  }
+ ]
+}

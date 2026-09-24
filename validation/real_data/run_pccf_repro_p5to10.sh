@@ -44,6 +44,18 @@ docker run --rm --name redact-pccf-repro ${HF_ENV} -v "${REPO}:/src:ro" -v "${OU
   mkdir -p /out/new/phase5
   cp phase5/pccf_phase5_*_results.json /out/new/phase5/
   for p in phase6 phase7 phase8 phase9 phase10; do mkdir -p /out/new/$p && cp -r $p/results /out/new/$p/; done
+  echo "[$(ts)] re-judging the recomputed results"
+  cd /work/repo/validation/real_data
+  python phase6/pccf_phase6_split_diagnostic.py --judge > /dev/null
+  python phase7/pccf_phase7_baselines.py --judge > /dev/null
+  python phase7/pccf_phase7_baselines.py --judge --b > /dev/null
+  python phase8/pccf_phase8.py --judge > /dev/null
+  python phase9/pccf_phase9.py --judge > /dev/null
+  python phase10/pccf_phase10_aci_stream.py --judge > /dev/null
+  cd /work/repo
+  for f in PCCF_PHASE6_RESULTS_RAW.md PCCF_PHASE7_RESULTS.md PCCF_PHASE7B_RESULTS.md PCCF_PHASE8_RESULTS.md PCCF_PHASE9_RESULTS.md PCCF_PHASE10A_RESULTS.md; do
+    grep -E "^  H[0-9]+: " $f | sed "s/ (a=.*//" | sed "s|^|$f |"; done > /out/verdicts_new.txt
+  grep -E "^  H[0-9]+: " validation/real_data/phase5/pccf_phase5_*tl_gl_results.txt | sed "s|^|PHASE5 |" >> /out/verdicts_new.txt
   echo "[$(ts)] all phases done"
 ' 2>&1 | tee "${OUT}/run.log"
 echo "== comparing with the committed results"
@@ -55,4 +67,16 @@ RELS="phase5/$(basename "${P5REF}")"
 for f in phase6/results/*.json phase7/results/*.json phase8/results/*.json phase9/results/*.json phase10/results/*.json; do
   RELS="${RELS} ${f}"; mkdir -p "${OUT}/ref/$(dirname "$f")"; cp "$f" "${OUT}/ref/$f"
 done
-python3 compare_repro_json.py "${OUT}/ref" "${OUT}/new" ${RELS} | tee "${OUT}/compare.txt" | grep -v "^ok  "
+echo "-- check 1 (strict): every stored number within 0.005 of the committed value"
+python3 compare_repro_json.py "${OUT}/ref" "${OUT}/new" ${RELS} > "${OUT}/compare.txt" || true
+grep -v "^ok  " "${OUT}/compare.txt"
+echo "-- check 2: every pre-registered verdict identical to the committed one"
+cd "${REPO}"
+for f in PCCF_PHASE6_RESULTS_RAW.md PCCF_PHASE7_RESULTS.md PCCF_PHASE7B_RESULTS.md PCCF_PHASE8_RESULTS.md PCCF_PHASE9_RESULTS.md PCCF_PHASE10A_RESULTS.md; do
+  grep -E "^  H[0-9]+: " $f | sed "s/ (a=.*//" | sed "s|^|$f |"; done > "${OUT}/verdicts_ref.txt"
+grep -E "^  H[0-9]+: " validation/real_data/phase5/docker_run/pccf_phase5_*tl_gl_results.txt | sed "s|^|PHASE5 |" >> "${OUT}/verdicts_ref.txt"
+if diff "${OUT}/verdicts_ref.txt" "${OUT}/verdicts_new.txt" > "${OUT}/verdicts_diff.txt"; then
+  echo "verdicts: $(wc -l < "${OUT}/verdicts_ref.txt" | tr -d ' ') identical -> PASS"
+else
+  echo "verdicts differ -> FAIL"; cat "${OUT}/verdicts_diff.txt"
+fi
