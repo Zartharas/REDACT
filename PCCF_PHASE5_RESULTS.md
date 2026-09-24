@@ -178,3 +178,80 @@ the tolerance after the fact.
 diagnosed in `PCCF_PHASE6_RESULTS.md`. it, hi and id_hf are train→validation
 split shift; ru is a chance tail draw; no method defect was found. The phase-5
 verdicts are unchanged.
+
+
+## Wave 3 + tr_mit + ko_klue (amendment 6; author's Docker run, 2026-09-24)
+
+All 20 new rows cached with 0 errors. The 20 original rows reproduced
+unchanged (H22 and H23 are still SUPPORTED, identical table). The new rows
+are judged separately, with the phase-6 combined-variance floor ("old" = the
+phase-5 floor, shown for comparison only).
+
+| row | union P / R | rule ΔP (floors) | LR-UD ΔP / ΔR (floors) | global-fallback ΔP | H29 status |
+|---|---|---|---|---|---|
+| tr_mit | 0.460 / 0.927 | +0.013 (ok) | +0.161 / -0.019 (ok; old ok) | +0.161 | useful+valid |
+| ko_klue | 0.896 / 0.825 | +0.002 (ok) | +0.005 / -0.035 (ok; old ok) | +0.005 | gain < 0.03 |
+| bg | 0.476 / 0.457 | +0.000 (ok) | +0.131 / -0.028 (ok; old ok) | +0.162 | useful+valid |
+| pl | 0.649 / 0.474 | +0.000 (ok) | +0.210 / -0.019 (ok; old ok) | +0.219 | useful+valid |
+| cs | 0.388 / 0.444 | +0.000 (ok) | +0.107 / -0.020 (ok; old ok) | +0.111 | useful+valid |
+| lt | 0.656 / 0.418 | +0.163 (ok) | +0.177 / -0.025 (ok; old ok) | +0.177 | useful+valid |
+| et | 0.418 / 0.421 | +0.000 (ok) | +0.113 / -0.026 (ok; old ok) | +0.123 | useful+valid |
+| sv | 0.683 / 0.352 | +0.066 (ok) | +0.132 / -0.014 (ok; old ok) | +0.207 | useful+valid |
+| sk | 0.414 / 0.422 | +0.000 (ok) | +0.089 / -0.017 (ok; old ok) | +0.112 | useful+valid |
+| lv | 0.369 / 0.428 | +0.000 (ok) | +0.103 / -0.016 (ok; old ok) | +0.103 | useful+valid |
+| hu | 0.356 / 0.436 | +0.000 (ok) | +0.093 / -0.016 (ok; old ok) | +0.125 | useful+valid |
+| ro | 0.437 / 0.360 | +0.000 (ok) | +0.235 / -0.016 (ok; old ok) | +0.449 | useful+valid |
+| el | 0.627 / 0.297 | -0.003 (ok) | +0.103 / -0.019 (ok; old miss) | +0.301 | useful+valid |
+| da | 0.699 / 0.385 | +0.063 (ok) | +0.147 / -0.022 (ok; old ok) | +0.233 | useful+valid |
+| sl | 0.699 / 0.440 | +0.008 (ok) | +0.216 / -0.022 (ok; old ok) | +0.226 | useful+valid |
+| hr | 0.608 / 0.482 | +0.000 (ok) | +0.233 / -0.028 (ok; old ok) | +0.263 | useful+valid |
+| sr | 0.319 / 0.400 | +0.000 (ok) | +0.076 / -0.023 (ok; old ok) | +0.076 | useful+valid |
+| vi | 0.197 / 0.361 | +0.000 (ok) | +0.024 / -0.010 (ok; old ok) | +0.024 | gain < 0.03 |
+| ms | 0.197 / 0.433 | +0.000 (ok) | +0.022 / -0.013 (ok; old ok) | +0.022 | gain < 0.03 |
+| tl | 0.438 / 0.558 | +0.000 (ok) | +0.000 / -0.013 (ok; old ok) | +0.000 | gain < 0.03 |
+
+**Mechanical verdicts (20 eligible rows):**
+
+- **H28 SUPPORTED.** The rule scorer's combined floors hold in all 20.
+- **H29 SUPPORTED.** LR-UD is useful and valid in **16 of 20**. It gains
+  less than +0.03 in ko_klue, vi, ms and tl. No row misses the combined
+  floor.
+
+**Findings:**
+
+1. **Largest gains yet:** ro +0.235, hr +0.233, sl +0.216, pl +0.210,
+   lt +0.177. Each costs ≤ 0.028 recall. Most wave-3 rows have one eligible
+   group ({ner}), so the gain is LR-UD reordering NER hits by their
+   syntactic context.
+2. **The forward floor matters.** el LR-UD and lt rule miss the old phase-5
+   floor but pass the combined one, which is the phase-6 prediction working
+   as intended. Both are reported, not re-scored.
+3. **The multilingual NER lesson repeats.** vi and ms use xx_ent_wiki_sm,
+   whose {ner} group has P 0.159 and 0.162. Their union P is 0.197 and
+   LR-UD cannot lift it past +0.03, the same pattern as `id`. tl gains
+   nothing: its dictionary (es_ES + en_US names) dominates, and the {ner}
+   group has P 0.223.
+4. **Faker dictionaries mostly miss ai4privacy names.** For bg, hu, el and
+   ro, the dict and dict+ner groups hold 0 true names in test. For
+   pl, cs, lt, lv and sl, they hold ≤ 8. In these languages the
+   dictionary layer adds almost nothing, and the result is effectively
+   single-layer PCCF.
+5. **ko_klue.** The union is already P 0.896 / R 0.825 on KLUE's news text,
+   so there is little to recover (+0.005). The row does show that the
+   Korean pipeline behaves on openly licensed data.
+6. **tr_mit vs tr (licensing).** On the same data and test split:
+
+   | model | LR-UD P | LR-UD R | F1 |
+   |---|---|---|---|
+   | MIT model | 0.621 | 0.909 | ≈ 0.74 |
+   | unlicensed savasy | 0.759 | 0.900 | ≈ 0.82 |
+
+   The MIT model finds more names (union R 0.927 vs 0.908) but also far
+   more false candidates ({ner} hits 14,259 vs 8,806). Amendment 6 did not
+   define "comparable" mechanically, so this is a judgement: **the MIT row is
+   weaker on precision.** Recommendation: publish tr_mit as the licensed
+   Turkish row, and report tr (savasy) only as a research comparison unless
+   a licence is obtained.
+7. **H24 again.** The global fallback's precision (ro +0.449, el +0.301)
+   comes from dropping small-group recall. Fail-open stays the redaction
+   default.
