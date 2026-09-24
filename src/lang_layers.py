@@ -115,7 +115,37 @@ def _nlp(model):
     return spacy.load(model)
 
 
+# amendment 7: GLiNER multilingual (Apache-2.0, zero-shot) for the rows whose
+# only spaCy option was the noisy xx_ent_wiki_sm. Keys are "<lang>_gl".
+GLINER_MODEL = "urchade/gliner_multi-v2.1"
+GLINER_THRESHOLD = 0.3  # high-recall operating point, fixed a priori; PCCF filters for precision
+GLINER_LANGS = ("bg", "cs", "et", "sk", "lv", "hu", "sr", "vi", "ms", "tl")
+_GLINER = {}
+
+
+def _gliner():
+    hit = _GLINER.get("m")
+    if hit is None:
+        try:
+            from gliner import GLiNER
+            hit = GLiNER.from_pretrained(GLINER_MODEL)
+        except Exception as ex:  # noqa: BLE001  (cache the failure, as _hf does)
+            hit = RuntimeError(f"GLiNER {GLINER_MODEL} failed to load: {ex!r}"[:400])
+        _GLINER["m"] = hit
+    if isinstance(hit, Exception):
+        raise hit
+    return hit
+
+
+def scan_ner_gliner(text):
+    return [{"type": "PERSON", "start": int(e["start"]), "end": int(e["end"]), "method": f"gliner:{GLINER_MODEL}",
+             "confidence": float(e["score"])}
+            for e in _gliner().predict_entities(text, ["person"], threshold=GLINER_THRESHOLD)]
+
+
 def scan_ner(lang, text):
+    if lang.endswith("_gl") and lang[:-3] in GLINER_LANGS:
+        return scan_ner_gliner(text)
     if lang in HF_NER:
         return scan_ner_hf(lang, text)
     model, label = NER_MODEL[lang]
@@ -268,6 +298,8 @@ def scan_dict(lang, text):
         lang = "id"
     if lang == "tr_mit":
         lang = "tr"
+    if lang.endswith("_gl"):
+        lang = lang[:-3]
     if lang in WAVE3_LOCALES:
         names = _wave3_names(lang)
         return [{"type": "PERSON", "start": r[0].start(), "end": r[-1].end(), "method": f"dict:{lang}"}

@@ -18,7 +18,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "${HERE}/../../.." && pwd)"
 DATA="${REPO}/validation/real_data/datasets/large"
 OUT="${HERE}/docker_run"
-LANGS="${LANGS:-fr,ru,de,it,nl,pt,fi,tr,hi,te,ar,ar_wiki,ja,id,id_hf,ko,zh,in,ko_kdpii,ko_legal,tr_mit,ko_klue,bg,pl,cs,lt,et,sv,sk,lv,hu,ro,el,da,sl,hr,sr,vi,ms,tl}"
+LANGS="${LANGS:-fr,ru,de,it,nl,pt,fi,tr,hi,te,ar,ar_wiki,ja,id,id_hf,ko,zh,in,ko_kdpii,ko_legal,tr_mit,ko_klue,bg,pl,cs,lt,et,sv,sk,lv,hu,ro,el,da,sl,hr,sr,vi,ms,tl,bg_gl,cs_gl,et_gl,sk_gl,lv_gl,hu_gl,sr_gl,vi_gl,ms_gl,tl_gl}"
 mkdir -p "${DATA}" "${OUT}"
 
 if ! docker image inspect redact-pccf >/dev/null 2>&1; then
@@ -40,6 +40,7 @@ file_for() {
     ko) echo KO_BCCard_large.jsonl ;; zh) echo ZH_piibench_large.jsonl ;; in) echo IN_indiapii_large.jsonl ;;
     ko_kdpii) echo KO_KDPII_large.jsonl ;;
     ar) echo AR_sitr_large.jsonl ;; ar_wiki) echo AR_wikiann_large.jsonl ;; tr) echo TR_kvkk_large.jsonl ;; id_hf) echo ID_OpenPII_large.jsonl ;;
+    *_gl) file_for "${1%_gl}" ;;
     ko_klue) echo KO_KLUE_large.jsonl ;; tr_mit) echo TR_kvkk_large.jsonl ;;
     de|it|nl|pt|fi|hi|te|ja|bg|pl|cs|lt|et|sv|sk|lv|hu|ro|el|da|sl|hr|sr|vi|ms|tl) echo "$(echo "$1" | tr '[:lower:]' '[:upper:]')_OpenPII_large.jsonl" ;;
     ko_legal) echo ../restricted/KO_LEGAL_K-LegalDeID.jsonl ;;

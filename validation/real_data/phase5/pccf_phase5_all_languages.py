@@ -76,6 +76,11 @@ LANGS = {
 import lang_layers as _LL  # noqa: E402
 for _l in ("bg", "pl", "cs", "lt", "et", "sv", "sk", "lv", "hu", "ro", "el", "da", "sl", "hr", "sr", "vi", "ms", "tl"):
     LANGS[_l] = {"file": f"{_l.upper()}_OpenPII_large.jsonl", "model": _LL.NER_MODEL[_l], "cues": None}
+# amendment 7: the ten xx-NER rows again, with GLiNER multilingual as the NER layer
+for _l in _LL.GLINER_LANGS:
+    LANGS[f"{_l}_gl"] = {"file": f"{_l.upper()}_OpenPII_large.jsonl", "model": _LL.NER_MODEL[_l], "cues": None,
+                         "hf_ner": True}
+WAVE4_KEYS = {f"{_l}_gl" for _l in _LL.GLINER_LANGS}
 WAVE3_KEYS = {"bg", "pl", "cs", "lt", "et", "sv", "sk", "lv", "hu", "ro", "el", "da", "sl", "hr", "sr", "vi", "ms",
               "tl", "tr_mit", "ko_klue"}
 HYP = open(os.path.join(ROOT, "PCCF_PHASE5_PREREGISTRATION.md")).read().split("**Hypotheses")[1].split("**Troubleshooting")[0]
@@ -278,7 +283,8 @@ def main():
             results[lang] = res
         say()
     wave3 = {l: r for l, r in results.items() if l in WAVE3_KEYS and r.get("rule", {}).get("eligible_groups", 0) > 0}
-    results_p5 = {l: r for l, r in results.items() if l not in WAVE3_KEYS}
+    wave4 = {l: r for l, r in results.items() if l in WAVE4_KEYS and r.get("rule", {}).get("eligible_groups", 0) > 0}
+    results_p5 = {l: r for l, r in results.items() if l not in WAVE3_KEYS and l not in WAVE4_KEYS}
     eligible = {l: r for l, r in results_p5.items() if r.get("rule", {}).get("eligible_groups", 0) > 0}
     h22 = bool(eligible) and all(r["rule"]["floors_hold"] for r in eligible.values())
     ud_ok = [l for l, r in eligible.items() if not r["LR-UD"].get("skipped") and r["LR-UD"]["floors_hold"]
@@ -298,9 +304,20 @@ def main():
         say(f"wave-3 eligible: {sorted(wave3)}; LR-UD useful+valid (combined floor) in: {ok29}")
         say(f"  H28: {'SUPPORTED' if h28 else 'NOT SUPPORTED'}")
         say(f"  H29: {'SUPPORTED' if h29 else 'NOT SUPPORTED'}")
+    h33 = h34 = None
+    if wave4:  # amendment 7
+        f1 = lambda m: 2 * m["P"] * m["R"] / (m["P"] + m["R"]) if m["P"] + m["R"] else 0.0  # noqa: E731
+        better = [l for l in wave4 if l[:-3] in results and f1(wave4[l]["union"]) > f1(results[l[:-3]]["union"])]
+        h33 = len(better) >= 7
+        ok34 = [l for l, r in wave4.items() if r["rule"]["floors_hold_cv"] and not r["LR-UD"].get("skipped")
+                and r["LR-UD"]["floors_hold_cv"] and r["LR-UD"]["P"] - r["union"]["P"] >= 0.03]
+        h34 = all(r["rule"]["floors_hold_cv"] for r in wave4.values()) and len(ok34) >= len(wave4) / 2
+        say(f"wave-4 (GLiNER) rows: {sorted(wave4)}; union F1 better than xx in: {better}; LR-UD useful+valid in: {ok34}")
+        say(f"  H33: {'SUPPORTED' if h33 else 'NOT SUPPORTED'}")
+        say(f"  H34: {'SUPPORTED' if h34 else 'NOT SUPPORTED'}")
     tag = "_".join(langs) if a.langs != ",".join(LANGS) else "all"
     open(os.path.join(HERE, f"pccf_phase5_{tag}_results.txt"), "w").write("\n".join(lines) + "\n")
-    json.dump({"results": results, "verdicts": {"H22": h22, "H23": h23, "H28": h28, "H29": h29}}, open(
+    json.dump({"results": results, "verdicts": {"H22": h22, "H23": h23, "H28": h28, "H29": h29, "H33": h33, "H34": h34}}, open(
         os.path.join(HERE, f"pccf_phase5_{tag}_results.json"), "w"), indent=1, default=str)
     json.dump(trouble, open(os.path.join(HERE, f"TROUBLESHOOTING_{tag}.json"), "w"), indent=1, default=str,
               ensure_ascii=False)

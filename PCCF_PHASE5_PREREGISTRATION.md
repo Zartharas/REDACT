@@ -242,3 +242,39 @@ H22/H23 remain computed over the original rows only.
   additive. Re-evaluating the existing caches on the host reproduces every
   phase-5 verdict. pt LR-UD moves by 0.0003, which is a numpy/BLAS platform
   difference that is also seen without the edit.
+
+## Amendment 7 (2026-09-24, before any GLiNER output was computed): stronger NER for the ten xx rows
+
+**Motivation.** Where the NER layer was spaCy's multilingual `xx_ent_wiki_sm`,
+PCCF could not help (vi, ms {ner} P ≈ 0.16; id 0.118). A licence and
+coverage search (see the session notes) found no single supervised,
+openly licensed NER model that covers all ten languages.
+
+**New rows (10):** bg_gl, cs_gl, et_gl, sk_gl, lv_gl, hu_gl, sr_gl, vi_gl,
+ms_gl, tl_gl.
+
+- **Data and dictionary:** the same data, splits and dictionary layer as the
+  base row.
+- **NER layer:** `urchade/gliner_multi-v2.1` (Apache-2.0; v0/v1 are NC and
+  are not used). It runs zero-shot with the label `person`.
+- **Threshold:** 0.3, fixed a priori as a high-recall operating point, since
+  PCCF filters for precision. It is not tuned on any split.
+- **Confidence:** GLiNER's span score is the per-span confidence.
+
+**Hypotheses (separate family; phase-6 combined floor):**
+
+- **H33 (layer quality).** Union F1 of the `_gl` row exceeds union F1 of its
+  xx base row in ≥ 7 of 10 languages.
+- **H34 (PCCF on the better layer).** The rule scorer's floors hold in all
+  eligible `_gl` rows, AND LR-UD is useful (≥ +0.03 P) and valid in at least
+  half of them.
+
+**Disclosures:**
+
+- GLiNER's per-language coverage is not documented, and it is used zero-shot.
+- `gliner==0.2.29` needs transformers < 5.17. The image may therefore pin a
+  different transformers version than the earlier HF rows used. Those rows'
+  caches persist and are not recomputed.
+- Per-language supervised models were considered (sk, cs, hu, et, sr, lv).
+  They were not used in this amendment, to keep one comparable model across
+  the ten rows.

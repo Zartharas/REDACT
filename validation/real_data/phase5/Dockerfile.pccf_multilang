@@ -24,3 +24,6 @@ ENV TRANSFORMERS_VERBOSITY=error HF_HUB_DISABLE_PROGRESS_BARS=1 TOKENIZERS_PARAL
 RUN for m in pl_core_news_md sv_core_news_md lt_core_news_md ro_core_news_md el_core_news_md \
              da_core_news_md sl_core_news_md hr_core_news_md; do \
       python -m spacy download ${m}-3.8.0 --direct || exit 1; done
+# amendment 7: GLiNER (Apache-2.0) for the multilingual NER upgrade rows. gliner 0.2.29 requires
+# transformers <5.17; pip may adjust transformers. Earlier rows' caches persist and are not recomputed.
+RUN pip install --no-cache-dir "gliner==0.2.29"
