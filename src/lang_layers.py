@@ -397,3 +397,39 @@ def scan_dict(lang, text):
             if any(len(w) >= 3 and w.lower() in names for w in m.group(0).split()):
                 hits.append({"type": "PERSON", "start": m.start(), "end": m.end(), "method": "dict:in"})
     return hits
+
+
+# ---------------------------------------------------------------------------
+# Phase 11 (PCCF_PHASE11_PREREGISTRATION.md): English layer sets.
+#   en_redact: production REDACT detector (detect.scan_ner = Presidio + spaCy
+#              en_core_web_lg; detect.scan_flattened = flattened-name layer)
+#   en_spacy : spaCy en_core_web_lg PERSON directly + SSA/Census name
+#              dictionary over capitalised word runs
+# ---------------------------------------------------------------------------
+def scan_dict_en(kind, text):
+    if kind == "en_redact":
+        import detect
+        return [h for h in detect.scan_flattened(text) if h["type"] == "PERSON"]
+    import flattened_names_ext as FX
+    giv, sur = FX._lists()
+    names = (giv or set()) | (sur or set())
+    out = []
+    for r in _cap_runs(text):  # keep maximal sub-runs of consecutive name tokens
+        cur = []
+        for m in r + [None]:
+            if m is not None and len(m.group(0)) >= 3 and m.group(0).lower() in names:
+                cur.append(m)
+                continue
+            if cur:
+                out.append({"type": "PERSON", "start": cur[0].start(), "end": cur[-1].end(),
+                            "method": "dict:en-ssa-census"})
+            cur = []
+    return out
+
+
+def scan_ner_en(kind, text):
+    if kind == "en_redact":
+        import detect
+        return [h for h in detect.scan_ner(text) if h["type"] == "PERSON"]
+    return [{"type": "PERSON", "start": e.start_char, "end": e.end_char, "method": "ner:en_core_web_lg"}
+            for e in _nlp("en_core_web_lg")(text).ents if e.label_ == "PERSON"]

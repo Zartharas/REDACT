@@ -81,12 +81,31 @@ for _l in _LL.GLINER_LANGS:
     LANGS[f"{_l}_gl"] = {"file": f"{_l.upper()}_OpenPII_large.jsonl", "model": _LL.NER_MODEL[_l], "cues": None,
                          "hf_ner": True}
 WAVE4_KEYS = {f"{_l}_gl" for _l in _LL.GLINER_LANGS}
+# phase 11 (PCCF_PHASE11_PREREGISTRATION.md): real documents
+EN = ("en_core_web_lg", "PERSON")
+for _d, _f in (("tab", "EN_TAB_large.jsonl"), ("btc", "EN_BTC_large.jsonl"), ("wnut", "EN_WNUT_large.jsonl"),
+               ("enron", "EN_ENRON_large.jsonl")):
+    for _k in ("redact", "spacy"):
+        LANGS[f"en_{_d}_{_k}"] = {"file": _f, "model": EN, "cues": None, "layers_as": f"en_{_k}"}
+LANGS["de_germeval"] = {"file": "DE_GERMEVAL_large.jsonl", "model": ("de_core_news_md", "PER"), "cues": None,
+                        "layers_as": "de"}
+LANGS["ru_factrueval"] = {"file": "RU_FACTRUEVAL_large.jsonl", "model": ("ru_core_news_md", "PER"), "cues": None,
+                          "layers_as": "ru"}
+LANGS["ar_anercorp"] = {"file": "AR_ANERCORP_large.jsonl", "model": ("xx_ent_wiki_sm", "PER"), "cues": None,
+                        "hf_ner": True, "layers_as": "ar"}
+WAVE5_KEYS = {k for k in LANGS if k.startswith(("en_tab", "en_btc", "en_wnut"))} | {"de_germeval", "ru_factrueval",
+                                                                                  "ar_anercorp"}
+DESC_KEYS = {"en_enron_redact", "en_enron_spacy"}  # descriptive only, excluded from every verdict
 WAVE3_KEYS = {"bg", "pl", "cs", "lt", "et", "sv", "sk", "lv", "hu", "ro", "el", "da", "sl", "hr", "sr", "vi", "ms",
               "tl", "tr_mit", "ko_klue"}
 HYP = open(os.path.join(ROOT, "PCCF_PHASE5_PREREGISTRATION.md")).read().split("**Hypotheses")[1].split("**Troubleshooting")[0]
 
 
 def layers(lang, text):
+    lang = LANGS.get(lang, {}).get("layers_as", lang) if lang not in ("fr", "ru") else lang
+    if lang in ("en_redact", "en_spacy"):  # phase 11
+        import lang_layers
+        return lang_layers.scan_dict_en(lang, text), lang_layers.scan_ner_en(lang, text)
     if lang == "fr":
         import fr_detect
         import fr_ner
@@ -284,7 +303,9 @@ def main():
         say()
     wave3 = {l: r for l, r in results.items() if l in WAVE3_KEYS and r.get("rule", {}).get("eligible_groups", 0) > 0}
     wave4 = {l: r for l, r in results.items() if l in WAVE4_KEYS and r.get("rule", {}).get("eligible_groups", 0) > 0}
-    results_p5 = {l: r for l, r in results.items() if l not in WAVE3_KEYS and l not in WAVE4_KEYS}
+    wave5 = {l: r for l, r in results.items() if l in WAVE5_KEYS and r.get("rule", {}).get("eligible_groups", 0) > 0}
+    results_p5 = {l: r for l, r in results.items()
+                  if l not in WAVE3_KEYS and l not in WAVE4_KEYS and l not in WAVE5_KEYS and l not in DESC_KEYS}
     eligible = {l: r for l, r in results_p5.items() if r.get("rule", {}).get("eligible_groups", 0) > 0}
     h22 = bool(eligible) and all(r["rule"]["floors_hold"] for r in eligible.values())
     ud_ok = [l for l, r in eligible.items() if not r["LR-UD"].get("skipped") and r["LR-UD"]["floors_hold"]
@@ -315,9 +336,18 @@ def main():
         say(f"wave-4 (GLiNER) rows: {sorted(wave4)}; union F1 better than xx in: {better}; LR-UD useful+valid in: {ok34}")
         say(f"  H33: {'SUPPORTED' if h33 else 'NOT SUPPORTED'}")
         say(f"  H34: {'SUPPORTED' if h34 else 'NOT SUPPORTED'}")
+    h41 = h42 = None
+    if wave5:  # phase 11
+        h41 = all(r["rule"]["floors_hold_cv"] for r in wave5.values())
+        ok42 = [l for l, r in wave5.items() if not r["LR-UD"].get("skipped") and r["LR-UD"]["floors_hold_cv"]
+                and r["LR-UD"]["P"] - r["union"]["P"] >= 0.03]
+        h42 = len(ok42) >= len(wave5) / 2
+        say(f"phase-11 real-document rows: {sorted(wave5)}; LR-UD useful+valid in: {ok42}")
+        say(f"  H41: {'SUPPORTED' if h41 else 'NOT SUPPORTED'}")
+        say(f"  H42: {'SUPPORTED' if h42 else 'NOT SUPPORTED'}")
     tag = "_".join(langs) if a.langs != ",".join(LANGS) else "all"
     open(os.path.join(HERE, f"pccf_phase5_{tag}_results.txt"), "w").write("\n".join(lines) + "\n")
-    json.dump({"results": results, "verdicts": {"H22": h22, "H23": h23, "H28": h28, "H29": h29, "H33": h33, "H34": h34}}, open(
+    json.dump({"results": results, "verdicts": {"H22": h22, "H23": h23, "H28": h28, "H29": h29, "H33": h33, "H34": h34, "H41": h41, "H42": h42}}, open(
         os.path.join(HERE, f"pccf_phase5_{tag}_results.json"), "w"), indent=1, default=str)
     json.dump(trouble, open(os.path.join(HERE, f"TROUBLESHOOTING_{tag}.json"), "w"), indent=1, default=str,
               ensure_ascii=False)
