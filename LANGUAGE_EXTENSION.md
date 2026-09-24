@@ -1,5 +1,16 @@
 # Language Extension: Research Notes & Engineering Starting Point
 
+## Shortlist status
+
+| language | status | final numbers (dictionary-only; NER pending Docker run) |
+|---|---|---|
+| **French** | **Done (dictionary-only pass) — see `MEDDOCAN_VALIDATION_REVIEW_SUMMARY.md` Section 7** | combined: P=1.000 R=0.143 (n=11 pilot sample, 14 gold spans across PERSON/EMAIL/CREDIT_CARD) — PERSON 0/11 recall (root-caused, see below), EMAIL 1/1, CREDIT_CARD 1/2 |
+| **Russian** | **Done (dictionary-only pass) — see `MEDDOCAN_VALIDATION_REVIEW_SUMMARY.md` Section 8** | combined: P=0.905 R=0.388 (n=26 pilot sample, 49 gold spans across all 6 REDACT types) — PERSON 9/33 recall (lemmatization solved inflection; dictionary-coverage + capitalization-regex gaps root-caused), SSN(SNILS) 2/2, MRN(OMS) 3/5, IP 3/3 (with new IPv6 support), EMAIL 2/2, CREDIT_CARD 0/4 (Luhn-checksum finding replicated) |
+| **Indonesian** | **Pipeline built, evaluation blocked on data access — see `MEDDOCAN_VALIDATION_REVIEW_SUMMARY.md` Section 9** | No staged data yet — `ai4privacy/pii-masking-openpii-1.5m`'s row API returned empty across ~10 attempts (confirmed reproducible, not a one-off). Detection layer, IndoBERT-NER wiring, Docker harness, and evaluation harness are all built and will run immediately once `OpenPII_ID_raw.jsonl` is staged (exact unblock commands in `prepare_id_dataset.py`) |
+| Korean (candidate, research-only) | **Researched, not built — awaiting go-ahead** | `BCCard/privacy-filter-openpii-masking` (HF, CC-BY-4.0) found: reliable row API (10/10 rows fetched), char-offset-native, 57,851 rows, PII-shaped taxonomy (PERSON/DATE/ADDRESS/PHONE/EMAIL/ZIPCODE/CARD_NUMBER/SSN/GENERIC_ID). No code written. |
+| Mandarin (candidate, research-only) | **Researched, not built — awaiting go-ahead** | `wan9yu/pii-bench-zh` (HF, Apache-2.0) found: 8,000 synthetic rows/23,206 entities, char-offset-native with pre-verified integrity, checksum-realistic IDs (MOD-11-2/Luhn), 8 entity types. No code written. |
+| Indian language (candidate, research-only) | **Researched, not built — awaiting go-ahead** | Two candidates, serving different purposes — see "Indian language(s), researched (this pass)" below for the full trade-off. No code written. |
+
 Reference document for extending REDACT's Spanish-language adaptation
 pattern (built for MEDDOCAN validation, see `validation/real_data/`) to
 additional languages. Written after two research passes surveying nine
@@ -61,16 +72,30 @@ approach is needed; the Spanish `_CAP_RUN_RE` capitalization-run dictionary
 match and the `NlpEngineProvider`-based second-analyzer pattern both port
 directly.
 
-**The one thing NOT yet done, and the actual first engineering step:**
-CAS/ESSAI/QUAERO's license and access terms have not been verified. Do not
-build code around any of them until this is checked — this project's own
-history is the cautionary example: n2c2 looked like the right dataset and
-turned out to be blocked behind a Harvard DBMI Data Use Agreement whose
-portal was down; MEDDOCAN was found afterward specifically because it's
-CC BY 4.0 with no DUA. Check CAS/ESSAI/QUAERO's actual terms first, and if
-all three require a DUA or registration, look for a DUA-free alternative
-the same way MEDDOCAN was found for Spanish before writing any French
-detection code.
+**RESOLVED (this pass): CAS/ESSAI/QUAERO are disqualified — but not for the
+license reason this document originally flagged.** License was actually
+resolvable (QUAERO is GFDL-licensed; CAS's paper is CC BY 4.0). The real,
+more fundamental disqualifier, confirmed by fetching `DrBenchmark/QUAERO`'s
+published NER label schema directly: **none of the three annotate PII/
+de-identification spans at all.** Their label set (LIVB/PROC/ANAT/DEVI/
+CHEM/GEOG/PHYS/PHEN/DISO/OBJC) is UMLS clinical-concept categories —
+living beings, procedures, anatomy, devices, diseases — a different task
+entirely from PERSON/EMAIL/ID-number de-identification. A benchmark can be
+well-licensed and well-documented and still be unusable if it was never
+annotated for the right kind of span. Worth recording as a finding in its
+own right: the original "license NOT YET VERIFIED" framing undersold the
+actual problem.
+
+**Alternative found and used:** `ai4privacy/open-pii-masking-500k-
+ai4privacy` (Hugging Face), CC BY 4.0, `gated: false` — a genuinely
+multilingual PII-masking corpus (English, French, German, Italian,
+Spanish, Hindi, Telugu, and more) with exact-offset `privacy_mask` spans
+across a PERSON/EMAIL/phone/ID-number-shaped label taxonomy, the right
+KIND of annotation MEDDOCAN also has. A real, disclosed difference from
+MEDDOCAN: this dataset's carrier text is template/LLM-generated synthetic
+text with synthetic PII values, not real human-authored documents — see
+`validation/real_data/prepare_fr_dataset.py`'s full disclosure. Full
+writeup: `MEDDOCAN_VALIDATION_REVIEW_SUMMARY.md` Section 7.
 
 ## A real finding worth re-deriving before building the French layer
 
@@ -89,6 +114,231 @@ Varón). Expect a structurally similar but not identical dynamic for French
 `--diagnose` flag) to measure combined-vs-standalone layers and root-cause
 false positives from the start, not as an afterthought once a
 surprising number shows up.
+
+## Russian, resolved (this pass)
+
+LANGUAGE_EXTENSION.md's original research found no Russian PII/
+de-identification benchmark at all (RuMedNER/RuDReC are clinical-concept
+entity recognition, the same wrong-kind-of-annotation problem French's
+CAS/ESSAI/QUAERO candidates had). A fresh literature search this pass
+found `redmadrobot-rnd/pii_benchmark` (Hugging Face, MIT license,
+`gated: false`) — 21 PII entity types including Russian-specific
+identity-document numbers (SNILS, OMS, INN, passport, driver's license,
+military ID, birth certificate), with a real-context/synthetic-value
+provenance mix (per its own README: real production-log sentences with
+PII values replaced by synthetic equivalents, plus synthetic document
+templates and hand-filtered hard negatives).
+
+The flagged inflection gotcha was confirmed real before building around
+it: Russian surnames, patronymics, and place names inflect by grammatical
+case (e.g. "Курганской области" is genitive, not the nominative
+dictionary form), so the Spanish/French exact-string dictionary approach
+would silently miss inflected occurrences. Fixed with `pymorphy2` (MIT,
+its Russian dictionary installs via plain `pip install` in this sandbox
+— no Docker needed, unlike the NER model), lemmatizing both the
+candidate word and the dictionary before comparing. A second, genuinely
+separate finding surfaced once inflection was solved: several staged
+surnames simply aren't in Faker's `ru_RU` dictionary at all (a
+coverage gap, not a lemmatization failure) — same class of result as
+French's 0% name-dictionary overlap, now measured and root-caused rather
+than assumed. Full write-up: `MEDDOCAN_VALIDATION_REVIEW_SUMMARY.md`
+Section 8.
+
+## Indonesian, blocked on data access (this pass)
+
+Unlike French and Russian, Indonesian's blocker is genuinely different in
+kind: a license-clear, correctly-annotated candidate WAS found
+(`ai4privacy/pii-masking-openpii-1.5m`, the same dataset family used for
+French, confirmed to include `language: id`), but Hugging Face's
+`datasets-server` row API returned empty responses across roughly ten
+attempts at different offsets and both splits for this specific
+1.5M-row/4.6GB dataset — a confirmed, reproducible access-reliability
+problem, not a license or annotation-type problem. Rather than fabricate
+data or keep retrying an API already shown unreliable, the full pipeline
+(type mapping proposed from the dataset's known shared schema, name
+dictionary layer, a from-scratch HuggingFace-transformers NER wrapper
+since Indonesian has no spaCy model — the flagged gotcha, addressed
+before writing code — Docker harness, evaluation harness) was built and
+is ready to run immediately once the one remaining step — staging real
+Indonesian rows, which needs real (non-sandboxed) internet access — is
+done. Exact unblock commands: `validation/real_data/
+prepare_id_dataset.py`. Full write-up: `MEDDOCAN_VALIDATION_REVIEW_
+SUMMARY.md` Section 9.
+
+## Korean, Mandarin, and an Indian language — researched (second pass, this session)
+
+The original shortlist (French/Russian/Indonesian) is complete. The user
+then asked to check Korean, Mandarin, and an Indian language as candidates
+to *add* coverage. This section is that research pass — license, benchmark,
+tooling, per the same checklist discipline used for every prior language.
+**No detection code, Docker files, or evaluation harnesses were written for
+any of the three languages below.** This is deliberate: the project's own
+checklist (see "Checklist for the next engineering session") requires
+license/benchmark/tooling verification *before* code, and the user's
+request was framed as "check" — treated as authorization to investigate,
+not to build. Go/no-go on any of these is the user's call.
+
+### Korean
+
+**Original (first-pass) finding, still true:** no dedicated PHI/PII
+de-identification benchmark exists in the clinical sense French/Spanish
+have — `K-LegalDeID` (EACL 2026, Korean court-judgment de-identification)
+is the closest legal-domain precedent, but it's **CC BY-NC-SA 4.0**,
+non-commercial and share-alike. That's a real license-friction point this
+document flags explicitly rather than building around quietly: every
+language shipped so far (Spanish/MEDDOCAN, French, Russian) uses a
+permissively-licensed (CC-BY-4.0 or MIT) source, and REDACT itself is
+framed as open/reusable tooling. A non-commercial-restricted training/eval
+source is a different category of dependency than anything in this project
+to date, and should be a decision the user makes deliberately, not
+inherited by default.
+
+**New finding, this pass:** `BCCard/privacy-filter-openpii-masking`
+(Hugging Face, `CC-BY-4.0`, `gated: false`, `private: false`) is a
+materially better-fitting candidate than K-LegalDeID. It's a *relabeled and
+supplemented* derivative of `ai4privacy/pii-masking-openpii-1.5m`'s Korean
+rows — same parent family already used for French — but published as its
+own smaller, reliably-hosted dataset (57,851 rows, mixed Korean/English),
+so it sidesteps the exact `datasets-server` unreliability that blocked
+Indonesian's own use of the 1.5M-row parent directly (confirmed via 10/10
+successful row fetches this pass, vs. ~1/10 for the parent). Char-offset
+`privacy_mask` annotations, PII-shaped taxonomy (PERSON, DATE, ADDRESS,
+PHONE, EMAIL, ZIPCODE, CARD_NUMBER, SSN, GENERIC_ID) — the right *kind* of
+annotation, not clinical-concept NER. Tokenization complication (eojeol/
+phrase-level spacing, not word-level) is addressable: `konlpy`'s `Okt`
+tagger pip-installs and imports successfully in this sandbox.
+
+**Devil's-advocate check:** `BCCard/privacy-filter-openpii-masking` is
+itself a *derivative* of `ai4privacy/pii-masking-openpii-1.5m` — CC-BY-4.0
+requires attribution to BCCard, but worth confirming BCCard's own upstream
+attribution to ai4privacy holds up before citing this as a clean-chain
+source in any published writeup. Not verified this pass — a 10-minute
+follow-up before this dataset is actually staged, not a blocker to noting
+it as the recommended Korean candidate now.
+
+### Mandarin
+
+**Original (first-pass) finding, still true:** CCKS shared tasks exist but
+tag clinical entities (symptoms/diagnoses), the same wrong-kind-of-
+annotation problem French's CAS/ESSAI/QUAERO had — doesn't solve the
+benchmark gap on its own.
+
+**New finding, this pass:** `wan9yu/pii-bench-zh` (Hugging Face,
+`Apache-2.0`, `gated: false`, `private: false`) is a purpose-built PII
+benchmark, not a repurposed clinical-NER set. 8,000 samples / 23,206
+entities across two register subsets (5,000 formal + 3,000 noisy chat),
+100% synthetic with an explicit bilingual disclaimer, char-offset-native
+with pre-verified `text[start:end] == entity.text` integrity (no
+reconstruction needed, unlike Russian). 8 entity types (person, phone,
+id_number, bank_card, address, email, passport, license_plate) with
+**realistic checksums** — MOD-11-2 for id_number, Luhn for bank_card — a
+genuinely stronger synthetic-data discipline than several sources already
+used (recall: French/Russian's own CREDIT_CARD gold values weren't
+consistently Luhn-valid, which is exactly why REDACT's Luhn-checksum
+safeguard under-recalled on them).
+
+**Structural complication flagged first-pass, confirmed still real this
+pass:** Chinese script has no capitalization signal, so the
+`_CAP_RUN_RE`-capitalized-run-plus-dictionary architecture every other
+language's `{lang}_detect.py` uses **does not port**. `jieba.cut()` was
+smoke-tested this pass on a mixed Chinese/English/email string and
+correctly segmented a two-character name ("张伟") as one token — solves
+the no-whitespace tokenization problem — but a `zh_detect.py` would still
+need a materially different architecture (segment-then-dictionary-lookup,
+not capitalization-run-then-dictionary-lookup) from every language shipped
+so far. This is the single biggest reason Mandarin is not a drop-in
+"fourth French" even with a strong benchmark now in hand — it's a genuine
+engineering-effort outlier relative to French/Russian/Indonesian, not a
+data problem.
+
+**Devil's-advocate check:** the README states names are drawn from "50
+common surnames × 50 common given names" — a 2,500-combination name space.
+Worth empirically checking word-list diversity/collision rate before
+trusting PERSON recall numbers from this benchmark as representative,
+the same way French's near-0% Faker-dictionary-overlap and Russian's
+partial-coverage gap were measured rather than assumed. Not checked this
+pass.
+
+### Indian language(s)
+
+This one splits into two genuinely different candidates that serve
+different goals — presented as a decision point, not resolved unilaterally.
+
+**Option A — `maskflow-ai/indiapii-bench` (Hugging Face, `CC-BY-4.0`,
+`gated: false`, `private: false`).** The strongest-fitting candidate found
+in *either* research pass by several measures: single raw `.jsonl` file
+(no `datasets-server` row-API reliability risk at all — the Indonesian
+blocker and the parent Korean/Mandarin family's own flakiness structurally
+can't recur, since the whole file was fetched directly), deterministic/
+reproducible build (`seed 20260827`), 2,000 documents / 13,468 labelled
+spans, char-offset-native with clean `text[start:end]` alignment (spot-
+checked against 15 sample rows this pass, all consistent), and a
+genuinely PII-specific — not general-NER — taxonomy covering India-specific
+structured identifiers: AADHAAR (+ masked variant), PAN, GSTIN, IFSC,
+UPI_VPA, ABHA (number + address), INDIAN_MOBILE, INDIAN_PASSPORT,
+INDIAN_ADDRESS, PIN_CODE, BANK_ACCOUNT_IN, DRIVING_LICENCE, VEHICLE_REG,
+VOTER_ID, PERSON_NAME. Aadhaar/GSTIN values carry mathematically valid
+checksums (Verhoeff, GSTIN mod-36) — the same checksum-realism discipline
+found in Mandarin's `wan9yu` set, stronger than what several already-
+shipped languages' gold data had. It also ships **labelled hard negatives**
+(PII-shaped non-PII: non-Verhoeff-valid 12-digit numbers, PAN-shaped
+invoice numbers, VPA-shaped emails, timestamps) specifically so precision
+is measurable against deliberate near-misses, not just recall against true
+positives — a more rigorous eval design than any benchmark used in this
+project so far.
+
+**The catch, stated plainly:** this is not Hindi-*language* text. Per its
+own README, "English and Hinglish only; no dedicated Devanagari-only
+documents" — confirmed in the 15 sample rows read this pass: `lang` field
+values were `"en"` or `"hi-en"` (code-mixed, Latin-script Hinglish, e.g.
+"Sir maine payment bheja hai apke UPI..."), never pure Devanagari script.
+Extending REDACT with this dataset would really mean **adding an
+India-specific structured-ID regex layer to the existing English
+pipeline** (parallel to how SSN/MRN regexes are already country-specific
+patterns) — not a new foreign-script dictionary-plus-NER language pipeline
+in the shape of French/Russian/Indonesian. That's arguably an *easier* and
+lower-risk build (checksummable regexes, no lemmatization, no Faker-
+dictionary-coverage gap, no segmentation rewrite) — but it is a different
+kind of extension than "Hindi," and calling it "Indian language support"
+without this caveat would overstate what it covers. Devil's-advocate
+framing: a reviewer who reads "added Hindi support" and then finds no
+Devanagari text anywhere in the eval set has a legitimate "limited
+technical depth" complaint — the same failure mode this project's earlier
+desk rejection is explicitly trying not to repeat. Any writeup using this
+dataset must name it as "Indian structured-PII formats (English/Hinglish
+text)," not "Hindi."
+
+**Option B — `cfilt/HiNER-original` (Hugging Face, `CC-BY-SA-4.0`).**
+Genuine Hindi/Devanagari-script text (76,025 train / 10,861 validation /
+21,722 test examples, LREC 2022, expert-annotated) — the literal "Hindi
+language" candidate. But two real problems, both flagged rather than
+absorbed silently: (1) it's general NER (person/location/organization-
+style tagging, the same wrong-kind-of-annotation gap French's CAS/ESSAI/
+QUAERO and Mandarin's CCKS had), not PII/de-identification-labeled, so
+type-mapping onto REDACT's PERSON/EMAIL/SSN vocabulary would need the same
+kind of careful, partial, honestly-disclosed mapping Russian and French
+both needed for their weaker label matches. (2) `CC BY-SA-4.0` is
+**share-alike** — a new license category for this project. Every source
+used so far (MEDDOCAN's CC BY 4.0, French/Korean's CC-BY-4.0, Russian's
+MIT, Mandarin's Apache-2.0, IndiaPII-Bench's CC-BY-4.0) is a plain
+attribution or permissive license with no downstream-licensing
+obligation; share-alike would be the first source in this project that
+constrains how REDACT itself (or work built from it) can be licensed
+going forward. Worth a deliberate decision, not a default.
+
+**Recommendation, stated as a recommendation, not a decision:** if the
+goal is "detect India-specific structured PII formats," Option A
+(IndiaPII-Bench) is ready to stage today with no open license question and
+the strongest eval-rigor of anything considered across both research
+passes — build it as an India-regex layer, named accurately. If the goal
+is specifically "detect PII in Hindi-language prose," neither option fully
+delivers: Option A has no Devanagari text at all, and Option B has
+Devanagall text but the wrong annotation type and a license with a new
+downstream obligation. That gap — no clean, permissively-licensed,
+PII-labeled, Devanagari-script benchmark was found in either research
+pass — is itself worth recording as a finding, the same way "no Russian
+PHI benchmark exists" was recorded in the first pass rather than papered
+over.
 
 ## Scope note
 
@@ -120,6 +370,17 @@ finish and write up Russian before starting Indonesian. Do not work on more
 than one language at a time, and do not add a fourth language to this
 shortlist without re-running the same tooling/benchmark/license research
 this document is based on.
+
+**Update, second research pass:** the original three-language shortlist is
+now complete (French, Russian, Indonesian — see status table at top).
+Korean, Mandarin, and an Indian-language/regex-layer option have since been
+researched (license, benchmark, tooling — see the section above) at the
+user's explicit request, but **none have been built**. This document does
+not unilaterally extend the shortlist to six — that decision, including
+which (if any) of the three new candidates to build and in what order, is
+the user's to make. The same "no fourth language without re-running
+research" discipline stated above applies symmetrically here: research is
+done, code is not, and shouldn't start without explicit go-ahead.
 
 ## Checklist for the next engineering session
 

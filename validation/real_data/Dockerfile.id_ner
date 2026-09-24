@@ -1,0 +1,54 @@
+# Standalone image for the ONE thing this project's own sandbox structurally
+# cannot do: download an NLP model. Structurally DIFFERENT from
+# Dockerfile.meddocan_ner/Dockerfile.fr_ner/Dockerfile.ru_ner -- those
+# install spaCy and download a spaCy model; this one installs
+# `transformers` + `torch` and downloads a HuggingFace BERT model, because
+# Indonesian has no official spaCy model at all (see src/id_ner.py's
+# docstring for why this is the correct fix, not a workaround, and why it
+# was anticipated before writing any code rather than discovered as a
+# surprise).
+#
+# Why a SEPARATE Indonesian model, not just "unblock the existing English
+# one": same reasoning as every other language's Dockerfile in this
+# directory -- detect.py's default Presidio AnalyzerEngine loads an
+# English spaCy model, which would silently return near-zero real recall
+# on Indonesian (Latin-script but structurally different) text.
+# cahya/bert-base-indonesian-NER is fine-tuned specifically for Indonesian
+# NER.
+#
+# Usage: don't build/run this by hand -- run run_id_ner.sh from the repo
+# (any working directory; it resolves paths itself). It builds this
+# image, mounts the whole repo read-only at /app (so evaluate_id.py sees
+# your real src/, id_detect.py, id_ner.py, and staged
+# OpenPII_ID_raw.jsonl exactly as they are locally -- see
+# prepare_id_dataset.py for the CURRENT BLOCKER on staging that file, not
+# yet resolved as of this Dockerfile's writing), and tees results to a
+# file.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# transformers + torch (CPU build is sufficient -- this is inference on
+# short PII-detection sentences, not training) instead of spacy, since
+# this language's NER layer is architecturally different (see
+# src/id_ner.py's docstring). faker/pyahocorasick kept for parity with
+# id_detect.py's dictionary layer, same as every other language's image.
+RUN pip install --no-cache-dir \
+    transformers \
+    torch --index-url https://download.pytorch.org/whl/cpu \
+    faker \
+    pyahocorasick
+
+# Real network access (this is the whole point of running in Docker
+# rather than this project's own sandbox) -- downloads
+# cahya/bert-base-indonesian-NER's weights directly from the HuggingFace
+# model hub, not from this project's blocked huggingface.co allowlist gap.
+# Baked into the image at build time (unlike the spaCy Dockerfiles, which
+# download at build time too, for the same reason: avoid re-downloading
+# on every container run).
+RUN python -c "from transformers import pipeline; pipeline('ner', model='cahya/bert-base-indonesian-NER', tokenizer='cahya/bert-base-indonesian-NER')"
+
+# Source and validation code are mounted at runtime (see run_id_ner.sh)
+# rather than baked into the image, so local edits to id_detect.py /
+# evaluate_id.py / id_ner.py are picked up without a rebuild.
+CMD ["python", "/app/validation/real_data/evaluate_id.py", "--with-ner"]
