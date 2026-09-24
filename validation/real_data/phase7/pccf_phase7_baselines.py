@@ -15,6 +15,7 @@ pccf, ctx, H, P2 = P5.pccf, P5.ctx, P5.H, P5.P2
 ROWS = ["fr", "ru", "de", "it", "nl", "pt", "fi", "tr", "hi", "te", "ar_wiki", "ja", "id", "id_hf", "ko", "zh", "in",
         "ko_kdpii", "tr_mit", "ko_klue", "bg", "pl", "cs", "lt", "et", "sv", "sk", "lv", "hu", "ro", "el", "da", "sl",
         "hr", "sr", "vi", "ms", "tl"]
+GL_ROWS = ["bg_gl", "cs_gl", "et_gl", "sk_gl", "lv_gl", "hu_gl", "sr_gl", "vi_gl", "ms_gl", "tl_gl"]  # phase 7b
 OUT = os.path.join(HERE, "results")
 A = 0.05
 
@@ -83,10 +84,10 @@ def run_row(lang):
     return out
 
 
-def run(budget):
+def run(budget, rows=None):
     os.makedirs(OUT, exist_ok=True)
     t0 = time.perf_counter()
-    for lang in ROWS:
+    for lang in rows or ROWS:
         p = os.path.join(OUT, f"{lang}.json")
         if os.path.exists(p):
             continue
@@ -97,10 +98,10 @@ def run(budget):
     print("complete")
 
 
-def judge():
+def judge(rows=None, outname="PCCF_PHASE7_RESULTS.md", title="# PCCF phase 7 results: PCCF vs simpler thresholding\n"):
     L = []
     say = lambda s="": (print(s), L.append(s))  # noqa: E731
-    res = {l: json.load(open(os.path.join(OUT, f"{l}.json"))) for l in ROWS}
+    res = {l: json.load(open(os.path.join(OUT, f"{l}.json"))) for l in (rows or ROWS)}
     meths = ["B0 union", "B1 F1-tuned", "B2 global conformal", "B3 p>=0.5", "PCCF"]
     viol = {m: [0, 0] for m in meths}
     marg = [0, 0]
@@ -127,7 +128,7 @@ def judge():
         b1_trade += b1["P"] > pc["P"] and b1["R"] < pc["R"]
         per_row.append("| " + " | ".join(line) + " |")
     rate = {m: viol[m][0] / viol[m][1] for m in meths}
-    say("# PCCF phase 7 results: PCCF vs simpler thresholding\n")
+    say(title)
     say(f"Cells (row × group with n_true_test ≥ 19): {viol['PCCF'][1]} across {len(res)} rows.\n")
     say("| method | floor violations | rate | mean ΔP vs union | mean ΔR vs union |")
     say("|---|---|---|---|---|")
@@ -143,12 +144,17 @@ def judge():
     for x in per_row:
         say(x)
     say(f"\n=== Verdicts (mechanical) ===\n  H30: {'SUPPORTED' if h30 else 'NOT SUPPORTED'}\n  H31: {'SUPPORTED' if h31 else 'NOT SUPPORTED'}")
-    open(os.path.join(HERE, "..", "..", "..", "PCCF_PHASE7_RESULTS.md"), "w").write("\n".join(L) + "\n")
+    open(os.path.join(HERE, "..", "..", "..", outname), "w").write("\n".join(L) + "\n")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--budget", type=float, default=40)
     ap.add_argument("--judge", action="store_true")
+    ap.add_argument("--b", action="store_true", help="phase 7b: all 48 rows (38 + GLiNER)")
     a = ap.parse_args()
-    judge() if a.judge else run(a.budget)
+    rows = ROWS + GL_ROWS if a.b else None
+    if a.judge:
+        judge(rows, *(("PCCF_PHASE7B_RESULTS.md", "# PCCF phase 7b results: 48 rows (38 + 10 GLiNER)\n") if a.b else ()))
+    else:
+        run(a.budget, rows)
