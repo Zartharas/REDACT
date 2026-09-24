@@ -255,3 +255,47 @@ phase-5 floor, shown for comparison only).
 7. **H24 again.** The global fallback's precision (ro +0.449, el +0.301)
    comes from dropping small-group recall. Fail-open stays the redaction
    default.
+
+
+## Wave 4: GLiNER NER for the ten xx rows (amendment 7; author's Docker run, 2026-09-24)
+
+All ten `_gl` rows were cached with 0 errors, at about 4.4 docs/s on CPU (vi
+2.8 docs/s). All earlier rows reproduced unchanged: H22, H23, H28 and H29 are
+still SUPPORTED.
+
+| lang | union P / R, xx NER | union P / R, GLiNER | LR-UD P on GLiNER (ΔP / ΔR) | combined floor |
+|---|---|---|---|---|
+| bg | 0.476 / 0.457 | **0.710 / 0.607** | 0.863 (+0.153 / −0.031) | ok |
+| cs | 0.388 / 0.444 | **0.767 / 0.622** | 0.927 (+0.160 / −0.037) | ok (old floor: miss) |
+| et | 0.418 / 0.421 | **0.730 / 0.585** | 0.904 (+0.174 / −0.029) | ok |
+| sk | 0.414 / 0.422 | **0.746 / 0.594** | 0.867 (+0.121 / −0.023) | ok |
+| lv | 0.369 / 0.428 | **0.743 / 0.614** | 0.929 (+0.186 / −0.032) | ok |
+| hu | 0.356 / 0.436 | **0.696 / 0.562** | 0.818 (+0.122 / −0.032) | ok |
+| sr | 0.319 / 0.400 | **0.775 / 0.616** | 0.913 (+0.138 / −0.036) | ok |
+| vi | 0.197 / 0.361 | **0.643 / 0.568** | 0.738 (+0.095 / −0.022) | ok |
+| ms | 0.197 / 0.433 | **0.664 / 0.596** | 0.867 (+0.203 / −0.028) | ok |
+| tl | 0.438 / 0.558 | **0.616 / 0.622** | 0.717 (+0.101 / −0.034) | **miss** ({ner} 0.91, n = 550) |
+
+**Mechanical verdicts:**
+
+- **H33 SUPPORTED (10/10).** Union F1 improves in every language. Precision
+  and recall both rise, e.g. vi 0.197/0.361 → 0.643/0.568 and sr 0.319 →
+  0.775 precision.
+- **H34 SUPPORTED.** The rule scorer's combined floors hold in all 10.
+  LR-UD is useful and valid in 9 of 10. vi and ms, which PCCF could not help
+  with the xx model (+0.024 / +0.022), now gain +0.095 and +0.203.
+
+**Findings:**
+
+1. **This confirms the phase-5 lesson directly.** PCCF needs a usable NER
+   layer. With one, every one of these languages reaches LR-UD precision of
+   0.74–0.93, against 0.22–0.61 before.
+2. **The tl_gl floor miss is split shift.** An *exploratory* re-run of the
+   phase-6 diagnostic, not pre-registered, gave {ner} recall 0.951 ± 0.002
+   under pooled splits and 0.929 ± 0.002 under the original train→validation
+   protocol. That is the same signature as it, hi and id_hf.
+3. **Rule scorer on et_gl and sk_gl.** It costs about 0.035 recall for no
+   precision gain. It stays within its floor, but here the rule scorer's
+   cues do not suit GLiNER's candidates.
+4. **Cost.** GLiNER runs at about 4 docs/s on CPU, about 10× slower than
+   spaCy md. That matters for telemetry throughput.
