@@ -27,7 +27,7 @@
 >
 > **H39 SUPPORTED: the labelling budget.**
 >
-> - **Floor:** it holds in 97.0 % of draws once a group has ≥ 100 true
+> - **Floor:** it holds in 96.9 % of draws once a group has ≥ 100 true
 >   calibration names. Because the combined floor already accounts for
 >   calibration size, it holds at about 97 % in every bin, even 19–49.
 > - **Tightness improves with more labels.** The 5th-percentile recall rises
@@ -61,7 +61,7 @@ Rows with a fail-open group: 36; drop decisions: 5 in 5 rows.
 | el | {dict} 99/0; u=0.037 | 0/155 | 0.730/0.278 | 0.883/0.278 |
 | hu_gl | {dict} 83/0; u=0.043 | 0/150 | 0.818/0.530 | 0.901/0.530 |
 | in | {dict} 310/1; u=0.015 | 3/564 | 0.489/0.564 | 0.945/0.562 |
-| pt | {dict} 320/3; u=0.027 | 2/457 | 0.619/0.393 | 0.893/0.392 |
+| pt | {dict} 320/3; u=0.027 | 2/457 | 0.619/0.393 | 0.893/0.393 |
 | vi_gl | {dict} 184/2; u=0.034 | 13/338 | 0.738/0.546 | 0.889/0.541 |
 
 ## Part B: labelling budget (pooled splits, seeds 1-10)
@@ -70,9 +70,9 @@ Rows with a fail-open group: 36; drop decisions: 5 in 5 rows.
 |---|---|---|---|---|
 | 19–49 | 932 | 97.2% | 0.964 | 0.886 |
 | 50–99 | 692 | 97.4% | 0.961 | 0.908 |
-| 100–199 | 578 | 96.9% | 0.954 | 0.916 |
+| 100–199 | 578 | 96.9% | 0.955 | 0.916 |
 | 200–399 | 460 | 96.5% | 0.954 | 0.925 |
-| 400–+ | 443 | 97.5% | 0.953 | 0.932 |
+| 400–+ | 443 | 97.3% | 0.953 | 0.932 |
 
 | row | full-calibration ΔP (median) | smallest f with main group ≥ 100 true | ΔP there (median) | ratio |
 |---|---|---|---|---|
@@ -89,15 +89,15 @@ Rows with a fail-open group: 36; drop decisions: 5 in 5 rows.
 | zh | +0.114 | 0.4 | +0.111 | 0.97 |
 | in | +0.257 | 0.4 | +0.258 | 1.00 |
 | tr_mit | +0.156 | 0.05 | +0.043 | 0.28 |
-| bg | +0.105 | 0.2 | +0.110 | 1.06 |
+| bg | +0.105 | 0.2 | +0.104 | 1.00 |
 | pl | +0.212 | 0.2 | +0.207 | 0.97 |
-| cs | +0.103 | 0.2 | +0.071 | 0.68 |
+| cs | +0.099 | 0.2 | +0.071 | 0.71 |
 | lt | +0.164 | 0.2 | +0.145 | 0.88 |
 | et | +0.107 | 0.2 | +0.100 | 0.94 |
 | sv | +0.108 | 0.4 | +0.089 | 0.83 |
-| sk | +0.096 | 0.2 | +0.096 | 1.01 |
+| sk | +0.099 | 0.2 | +0.096 | 0.98 |
 | lv | +0.100 | 0.2 | +0.079 | 0.79 |
-| hu | +0.146 | 0.2 | +0.118 | 0.81 |
+| hu | +0.147 | 0.2 | +0.118 | 0.80 |
 | ro | +0.247 | 0.4 | +0.245 | 0.99 |
 | el | +0.109 | 0.4 | +0.110 | 1.00 |
 | da | +0.151 | 0.2 | +0.161 | 1.06 |
@@ -115,7 +115,7 @@ Rows with a fail-open group: 36; drop decisions: 5 in 5 rows.
 | ms_gl | +0.194 | 0.2 | +0.175 | 0.91 |
 | tl_gl | +0.085 | 0.2 | +0.077 | 0.91 |
 
-Floor holds for n_cal_true ≥ 100: 1436/1481 (97.0%); rows reaching ≥ 80 % of full gain at the ≥ 100-name budget: 34/38
+Floor holds for n_cal_true ≥ 100: 1435/1481 (96.9%); rows reaching ≥ 80 % of full gain at the ≥ 100-name budget: 34/38
 
 === Verdicts (mechanical) ===
   H38: NOT SUPPORTED (a=True, b=True, c=False)

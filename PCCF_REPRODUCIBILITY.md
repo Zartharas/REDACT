@@ -1,5 +1,22 @@
 # PCCF reproducibility status (2026-09-24)
 
+> **Update (same day): Docker is now the reference environment.** The
+> clean-room Docker outputs of phases 6–10A from `run_pccf_repro_p5to10.sh`
+> (run of 2026-09-24, runner commit 0a69b81) replaced the host-computed
+> result files. The results documents were regenerated from them. All 19
+> verdicts are unchanged. Three headline figures moved at the third decimal:
+>
+> | figure | host value | Docker value |
+> |---|---|---|
+> | phase 7, B1 mean ΔP | +0.234 | +0.236 |
+> | phase 8, ACI mean ΔP vs PCCF | +0.0004 (worst −0.026) | +0.0006 (worst −0.027) |
+> | phase 9, floor hold at ≥ 100 names | 97.0 % | 96.9 % |
+>
+> Re-running the Docker runner now compares Docker with Docker, so the
+> strict check is expected to pass. Host runs of phases 6–10 are for
+> development only.
+
+
 | scope | how | result |
 |---|---|---|
 | Phases 1–3 | `run_pccf_docker.sh`: full clean-room rerun, every stored number within 0.005 | **PASS**, three times |
