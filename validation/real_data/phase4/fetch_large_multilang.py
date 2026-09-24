@@ -253,7 +253,11 @@ def fetch_generic(lang, out):
 # ---------------------------------------------------------------------------
 AI4P_500K = "ai4privacy/open-pii-masking-500k-ai4privacy"
 AI4P_15M = "ai4privacy/pii-masking-openpii-1.5m"
-AI4P_GROUPS = {AI4P_500K: ("de", "it", "nl", "hi", "te"), AI4P_15M: ("id", "ja", "pt", "fi")}
+AI4P_GROUPS = {AI4P_500K: ("de", "it", "nl", "hi", "te"),
+               AI4P_15M: ("id", "ja", "pt", "fi",
+                          # amendment 6, wave 3
+                          "bg", "pl", "cs", "lt", "et", "sv", "sk", "lv", "hu", "ro", "el", "da", "sl", "hr",
+                          "sr", "vi", "ms", "tl")}
 AI4P_CAPS = {"train": 2000, "validation": 1500}
 
 
@@ -463,6 +467,48 @@ def ar_wiki(out):
     return {"rows": len(rows), "per_spans": per, "source": "unimelb-nlp/wikiann:ar"}
 
 
+def ko_klue(out):
+    """amendment 6: open Korean PERSON gold while K-LegalDeID is pending.
+    KLUE-NER (klue/klue, config "ner", CC BY-SA 4.0): news/wiki sentences,
+    character-level tokens, PS = person. 2,000 train + 1,500 validation rows,
+    matching the ai4privacy caps. Not PII-style text; disclosed as such."""
+    from datasets import load_dataset
+    rows, bad = [], 0
+    for split, k in (("train", 2000), ("validation", 1500)):
+        ds = load_dataset("klue/klue", "ner", split=split)
+        names = ds.features["ner_tags"].feature.names
+        for i, r in enumerate(ds.select(range(min(k, len(ds))))):
+            toks = [("" if t is None else str(t)).replace("\xa0", " ") for t in r["tokens"]]
+            tags = [names[t] for t in r["ner_tags"]]
+            if len(toks) != len(tags):
+                bad += 1
+                continue
+            text, offs, pos = "".join(toks), [], 0
+            for t in toks:
+                offs.append((pos, pos + len(t)))
+                pos += len(t)
+            ents, cur = [], None
+            for (a, b), tag in zip(offs, tags):
+                if tag == "O":
+                    cur = None
+                    continue
+                typ = tag.split("-", 1)[-1]
+                if tag.startswith("B-") or cur is None or cur["t"] != typ:
+                    cur = {"t": typ, "o": [a, b]}
+                    ents.append(cur)
+                else:
+                    cur["o"][1] = b
+            for en in ents:
+                en["s"] = text[en["o"][0]:en["o"][1]].strip()
+            rows.append({"split": split, "id": f"ko-klue-{split}-{i}", "text": text, "ents": ents})
+    with open(os.path.join(out, "KO_KLUE_large.jsonl"), "w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    ps = sum(1 for r in rows for e in r["ents"] if e["t"] == "PS")
+    print(f"  KO_KLUE: {len(rows)} rows, PS spans {ps}, dropped {bad}")
+    return {"rows": len(rows), "ps_spans": ps, "dropped_len_mismatch": bad, "source": "klue/klue:ner (CC BY-SA 4.0)"}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -474,7 +520,7 @@ def main():
     man = json.load(open(mp)) if os.path.exists(mp) else {}
     only = set(a.only.split(",")) if a.only else None
     jobs = [("fr", fr), ("ru", ru)] + [(lg, (lambda out, lg=lg: fetch_generic(lg, out))) for lg in SOURCES] \
-        + [("ko_kdpii", fetch_kdpii), ("ar_wiki", ar_wiki)]
+        + [("ko_kdpii", fetch_kdpii), ("ar_wiki", ar_wiki), ("ko_klue", ko_klue)]
     for ds_id, group in AI4P_GROUPS.items():
         want = [l for l in group if not only or l in only]
         if want:

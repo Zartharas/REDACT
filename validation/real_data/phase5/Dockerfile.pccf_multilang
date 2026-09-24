@@ -20,3 +20,7 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 # build (then rebuilt for every document). Quiet the HF progress bars/log noise.
 RUN pip install --no-cache-dir protobuf
 ENV TRANSFORMERS_VERBOSITY=error HF_HUB_DISABLE_PROGRESS_BARS=1 TOKENIZERS_PARALLELISM=false
+# amendment 6, wave 3: spaCy 3.8 pipelines for the wave-3 languages that have one
+RUN for m in pl_core_news_md sv_core_news_md lt_core_news_md ro_core_news_md el_core_news_md \
+             da_core_news_md sl_core_news_md hr_core_news_md; do \
+      python -m spacy download ${m}-3.8.0 --direct || exit 1; done

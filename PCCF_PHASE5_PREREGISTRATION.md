@@ -203,3 +203,42 @@ publication.
    silver; and the HF NER model may have seen similar Wikipedia data during
    training. It counts towards H22/H23 eligibility like any other row but
    is flagged as a proxy in the results table.
+
+## Amendment 6 (2026-09-24, before any wave-3, tr_mit or ko_klue data was fetched): wave 3 + licence and Korean substitutes
+
+**New rows (20):**
+
+1. **Wave 3: 18 ai4privacy openpii-1.5m languages.** bg, pl, cs, lt, et, sv, sk,
+   lv, hu, ro, el, da, sl, hr, sr, vi, ms, tl. Caps: 2,000 train + 1,500
+   validation, the same as wave 2.
+   - **NER:** spaCy 3.8 `*_core_news_md` where it exists (pl `persName`, sv
+     `PRS`, lt/ro/el `PERSON`, da/sl/hr `PER`). Otherwise the multilingual
+     `xx_ent_wiki_sm`, which is the `id` baseline pattern and expected to be
+     noisy (id: {ner} P = 0.118): bg, cs, et, sk, lv, hu, sr, vi, ms, tl.
+   - **Dictionary:** Faker person lists (all first/middle/last lists) over
+     script-agnostic capitalised-word runs. Faker has no sr, ms or tl
+     provider, so those borrow hr_HR, id_ID and es_ES + en_US; this is
+     disclosed as an approximation. Some lists are small (vi 24 tokens, pl 155).
+2. **tr_mit.** The same Turkish data as `tr`, with the MIT-licensed
+   `akdeniz27/bert-base-turkish-cased-ner` instead of the unlicensed savasy
+   model. If it performs comparably, it becomes the publishable Turkish row.
+3. **ko_klue.** KLUE-NER (`klue/klue`, config `ner`, CC BY-SA 4.0): 2,000
+   train + 1,500 validation sentences, character tokens, PS = person. It is an
+   openly licensed Korean stand-in while K-LegalDeID is pending. It is
+   news/wiki text, not PII-style text, and is disclosed as such.
+
+**Hypotheses for these 20 rows:** they are judged as a separate family.
+H22/H23 remain computed over the original rows only.
+
+- **H28 (validity):** the rule scorer's per-group floors hold in every eligible
+  new row, using the phase-6 forward floor
+  `0.95 − 2·sqrt(α(1−α)(1/n_cal_true + 1/n_test_true))`.
+- **H29 (utility):** LR-UD gains ≥ +0.03 precision over union, with its floors
+  (same combined floor) holding in at least half of the eligible new rows.
+- Eligibility, α = 0.05, fail-open fallback and min_group_true = 19 are
+  unchanged. The old floor is also printed for comparison but is not judged.
+- **Code note:** the new floor needs per-group calibration counts, so
+  `evaluate()` now also records `cal_true` and `floors_hold_cv`. This is
+  additive. Re-evaluating the existing caches on the host reproduces every
+  phase-5 verdict. pt LR-UD moves by 0.0003, which is a numpy/BLAS platform
+  difference that is also seen without the edit.

@@ -62,6 +62,9 @@ LANGS = {
     "te": {"file": "TE_OpenPII_large.jsonl", "model": ("xx_ent_wiki_sm", "PER"), "cues": None, "hf_ner": True},
     # amendment 4: second Indonesian row, IndoBERT NER (the project's own id_ner.py model) instead of xx
     "id_hf": {"file": "ID_OpenPII_large.jsonl", "model": ("xx_ent_wiki_sm", "PER"), "cues": None, "hf_ner": True},
+    # amendment 6: MIT-licensed Turkish NER (akdeniz27) on the same data; KLUE-NER Korean (CC BY-SA 4.0)
+    "tr_mit": {"file": "TR_kvkk_large.jsonl", "model": ("xx_ent_wiki_sm", "PER"), "cues": None, "hf_ner": True},
+    "ko_klue": {"file": "KO_KLUE_large.jsonl", "model": ("ko_core_news_md", "PS"), "cues": None, "layers_as": "ko"},
     # KDPII (Zenodo 10.5281/zenodo.10968609, CC BY 4.0): open Korean dialogue PII corpus.
     "ko_kdpii": {"file": "KO_KDPII_large.jsonl", "model": ("ko_core_news_md", "PS"), "cues": None, "layers_as": "ko"},
     # K-LegalDeID: CC BY-NC-SA, research-only, obtained from the authors, gitignored
@@ -69,6 +72,12 @@ LANGS = {
     "ko_legal": {"file": os.path.join("..", "restricted", "KO_LEGAL_K-LegalDeID.jsonl"),
                  "model": ("ko_core_news_md", "PS"), "cues": None, "layers_as": "ko"},
 }
+# amendment 6, wave 3: 18 more ai4privacy openpii-1.5m languages (baseline layers in src/lang_layers.py)
+import lang_layers as _LL  # noqa: E402
+for _l in ("bg", "pl", "cs", "lt", "et", "sv", "sk", "lv", "hu", "ro", "el", "da", "sl", "hr", "sr", "vi", "ms", "tl"):
+    LANGS[_l] = {"file": f"{_l.upper()}_OpenPII_large.jsonl", "model": _LL.NER_MODEL[_l], "cues": None}
+WAVE3_KEYS = {"bg", "pl", "cs", "lt", "et", "sv", "sk", "lv", "hu", "ro", "el", "da", "sl", "hr", "sr", "vi", "ms",
+              "tl", "tr_mit", "ko_klue"}
 HYP = open(os.path.join(ROOT, "PCCF_PHASE5_PREREGISTRATION.md")).read().split("**Hypotheses")[1].split("**Troubleshooting")[0]
 
 
@@ -231,9 +240,14 @@ def evaluate(lang, say):
         fbk = {"+".join(sorted(k)): st["fallback"] for k, st in model.stats.items()}
         elig = {k: d for k, d in ch.items() if d["n_true"] >= 19}
         floors = all(d["cand_recall"] >= 0.95 - 2 * (0.05 * 0.95 / d["n_true"]) ** 0.5 for d in elig.values())
-        res[name] = {**m, "checks": ch, "fallback": fbk, "floors_hold": floors, "eligible_groups": len(elig)}
+        # amendment 6 / phase-6 forward rule: floor also accounts for calibration-set size
+        cal_true = collections.Counter("+".join(sorted(c.mask)) for r in c2 for c, y in zip(r["cands"], r["labels"]) if y)
+        floors_cv = all(d["cand_recall"] >= 0.95 - 2 * (0.05 * 0.95 * (1 / max(cal_true.get(k, 0), 1) + 1 / d["n_true"])) ** 0.5
+                        for k, d in elig.items())
+        res[name] = {**m, "checks": ch, "fallback": fbk, "floors_hold": floors, "floors_hold_cv": floors_cv,
+                     "cal_true": dict(cal_true), "eligible_groups": len(elig)}
         say(f"  {name:34s} P={m['P']:.3f} ({m['P']-mu['P']:+.3f}) R={m['R']:.3f} ({m['R']-mu['R']:+.3f}) "
-            f"floors={'ok' if floors else 'FAIL'} (eligible groups {len(elig)}) fallback={fbk}  "
+            f"floors={'ok' if floors else 'FAIL'} floors_cv={'ok' if floors_cv else 'FAIL'} (eligible groups {len(elig)}) fallback={fbk}  "
             + " | ".join(f"{k}: rec={d['cand_recall']:.2f}/n={d['n_true']}" for k, d in sorted(ch.items())
                          if d["cand_recall"] is not None))
     rep["status"] = "ok"
@@ -263,7 +277,9 @@ def main():
         if res:
             results[lang] = res
         say()
-    eligible = {l: r for l, r in results.items() if r.get("rule", {}).get("eligible_groups", 0) > 0}
+    wave3 = {l: r for l, r in results.items() if l in WAVE3_KEYS and r.get("rule", {}).get("eligible_groups", 0) > 0}
+    results_p5 = {l: r for l, r in results.items() if l not in WAVE3_KEYS}
+    eligible = {l: r for l, r in results_p5.items() if r.get("rule", {}).get("eligible_groups", 0) > 0}
     h22 = bool(eligible) and all(r["rule"]["floors_hold"] for r in eligible.values())
     ud_ok = [l for l, r in eligible.items() if not r["LR-UD"].get("skipped") and r["LR-UD"]["floors_hold"]
              and r["LR-UD"]["P"] - r["union"]["P"] >= 0.03]
@@ -273,9 +289,18 @@ def main():
     say("=== Verdicts (mechanical) ===" + (f"  PROVISIONAL: no results for {missing}" if missing else ""))
     say(f"  H22: {'SUPPORTED' if h22 else 'NOT SUPPORTED'}")
     say(f"  H23: {'SUPPORTED' if h23 else 'NOT SUPPORTED'}")
+    h28 = h29 = None
+    if wave3:  # amendment 6: judged separately, with the phase-6 combined-variance floor
+        h28 = all(r["rule"]["floors_hold_cv"] for r in wave3.values())
+        ok29 = [l for l, r in wave3.items() if not r["LR-UD"].get("skipped") and r["LR-UD"]["floors_hold_cv"]
+                and r["LR-UD"]["P"] - r["union"]["P"] >= 0.03]
+        h29 = len(ok29) >= len(wave3) / 2
+        say(f"wave-3 eligible: {sorted(wave3)}; LR-UD useful+valid (combined floor) in: {ok29}")
+        say(f"  H28: {'SUPPORTED' if h28 else 'NOT SUPPORTED'}")
+        say(f"  H29: {'SUPPORTED' if h29 else 'NOT SUPPORTED'}")
     tag = "_".join(langs) if a.langs != ",".join(LANGS) else "all"
     open(os.path.join(HERE, f"pccf_phase5_{tag}_results.txt"), "w").write("\n".join(lines) + "\n")
-    json.dump({"results": results, "verdicts": {"H22": h22, "H23": h23}}, open(
+    json.dump({"results": results, "verdicts": {"H22": h22, "H23": h23, "H28": h28, "H29": h29}}, open(
         os.path.join(HERE, f"pccf_phase5_{tag}_results.json"), "w"), indent=1, default=str)
     json.dump(trouble, open(os.path.join(HERE, f"TROUBLESHOOTING_{tag}.json"), "w"), indent=1, default=str,
               ensure_ascii=False)

@@ -34,7 +34,20 @@ NER_MODEL = {"id": ("xx_ent_wiki_sm", "PER"), "ko": ("ko_core_news_md", "PS"),
              "zh": ("zh_core_web_md", "PERSON"), "in": ("en_core_web_lg", "PERSON"),
              # phase 5, second wave (see PCCF_PHASE5_PREREGISTRATION.md amendment 3)
              "de": ("de_core_news_md", "PER"), "it": ("it_core_news_md", "PER"), "nl": ("nl_core_news_md", "PERSON"),
-             "pt": ("pt_core_news_md", "PER"), "fi": ("fi_core_news_md", "PERSON"), "ja": ("ja_core_news_md", "PERSON")}
+             "pt": ("pt_core_news_md", "PER"), "fi": ("fi_core_news_md", "PERSON"), "ja": ("ja_core_news_md", "PERSON"),
+             # phase 5, wave 3 (amendment 6): spaCy 3.8 pipelines where one exists ...
+             "pl": ("pl_core_news_md", "persName"), "sv": ("sv_core_news_md", "PRS"), "lt": ("lt_core_news_md", "PERSON"),
+             "ro": ("ro_core_news_md", "PERSON"), "el": ("el_core_news_md", "PERSON"), "da": ("da_core_news_md", "PER"),
+             "sl": ("sl_core_news_md", "PER"), "hr": ("hr_core_news_md", "PER"),
+             # ... and the multilingual xx model (the `id` baseline pattern) where none does
+             **{l: ("xx_ent_wiki_sm", "PER") for l in ("bg", "cs", "et", "sk", "lv", "hu", "sr", "vi", "ms", "tl")}}
+
+# amendment 6: dictionary locales for wave 3. Faker has no sr/ms/tl person
+# provider, so those borrow the closest one (disclosed in the pre-registration).
+WAVE3_LOCALES = {"bg": ("bg_BG",), "pl": ("pl_PL",), "cs": ("cs_CZ",), "lt": ("lt_LT",), "et": ("et_EE",),
+                 "sv": ("sv_SE",), "sk": ("sk_SK",), "lv": ("lv_LV",), "hu": ("hu_HU",), "ro": ("ro_RO",),
+                 "el": ("el_GR",), "da": ("da_DK",), "sl": ("sl_SI",), "hr": ("hr_HR",),
+                 "sr": ("hr_HR",), "vi": ("vi_VN",), "ms": ("id_ID",), "tl": ("es_ES", "en_US")}
 
 # Languages with no usable spaCy NER. spaCy's multilingual xx_ent_wiki_sm found
 # nothing on Arabic and tagged Hindi words as MISC when smoke-tested, so these
@@ -49,7 +62,8 @@ HF_NER = {"ar": "Davlan/xlm-roberta-base-ner-hrl",
           # embedded in Devanagari/Telugu text, so a multilingual Latin-capable NER fits
           # the data. Davlan XLM-R: AFL-3.0, ungated.
           "hi": "Davlan/xlm-roberta-base-ner-hrl", "te": "Davlan/xlm-roberta-base-ner-hrl",
-          "tr": "savasy/bert-base-turkish-ner-cased",  # model card shows NO licence: research use only, flag it
+          "tr": "savasy/bert-base-turkish-ner-cased",
+          "tr_mit": "akdeniz27/bert-base-turkish-cased-ner",  # amendment 6: MIT-licensed alternative  # model card shows NO licence: research use only, flag it
           # amendment 4: second Indonesian row with the project's own IndoBERT (id_ner.py MODEL_NAME)
           "id_hf": "cahya/bert-base-indonesian-NER"}
 
@@ -213,10 +227,51 @@ def _scan_latin_multi(text, tag):
             if any(len(w) >= 3 and _norm(w) in names for w in m.group(0).split())]
 
 
+_WORD = re.compile(r"[^\W\d_][\w'’-]*")
+
+
+def _cap_runs(text, max_len=4):
+    """Script-agnostic runs of up to max_len adjacent capitalised words
+    (works for Latin, Cyrillic and Greek alike)."""
+    out, run = [], []
+    for m in list(_WORD.finditer(text)) + [None]:
+        ok = m is not None and m.group(0)[0].isupper()
+        adjacent = ok and run and text[run[-1].end():m.start()] == " " and len(run) < max_len
+        if ok and (adjacent or not run):
+            run.append(m)
+            continue
+        if run:
+            out.append(run)
+        run = [m] if ok else []
+    return out
+
+
+@lru_cache(maxsize=32)
+def _wave3_names(lang):
+    # Wider than _locale_names (left unchanged so earlier waves reproduce):
+    # every first/middle/last-name list the provider defines, male/female too.
+    import importlib
+    names = set()
+    for loc in WAVE3_LOCALES[lang]:
+        P = importlib.import_module(f"faker.providers.person.{loc}").Provider
+        for attr in dir(P):
+            if attr.startswith(("first_name", "last_name", "middle_name")) and attr.endswith(("s", "names")):
+                v = getattr(P, attr)
+                if isinstance(v, (tuple, list, dict, set, frozenset)):
+                    names |= {t for n in v if isinstance(n, str) for t in _norm(n).split()}
+    return frozenset(names)
+
+
 def scan_dict(lang, text):
     hits = []
     if lang == "id_hf":
         lang = "id"
+    if lang == "tr_mit":
+        lang = "tr"
+    if lang in WAVE3_LOCALES:
+        names = _wave3_names(lang)
+        return [{"type": "PERSON", "start": r[0].start(), "end": r[-1].end(), "method": f"dict:{lang}"}
+                for r in _cap_runs(text) if any(len(m.group(0)) >= 3 and _norm(m.group(0)) in names for m in r)]
     if lang == "id":
         import id_detect
         return [h for h in id_detect.scan_indonesian_names(text) if h["type"] == "PERSON"]
