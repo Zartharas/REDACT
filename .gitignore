@@ -127,3 +127,4 @@ validation/real_data/docker_repro_p5to10/ref/
 validation/real_data/docker_repro_p5to10/*.log
 validation/real_data/datasets/manual/
 validation/real_data/phase11/docker_out/*.log
+_to_delete/

@@ -24,7 +24,7 @@ if [[ -n "${MISSING}" ]]; then
   echo "== fetching: ${MISSING}"
   docker run --rm --name redact-pccf-fetch ${HF_ENV} -v "${REPO}:/src:ro" -v "${DATA}:/data" -v "${MANUAL}:/manual:ro" \
     -v "${P5}/docker_run/hf_cache:/root/.cache/huggingface" redact-pccf-multilang \
-    python /src/validation/real_data/phase11/fetch_phase11.py --out /data --only "${MISSING}" --anercorp-dir /manual/anercorp \
+    python /src/validation/real_data/phase11/fetch_phase11.py --out /data --only "${MISSING}" --anercorp-dir /manual/anercorp --enron-dir /manual/enron \
     2>&1 | grep -v "Generating\|Warning: You are sending" | tee "${OUT}/fetch.log"
 fi
 echo "== detection layers + evaluation (progress below)"

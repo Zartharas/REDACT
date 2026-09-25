@@ -1,4 +1,4 @@
-# PCCF: one-page results index (phases 1–10)
+# PCCF: one-page results index (phases 1–11)
 
 *Index as of 2026-09-24, branch `pccf-research`. Every verdict below is
 mechanical and pre-registered unless it is marked* exploratory. *Phases
@@ -53,6 +53,9 @@ Code: `src/pccf.py`.
 | H39 | 9 | Labelling budget of about 100 true names per group | ✅ | floor 96.9 %; 34/38 rows ≥ 80 % of gain | PCCF_PHASE9_RESULTS.md |
 | H40 | 10A | ACI with 10 % sampled audits on telemetry | ✅ (modest) | violations 3 → 2 (0 with full feedback) | PCCF_PHASE10A_RESULTS.md |
 | — | 10B | Throughput (descriptive) | — | PCCF filter ≈ 2 vCPU-s per 1M lines; NER dominates | PCCF_PHASE10B_RESULTS.md |
+| H41 | 11 | Rule floors hold on real documents | ✅ | 8/8 (TAB, BTC, WNUT-17, GermEval, FactRuEval) | PCCF_PHASE11_RESULTS.md |
+| H42 | 11 | LR-UD useful and valid on real documents | ✅ | 6/8 (wnut_redact: shift miss, ACI fixes; factrueval: gain +0.012) | PCCF_PHASE11_RESULTS.md |
+| H43 | 11 | TAB direct identifiers kept once proposed | ✅ | 0.978 / 0.980 of covered (end-to-end 0.944 / 0.955) | PCCF_PHASE11_RESULTS.md |
 
 *Exploratory, not judged:* the phase-2 global alert certificate (E1); the
 T7 E2/E3 rows; the H17b real-name population; the tl_gl split diagnostic
@@ -78,8 +81,9 @@ T7 E2/E3 rows; the H17b real-name population; the tl_gl split diagnostic
 - **Scope of the guarantee:** per candidate and marginal. It does not cover
   names no layer proposes, and it breaks under shift.
 - **Data realism:** most multilingual rows are synthetic (ai4privacy). Real
-  documents so far: MEDDOCAN, KDPII dialogue, and WikiANN/KLUE proxies. Real
-  data is proposed for phase 11.
+  documents: MEDDOCAN, KDPII dialogue, WikiANN/KLUE proxies, and (phase 11)
+  TAB court judgments, BTC and WNUT-17 tweets, GermEval and FactRuEval news.
+  Enron email and ANERcorp are not yet run.
 - **Licensing:** the Turkish savasy model has no licence. The MIT
   replacement (`tr_mit`) is weaker.
 - **Numeric sensitivity:** cross-platform floating point moves single cells

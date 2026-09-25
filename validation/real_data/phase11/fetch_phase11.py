@@ -2,15 +2,18 @@
 redact-pccf-multilang image (needs network) or locally for the parsers.
 Writes <out>/{EN_TAB,EN_BTC,EN_WNUT,EN_ENRON,DE_GERMEVAL,RU_FACTRUEVAL,AR_ANERCORP}_large.jsonl
 and <out>/PHASE11_MANIFEST.json. Rows: {"split","id","text","ents":[{"t","o":[s,e],"s", ...}]}.
-  python fetch_phase11.py --out <datasets/large> [--only tab,btc,...] [--anercorp-dir <manual dir>]
+  python fetch_phase11.py --out <datasets/large> [--only tab,btc,...] [--anercorp-dir <manual dir>] [--enron-dir <manual dir>]
 """
 import argparse, collections, glob, io, json, os, random, re, sys, urllib.request, zipfile
 
 CAP = {"train": 2000, "other": 1500}
 TAB_URL = "https://raw.githubusercontent.com/NorskRegnesentral/text-anonymization-benchmark/master/echr_{}.json"
 FRE_URL = "https://codeload.github.com/dialogue-evaluation/factRuEval-2016/zip/refs/heads/master"
-ENRON_URLS = ["http://hevra.haifa.ac.il/~is-web/images/lecturers_files/einat_files/EnronMeetings-Minorthird.zip",
-              "http://hevra.haifa.ac.il/~is-web/images/lecturers_files/einat_files/EnronRandom-Minorthird.zip"]
+ENRON_FILES = {"meetings": "EnronMeetings-Minorthird.zip", "random": "EnronRandom-Minorthird.zip"}
+ENRON_BASES = ["http://hevra.haifa.ac.il/~is-web/images/lecturers_files/einat_files/",
+               "https://hevra.haifa.ac.il/~is-web/images/lecturers_files/einat_files/",
+               "https://is-web.hevra.haifa.ac.il/images/lecturers_files/einat_files/",
+               "http://is-web.hevra.haifa.ac.il/images/lecturers_files/einat_files/"]
 
 
 def _get(url, timeout=120):
@@ -201,12 +204,43 @@ def parse_minorthird(zbytes, tag):
                   "zip_members_sample": names[:8]}
 
 
-def fetch_enron(out):
+def _enron_zip(fname, manual_dir, diag):
+    """Manual copy first (datasets/manual/enron/<fname>), then each mirror; accept only real zips."""
+    if manual_dir and os.path.exists(os.path.join(manual_dir, fname)):
+        b = open(os.path.join(manual_dir, fname), "rb").read()
+        if b[:2] == b"PK":
+            diag.append({"file": fname, "source": "manual"})
+            return b
+        diag.append({"file": fname, "source": "manual", "error": "not a zip", "head": b[:120].decode("latin-1")})
+    for base in ENRON_BASES:
+        url = base + fname
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (research; PCCF phase 11)"})
+            with urllib.request.urlopen(req, timeout=300) as r:
+                b, final, ctype = r.read(), r.geturl(), r.headers.get("Content-Type")
+        except Exception as ex:  # noqa: BLE001
+            diag.append({"url": url, "error": repr(ex)[:200]})
+            continue
+        if b[:2] == b"PK":
+            diag.append({"url": url, "final_url": final, "bytes": len(b)})
+            return b
+        diag.append({"url": url, "final_url": final, "content_type": ctype, "bytes": len(b),
+                     "head": b[:200].decode("latin-1", "replace")})
+    raise RuntimeError(f"no zip for {fname}; put it in datasets/manual/enron/ (diagnostics in manifest)")
+
+
+def fetch_enron(out, manual_dir=None):
     rows, info = [], {"source": "Minkov et al. Enron-Meetings/Random (no licence stated)"}
-    for url, tag in zip(ENRON_URLS, ("meetings", "random")):
-        r, i = parse_minorthird(_get(url, 300), tag)
-        rows += r
-        info[tag] = i
+    diag = []
+    try:
+        for tag, fname in ENRON_FILES.items():
+            r, i = parse_minorthird(_enron_zip(fname, manual_dir, diag), tag)
+            rows += r
+            info[tag] = i
+    finally:
+        for d in diag:
+            print(f"  enron probe: {d}", flush=True)
+    info["probes"] = diag
     return write(out, "EN_ENRON_large.jsonl", rows, info)
 
 
@@ -241,6 +275,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--only", default="tab,btc,wnut,germeval,factrueval,enron,anercorp")
     ap.add_argument("--anercorp-dir", default=None)
+    ap.add_argument("--enron-dir", default=None)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     mp = os.path.join(a.out, "PHASE11_MANIFEST.json")
@@ -251,7 +286,7 @@ def main():
             "germeval": lambda: fetch_hf_bio(a.out, ["GermanEval/germeval_14", "germeval_14"], "DE_GERMEVAL_large.jsonl",
                                              "germeval", {"PER"}),
             "factrueval": lambda: fetch_factrueval(a.out),
-            "enron": lambda: fetch_enron(a.out),
+            "enron": lambda: fetch_enron(a.out, a.enron_dir),
             "anercorp": lambda: fetch_anercorp(a.out, a.anercorp_dir)}
     for k in a.only.split(","):
         try:
