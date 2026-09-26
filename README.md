@@ -5,6 +5,7 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![Docker Compose](https://img.shields.io/badge/docker-compose-2496ED.svg?logo=docker&logoColor=white)
 ![Validated at 1M lines](https://img.shields.io/badge/load--tested-1%2C000%2C000%20lines-success.svg)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21829173.svg)](https://doi.org/10.5281/zenodo.21829173)
 
 PII/PHI detection and anonymization for heterogeneous security telemetry. A three-layer detection ensemble (regex, Microsoft Presidio NER, Shannon entropy) sits behind a taxonomy-driven anonymization router (redaction, keyed pseudonymization, reversible tokenization) and a field-level drift detector that catches a field silently starting to carry personal data it never carried before.
 
@@ -42,6 +43,26 @@ Every number in this README came out of an actual executed run, not a projection
 *Real output, not staged — a tokenize/detokenize round trip and the syslog coverage test suite, both run against this exact codebase.*
 
 This is the reference implementation behind two related but separately written pieces of work: a practitioner-oriented book chapter and an empirical research paper. Check each publication for its own scope — this repo is the shared technical foundation underneath both, not a copy of either.
+
+## Repository layout
+
+```
+src/                    Detection, anonymization, drift, service, PCCF (src/pccf.py)
+tests/                  Unit + integration test suite (pytest)
+validation/             Real-data and synthetic evaluation harnesses (real_data/, load_test/, piibench/, ...)
+docs/
+  pccf/                 PCCF phase pre-registrations, results, and PCCF_SUMMARY.md (start here for PCCF)
+  research/             Algorithm design, taxonomy, detection-policy scoping, language-extension research
+  ops/                  Cloud deployment setup
+  internal/             Working logs (BUGS_AND_FIXES.md, ROADMAP.md) -- history, not navigation
+infra/
+  config/, logstash/, redis/, monitoring/, dags/, wasm/   Docker Compose service configs, mounted at build/run time
+requirements/           Optional-dependency requirement files (redis.txt, kafka.txt, fpe.txt, vault.txt, airflow.txt)
+scripts/load_tests/     Load and failover test scripts (run_*.sh)
+assets/                 README images/GIFs and generated result charts
+Dockerfile, docker-compose*.yml   Container build and orchestration (repo root, required by Docker convention)
+CITATION.cff, .zenodo.json        Citation/DOI metadata (repo root, required by GitHub/Zenodo convention)
+```
 
 ## Does this actually work? Run this and see.
 

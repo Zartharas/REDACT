@@ -20,6 +20,10 @@ Code: `src/pccf.py`.
 
 ## Verdicts
 
+![PCCF hypothesis verdicts, phases 1-11](../../assets/pccf_verdict_summary.png)
+![Phase 11 real-document validation](../../assets/pccf_phase11_realdoc_validation.png)
+
+
 | # | phase | claim (short) | verdict | key number | file |
 |---|---|---|---|---|---|
 | — | 1 | Presence patterns separate precision regimes (MEDDOCAN) | descriptive | {dict+ner} 0.94 vs {dict} 0.15 / {ner} 0.10 | PCCF_FEASIBILITY_RESULTS.md |
