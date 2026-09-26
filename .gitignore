@@ -142,3 +142,8 @@ output/pccf_meddocan_*.json
 output/splunk_upload/
 output/loglake_upload/
 output/loglake_downloaded/
+
+# Research-strategy notes, private/pre-decisional (see contents: "Go/no-go
+# on building anything described here is the user's call") -- kept local,
+# not part of the published release.
+PUBLICATION_STRATEGY.md
