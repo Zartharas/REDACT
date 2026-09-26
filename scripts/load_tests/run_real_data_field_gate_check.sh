@@ -4,8 +4,8 @@
 # datasets/ folder from the first run is reused (no re-download needed).
 #
 # Run from the repo root:
-#   chmod +x run_real_data_field_gate_check.sh
-#   ./run_real_data_field_gate_check.sh
+#   chmod +x scripts/load_tests/run_real_data_field_gate_check.sh
+#   ./scripts/load_tests/run_real_data_field_gate_check.sh
 set -euo pipefail
 
 git push origin main   # publish the key= excision fix first

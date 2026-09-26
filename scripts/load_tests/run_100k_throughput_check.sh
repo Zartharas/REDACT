@@ -6,8 +6,8 @@
 # corpus gives real statistical power on the same controlled comparison.
 #
 # Run from the repo root:
-#   chmod +x run_100k_throughput_check.sh
-#   ./run_100k_throughput_check.sh
+#   chmod +x scripts/load_tests/run_100k_throughput_check.sh
+#   ./scripts/load_tests/run_100k_throughput_check.sh
 set -euo pipefail
 
 git push origin main   # publish the field-gated production-wiring commit first

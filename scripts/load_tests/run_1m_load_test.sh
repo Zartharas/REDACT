@@ -13,8 +13,8 @@
 # reason to rewrite something that already works.
 #
 # Run from the repo root:
-#   chmod +x run_1m_load_test.sh
-#   ./run_1m_load_test.sh
+#   chmod +x scripts/load_tests/run_1m_load_test.sh
+#   ./scripts/load_tests/run_1m_load_test.sh
 #
 # Needs Docker Desktop running, several GB of free disk space, and takes
 # a while -- the last 1,000,000-line run took ~75 minutes end to end.

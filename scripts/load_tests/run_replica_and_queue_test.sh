@@ -28,12 +28,12 @@
 # all containers healthy) rather than this fix, since the fix hadn't been
 # written yet -- this script still asks for 3 below now that the fix is
 # in place; if your host is memory-constrained, override with
-# `GUNICORN_WORKERS=1 ./run_replica_and_queue_test.sh` or edit the
+# `GUNICORN_WORKERS=1 ./scripts/load_tests/run_replica_and_queue_test.sh` or edit the
 # --scale value down to 2, same workaround as before.
 #
 # Needs Docker Desktop running. Run from the repo root:
-#   chmod +x run_replica_and_queue_test.sh
-#   ./run_replica_and_queue_test.sh
+#   chmod +x scripts/load_tests/run_replica_and_queue_test.sh
+#   ./scripts/load_tests/run_replica_and_queue_test.sh
 set -euo pipefail
 
 touch .env

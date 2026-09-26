@@ -70,7 +70,7 @@ RG="redact-lb-test"
 #   az policy assignment list --output json | python3 -c \
 #     "import sys,json; [print(a['displayName'], a.get('parameters',{}).get('listOfAllowedLocations',{}).get('value')) for a in json.load(sys.stdin) if 'listOfAllowedLocations' in a.get('parameters',{})]"
 # then pass it as this script's first argument, e.g.:
-#   ./run_azure_lb_test.sh westus2
+#   ./scripts/load_tests/run_azure_lb_test.sh westus2
 LOCATION="${1:-eastus}"
 # VM_SIZE, made overridable 2026-09-06 after a second real live finding:
 # Standard_B1s hit `(SkuNotAvailable)` in northcentralus -- Azure's
@@ -304,7 +304,7 @@ for i in 1 2; do
         echo "genuinely capacity- or quota-constrained for this subscription right now."
         echo "Next step: try a different allowed region from Bug (a)'s discovery command"
         echo "in BUGS_AND_FIXES.md, e.g.:"
-        echo "  ./run_azure_lb_test.sh westus"
+        echo "  ./scripts/load_tests/run_azure_lb_test.sh westus"
         exit 1
     fi
 done

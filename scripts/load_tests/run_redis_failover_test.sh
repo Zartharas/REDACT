@@ -26,8 +26,8 @@
 # for what actually would be a red flag.
 #
 # Needs Docker Desktop running. Run from the repo root:
-#   chmod +x run_redis_failover_test.sh
-#   ./run_redis_failover_test.sh
+#   chmod +x scripts/load_tests/run_redis_failover_test.sh
+#   ./scripts/load_tests/run_redis_failover_test.sh
 set -euo pipefail
 
 touch .env

@@ -54,8 +54,8 @@
 # scale.
 #
 # Run from the repo root:
-#   chmod +x run_5m_load_test.sh
-#   ./run_5m_load_test.sh
+#   chmod +x scripts/load_tests/run_5m_load_test.sh
+#   ./scripts/load_tests/run_5m_load_test.sh
 #
 # Needs Docker Desktop running, and takes a while -- plan for several
 # hours based on the 1,000,000-line runs' own measured rates (see the

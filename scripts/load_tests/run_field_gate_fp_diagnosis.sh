@@ -7,8 +7,8 @@
 # positive so we can see the actual mechanism, not guess at it.
 #
 # Run from the repo root:
-#   chmod +x run_field_gate_fp_diagnosis.sh
-#   ./run_field_gate_fp_diagnosis.sh
+#   chmod +x scripts/load_tests/run_field_gate_fp_diagnosis.sh
+#   ./scripts/load_tests/run_field_gate_fp_diagnosis.sh
 set -euo pipefail
 
 git push origin main   # publish the diagnostic script + doc corrections first
