@@ -1,0 +1,34 @@
+{
+  "title": "REDACT: PII/PHI Detection and Anonymization for Security Telemetry",
+  "description": "<p>PII/PHI detection and anonymization for heterogeneous security telemetry. A three-layer detection ensemble (regex, Microsoft Presidio NER, Shannon entropy) sits behind a taxonomy-driven anonymization router (redaction, keyed pseudonymization, reversible tokenization) and a field-level drift detector.</p><p>Includes PCCF (Presence-Conditioned Conformal Fusion), a per-group conformal calibration method for multi-layer PII candidate fusion, mechanically validated across 11 research phases on synthetic and real documents (TAB, Broad Twitter Corpus, WNUT-17, GermEval, FactRuEval, ANERcorp, MEDDOCAN, and more). See PCCF_SUMMARY.md in the repository for the full hypothesis index.</p><p>No real personal data is included anywhere in this repository; all detection is validated against synthetic corpora (fixed random seed) or publicly licensed research benchmarks, each cited with its own license in the results documents.</p>",
+  "creators": [
+    {
+      "name": "Singh, Aman Kumar",
+      "alias": "Zartharas",
+      "affiliation": "Independent Researcher",
+      "orcid": "0009-0008-9752-3743"
+    }
+  ],
+  "license": "MIT",
+  "upload_type": "software",
+  "access_right": "open",
+  "keywords": [
+    "PII detection",
+    "PHI detection",
+    "anonymization",
+    "pseudonymization",
+    "tokenization",
+    "security telemetry",
+    "conformal prediction",
+    "named entity recognition",
+    "privacy engineering"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/Zartharas/REDACT",
+      "relation": "isSupplementTo",
+      "resource_type": "software",
+      "scheme": "url"
+    }
+  ]
+}

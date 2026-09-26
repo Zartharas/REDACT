@@ -128,3 +128,17 @@ validation/real_data/docker_repro_p5to10/*.log
 validation/real_data/datasets/manual/
 validation/real_data/phase11/docker_out/*.log
 _to_delete/
+
+# Runtime state/caches from local demo runs (service.py, pccf_phase*.py) --
+# same "generated, not hand-authored" category as the audit-log entries
+# above; flagged 2026-09-26 before the v0.3.1 Zenodo release so none of
+# this local run state (which can include a token store / real ingested
+# log samples) ends up in the archived release tarball.
+output/token_store.json*
+output/audit_log.jsonl
+output/anonymized.jsonl
+output/pccf_phase*.json
+output/pccf_meddocan_*.json
+output/splunk_upload/
+output/loglake_upload/
+output/loglake_downloaded/
