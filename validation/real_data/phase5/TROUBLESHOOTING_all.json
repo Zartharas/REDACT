@@ -1,0 +1,265 @@
+{
+ "fr": {
+  "lang": "fr",
+  "docs": 3500,
+  "docs_uncached_or_error": 0,
+  "gold_person": 3601,
+  "label_inventory": [
+   [
+    "GIVENNAME",
+    2652
+   ],
+   [
+    "SURNAME",
+    949
+   ],
+   [
+    "TELEPHONENUM",
+    546
+   ],
+   [
+    "CITY",
+    522
+   ],
+   [
+    "TIME",
+    516
+   ],
+   [
+    "EMAIL",
+    474
+   ],
+   [
+    "DATE",
+    365
+   ],
+   [
+    "STREET",
+    359
+   ],
+   [
+    "BUILDINGNUM",
+    326
+   ],
+   [
+    "IDCARDNUM",
+    300
+   ],
+   [
+    "TITLE",
+    253
+   ],
+   [
+    "AGE",
+    193
+   ],
+   [
+    "ZIPCODE",
+    154
+   ],
+   [
+    "PASSPORTNUM",
+    114
+   ],
+   [
+    "TAXNUM",
+    90
+   ],
+   [
+    "SEX",
+    86
+   ],
+   [
+    "CREDITCARDNUMBER",
+    75
+   ],
+   [
+    "SOCIALNUM",
+    71
+   ],
+   [
+    "DRIVERLICENSENUM",
+    52
+   ],
+   [
+    "GENDER",
+    51
+   ]
+  ],
+  "person_labels_matched": [
+   "GIVENNAME",
+   "SURNAME"
+  ],
+  "dict_hits": 145,
+  "ner_hits": 2213,
+  "test_patterns": {
+   "dict": {
+    "n": 32,
+    "true": 9,
+    "precision": 0.28125,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 31,
+    "true": 28,
+    "precision": 0.9032258064516129,
+    "ner_conf_mean_true": 0.8207832142857143,
+    "ner_conf_mean_false": 0.6669886666666667,
+    "ner_conf_auroc_within_pattern": 0.47619047619047616
+   },
+   "ner": {
+    "n": 908,
+    "true": 702,
+    "precision": 0.7731277533039648,
+    "ner_conf_mean_true": 0.8951555427350427,
+    "ner_conf_mean_false": 0.8043554466019417,
+    "ner_conf_auroc_within_pattern": 0.7350461925704644
+   }
+  },
+  "status": "ok"
+ },
+ "ru": {
+  "lang": "ru",
+  "docs": 2841,
+  "docs_uncached_or_error": 0,
+  "gold_person": 1264,
+  "label_inventory": [
+   [
+    "FIRST_NAME",
+    499
+   ],
+   [
+    "PASSPORT",
+    494
+   ],
+   [
+    "LAST_NAME",
+    457
+   ],
+   [
+    "DRIVER_LICENSE",
+    371
+   ],
+   [
+    "BIRTH_CERTIFICATE",
+    341
+   ],
+   [
+    "CITY",
+    339
+   ],
+   [
+    "MIDDLE_NAME",
+    308
+   ],
+   [
+    "MILITARY_ID",
+    278
+   ],
+   [
+    "INN",
+    263
+   ],
+   [
+    "COUNTRY",
+    242
+   ],
+   [
+    "SNILS",
+    223
+   ],
+   [
+    "EMAIL",
+    221
+   ],
+   [
+    "URL",
+    206
+   ],
+   [
+    "CREDIT_CARD",
+    203
+   ],
+   [
+    "REGION",
+    176
+   ],
+   [
+    "PHONE",
+    173
+   ],
+   [
+    "STREET",
+    171
+   ],
+   [
+    "OMS",
+    170
+   ],
+   [
+    "HOUSE",
+    163
+   ],
+   [
+    "DISTRICT",
+    161
+   ],
+   [
+    "IP_ADDRESS",
+    155
+   ]
+  ],
+  "person_labels_matched": [
+   "FIRST_NAME",
+   "LAST_NAME",
+   "MIDDLE_NAME"
+  ],
+  "dict_hits": 425,
+  "ner_hits": 693,
+  "test_patterns": {
+   "dict": {
+    "n": 38,
+    "true": 20,
+    "precision": 0.5263157894736842,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 162,
+    "true": 158,
+    "precision": 0.9753086419753086,
+    "ner_conf_mean_true": 0.8763725063291139,
+    "ner_conf_mean_false": 0.8164425,
+    "ner_conf_auroc_within_pattern": 0.7911392405063291
+   },
+   "ner": {
+    "n": 167,
+    "true": 71,
+    "precision": 0.4251497005988024,
+    "ner_conf_mean_true": 0.8682107746478873,
+    "ner_conf_mean_false": 0.72560046875,
+    "ner_conf_auroc_within_pattern": 0.706205985915493
+   }
+  },
+  "status": "ok"
+ },
+ "id": {
+  "lang": "id",
+  "status": "no data"
+ },
+ "ko": {
+  "lang": "ko",
+  "status": "no data"
+ },
+ "zh": {
+  "lang": "zh",
+  "status": "no data"
+ },
+ "in": {
+  "lang": "in",
+  "status": "no data"
+ }
+}

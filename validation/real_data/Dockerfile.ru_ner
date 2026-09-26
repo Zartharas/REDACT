@@ -1,0 +1,55 @@
+# Standalone image for the ONE thing this project's own sandbox structurally
+# cannot do: download a spaCy NER model. Everything else about the Russian
+# PII evaluation (regex, ru_detect.py's pymorphy2-lemmatized dictionary
+# layer, scoring) already runs fine without Docker -- unlike the Spanish/
+# French versions, even the LEMMATIZATION step needed no Docker here
+# (pymorphy2 installs directly via pip in this sandbox, see ru_detect.py's
+# docstring) -- this image exists only to add the Russian NER condition
+# (`ru-ner` / `full`) to evaluate_ru.py's results.
+#
+# Why a SEPARATE Russian model, not just "unblock the existing English
+# one": the Russian PII sample's carrier text is Cyrillic. Presidio's
+# default AnalyzerEngine (used everywhere else in this project, see
+# detect.py's own _get_analyzer()) loads an English spaCy model -- running
+# it against Russian text would not error, but would silently produce
+# near-zero real PERSON recall, which would look like "NER doesn't help
+# here" when the real story is "wrong model was loaded." ru_core_news_md
+# is spaCy's medium Russian pipeline (NER-capable with PER/LOC/ORG labels
+# -- Presidio's built-in SpacyRecognizer maps "PER" -> PERSON automatically,
+# same label-mapping logic already used for English/Spanish/French).
+#
+# Usage: don't build/run this by hand -- run run_ru_ner.sh from the repo
+# (any working directory; it resolves paths itself). It builds this image,
+# mounts the whole repo read-only at /app (so evaluate_ru.py sees your
+# real src/, ru_detect.py, ru_ner.py, and staged OpenRU_PII_raw.jsonl
+# exactly as they are locally), and tees results to a file.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Only what evaluate_ru.py + ru_ner.py + ru_detect.py actually need. Note
+# pymorphy2/pymorphy2-dicts-ru are installed here too so the SAME
+# environment can run the full 5-condition evaluation (not just the NER
+# conditions) in one container, even though pymorphy2 itself doesn't
+# strictly need Docker (see ru_detect.py's docstring) -- keeps
+# run_ru_ner.sh's single container self-sufficient rather than requiring
+# two different environments for one evaluation run.
+RUN pip install --no-cache-dir \
+    presidio-analyzer \
+    presidio-anonymizer \
+    faker \
+    pyahocorasick \
+    spacy \
+    pymorphy2 \
+    pymorphy2-dicts-ru
+
+# Real network access (this is the whole point of running in Docker rather
+# than this project's own sandbox) -- downloads spaCy's medium Russian
+# pipeline directly from spaCy's own model release, not from this
+# project's blocked huggingface.co/github.com allowlist gap.
+RUN python -m spacy download ru_core_news_md
+
+# Source and validation code are mounted at runtime (see run_ru_ner.sh)
+# rather than baked into the image, so local edits to ru_detect.py /
+# evaluate_ru.py / ru_ner.py are picked up without a rebuild.
+CMD ["python", "/app/validation/real_data/evaluate_ru.py", "--with-ner"]

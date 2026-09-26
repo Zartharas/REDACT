@@ -1,0 +1,2892 @@
+{
+ "sanity": {
+  "union": {
+   "tp": 2013,
+   "fp": 3117,
+   "fn": 72,
+   "P": 0.39239766081871347,
+   "R": 0.9654676258992806,
+   "F1": 0.558004158004158,
+   "F2": 0.7472160356347439
+  },
+  "dict-only (layer alone)": {
+   "tp": 1901,
+   "fp": 2110,
+   "fn": 184,
+   "P": 0.4739466467215158,
+   "R": 0.9117505995203837,
+   "F1": 0.6236876640419948,
+   "F2": 0.7695733139017084
+  },
+  "ner-only (layer alone)": {
+   "tp": 1693,
+   "fp": 1112,
+   "fn": 392,
+   "P": 0.6035650623885918,
+   "R": 0.8119904076738609,
+   "F1": 0.6924335378323108,
+   "F2": 0.7595334230596681
+  }
+ },
+ "pattern_table": {
+  "dict": {
+   "n": 2182,
+   "true": 332,
+   "precision": 0.152153987167736,
+   "ner_conf_mean_true": null,
+   "ner_conf_mean_false": null,
+   "ner_conf_auroc_within_pattern": null
+  },
+  "dict+ner": {
+   "n": 1682,
+   "true": 1582,
+   "precision": 0.9405469678953626,
+   "ner_conf_mean_true": 0.9437941656131479,
+   "ner_conf_mean_false": 0.79207087,
+   "ner_conf_auroc_within_pattern": 0.5872534766118837
+  },
+  "ner": {
+   "n": 1119,
+   "true": 112,
+   "precision": 0.10008936550491511,
+   "ner_conf_mean_true": 0.9488376428571429,
+   "ner_conf_mean_false": 0.7870519831181728,
+   "ner_conf_auroc_within_pattern": 0.6062783728188396
+  }
+ },
+ "primary": {
+  "union": {
+   "metrics": {
+    "tp": 467,
+    "fp": 690,
+    "fn": 15,
+    "P": 0.40363007778738114,
+    "R": 0.9688796680497925,
+    "F1": 0.5698596705308113,
+    "F2": 0.7568881685575364
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": null
+  },
+  "dict-only (layer alone)": {
+   "metrics": {
+    "tp": 439,
+    "fp": 445,
+    "fn": 43,
+    "P": 0.49660633484162897,
+    "R": 0.9107883817427386,
+    "F1": 0.6427525622254759,
+    "F2": 0.7805832147937412
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": null
+  },
+  "ner-only (layer alone)": {
+   "metrics": {
+    "tp": 403,
+    "fp": 261,
+    "fn": 79,
+    "P": 0.6069277108433735,
+    "R": 0.8360995850622407,
+    "F1": 0.7033158813263526,
+    "F2": 0.7773919753086418
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": null
+  },
+  "intersection (agreement only)": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": null
+  },
+  "PCCF coverage a=0.05 nested=False score=presidio": {
+   "metrics": {
+    "tp": 467,
+    "fp": 690,
+    "fn": 15,
+    "P": 0.40363007778738114,
+    "R": 0.9688796680497925,
+    "F1": 0.5698596705308113,
+    "F2": 0.7568881685575364
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.05,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": 0.0,
+      "calib_kept": 1724,
+      "calib_precision_kept": 0.154292343387471,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 846,
+      "calib_precision_kept": 0.09929078014184398,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.10 nested=False score=presidio": {
+   "metrics": {
+    "tp": 467,
+    "fp": 690,
+    "fn": 15,
+    "P": 0.40363007778738114,
+    "R": 0.9688796680497925,
+    "F1": 0.5698596705308113,
+    "F2": 0.7568881685575364
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.1,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": 0.0,
+      "calib_kept": 1724,
+      "calib_precision_kept": 0.154292343387471,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 846,
+      "calib_precision_kept": 0.09929078014184398,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.20 nested=False score=presidio": {
+   "metrics": {
+    "tp": 467,
+    "fp": 690,
+    "fn": 15,
+    "P": 0.40363007778738114,
+    "R": 0.9688796680497925,
+    "F1": 0.5698596705308113,
+    "F2": 0.7568881685575364
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.2,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": 0.0,
+      "calib_kept": 1724,
+      "calib_precision_kept": 0.154292343387471,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 846,
+      "calib_precision_kept": 0.09929078014184398,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.50 nested=False score=presidio": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.5,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.60 nested=False score=presidio": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.6,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.70 nested=False score=presidio": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.7,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.80 nested=False score=presidio": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.8,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.05 nested=True score=presidio": {
+   "metrics": {
+    "tp": 467,
+    "fp": 690,
+    "fn": 15,
+    "P": 0.40363007778738114,
+    "R": 0.9688796680497925,
+    "F1": 0.5698596705308113,
+    "F2": 0.7568881685575364
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.05,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": 0.0,
+      "calib_kept": 3016,
+      "calib_precision_kept": 0.488395225464191,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 2138,
+      "calib_precision_kept": 0.6038353601496725,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.10 nested=True score=presidio": {
+   "metrics": {
+    "tp": 467,
+    "fp": 690,
+    "fn": 15,
+    "P": 0.40363007778738114,
+    "R": 0.9688796680497925,
+    "F1": 0.5698596705308113,
+    "F2": 0.7568881685575364
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.1,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": 0.0,
+      "calib_kept": 3016,
+      "calib_precision_kept": 0.488395225464191,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 2138,
+      "calib_precision_kept": 0.6038353601496725,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.20 nested=True score=presidio": {
+   "metrics": {
+    "tp": 467,
+    "fp": 690,
+    "fn": 15,
+    "P": 0.40363007778738114,
+    "R": 0.9688796680497925,
+    "F1": 0.5698596705308113,
+    "F2": 0.7568881685575364
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.2,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": 0.0,
+      "calib_kept": 3016,
+      "calib_precision_kept": 0.488395225464191,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 2138,
+      "calib_precision_kept": 0.6038353601496725,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.50 nested=True score=presidio": {
+   "metrics": {
+    "tp": 403,
+    "fp": 296,
+    "fn": 79,
+    "P": 0.5765379113018598,
+    "R": 0.8360995850622407,
+    "F1": 0.6824724809483489,
+    "F2": 0.7670346402740769
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.5,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 2138,
+      "calib_precision_kept": 0.6038353601496725,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.60 nested=True score=presidio": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.6,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.70 nested=True score=presidio": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.7,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.80 nested=True score=presidio": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.8,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.15000000000000002,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.05 nested=False score=beam": {
+   "metrics": {
+    "tp": 452,
+    "fp": 682,
+    "fn": 30,
+    "P": 0.3985890652557319,
+    "R": 0.9377593360995851,
+    "F1": 0.5594059405940593,
+    "F2": 0.7380796864794252
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 373,
+     "kept_true": 360
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.05,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.771037,
+      "calib_kept": 1215,
+      "calib_precision_kept": 0.9448559670781893,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": 0.0,
+      "calib_kept": 1724,
+      "calib_precision_kept": 0.154292343387471,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": 1.0,
+      "calib_kept": 846,
+      "calib_precision_kept": 0.09929078014184398,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.10 nested=False score=beam": {
+   "metrics": {
+    "tp": 430,
+    "fp": 608,
+    "fn": 52,
+    "P": 0.4142581888246628,
+    "R": 0.8921161825726142,
+    "F1": 0.5657894736842106,
+    "F2": 0.724881995954147
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 351,
+     "kept_true": 339
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 204,
+     "kept_true": 27
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.1,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.0,
+      "calib_kept": 1162,
+      "calib_precision_kept": 0.9466437177280551,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": 0.0,
+      "calib_kept": 1724,
+      "calib_precision_kept": 0.154292343387471,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": 0.0,
+      "calib_kept": 622,
+      "calib_precision_kept": 0.12379421221864952,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.20 nested=False score=beam": {
+   "metrics": {
+    "tp": 430,
+    "fp": 608,
+    "fn": 52,
+    "P": 0.4142581888246628,
+    "R": 0.8921161825726142,
+    "F1": 0.5657894736842106,
+    "F2": 0.724881995954147
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 351,
+     "kept_true": 339
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 204,
+     "kept_true": 27
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.2,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.0,
+      "calib_kept": 1162,
+      "calib_precision_kept": 0.9466437177280551,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": 0.0,
+      "calib_kept": 1724,
+      "calib_precision_kept": 0.154292343387471,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": 0.0,
+      "calib_kept": 622,
+      "calib_precision_kept": 0.12379421221864952,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.50 nested=False score=beam": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.5,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 1.0,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.60 nested=False score=beam": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.6,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 1.0,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.70 nested=False score=beam": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.7,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 1.0,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.80 nested=False score=beam": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": false,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.8,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 1.0,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     },
+     "dict": {
+      "n": 1724,
+      "n_true": 266,
+      "calib_precision_all": 0.154292343387471,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 846,
+      "n_true": 84,
+      "calib_precision_all": 0.09929078014184398,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.05 nested=True score=beam": {
+   "metrics": {
+    "tp": 452,
+    "fp": 639,
+    "fn": 30,
+    "P": 0.4142988084326306,
+    "R": 0.9377593360995851,
+    "F1": 0.5746980292434838,
+    "F2": 0.7485922490891023
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 373,
+     "kept_true": 360
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 230,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.05,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": 0.0,
+      "calib_kept": 3016,
+      "calib_precision_kept": 0.488395225464191,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": 0.792378,
+      "calib_kept": 1914,
+      "calib_precision_kept": 0.6415882967607106,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.771037,
+      "calib_kept": 1215,
+      "calib_precision_kept": 0.9448559670781893,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.10 nested=True score=beam": {
+   "metrics": {
+    "tp": 430,
+    "fp": 608,
+    "fn": 52,
+    "P": 0.4142581888246628,
+    "R": 0.8921161825726142,
+    "F1": 0.5657894736842106,
+    "F2": 0.724881995954147
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 351,
+     "kept_true": 339
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 204,
+     "kept_true": 27
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.1,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": 0.0,
+      "calib_kept": 3016,
+      "calib_precision_kept": 0.488395225464191,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": 0.0,
+      "calib_kept": 1784,
+      "calib_precision_kept": 0.6597533632286996,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.0,
+      "calib_kept": 1162,
+      "calib_precision_kept": 0.9466437177280551,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF coverage a=0.20 nested=True score=beam": {
+   "metrics": {
+    "tp": 430,
+    "fp": 608,
+    "fn": 52,
+    "P": 0.4142581888246628,
+    "R": 0.8921161825726142,
+    "F1": 0.5657894736842106,
+    "F2": 0.724881995954147
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 458,
+     "kept_true": 66
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 351,
+     "kept_true": 339
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 204,
+     "kept_true": 27
+    }
+   },
+   "model": {
+    "mode": "coverage",
+    "alpha": 0.2,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": null,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": 0.0,
+      "calib_kept": 3016,
+      "calib_precision_kept": 0.488395225464191,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": 0.0,
+      "calib_kept": 1784,
+      "calib_precision_kept": 0.6597533632286996,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 0.0,
+      "calib_kept": 1162,
+      "calib_precision_kept": 0.9466437177280551,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.50 nested=True score=beam": {
+   "metrics": {
+    "tp": 403,
+    "fp": 296,
+    "fn": 79,
+    "P": 0.5765379113018598,
+    "R": 0.8360995850622407,
+    "F1": 0.6824724809483489,
+    "F2": 0.7670346402740769
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 273,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.5,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": 1.0,
+      "calib_kept": 2138,
+      "calib_precision_kept": 0.6038353601496725,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 1.0,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.60 nested=True score=beam": {
+   "metrics": {
+    "tp": 403,
+    "fp": 253,
+    "fn": 79,
+    "P": 0.614329268292683,
+    "R": 0.8360995850622407,
+    "F1": 0.7082601054481547,
+    "F2": 0.779798761609907
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 230,
+     "kept_true": 28
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.6,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": 0.960791,
+      "calib_kept": 1925,
+      "calib_precision_kept": 0.6425974025974026,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 1.0,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.70 nested=True score=beam": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.7,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 1.0,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  },
+  "PCCF precision>=0.80 nested=True score=beam": {
+   "metrics": {
+    "tp": 375,
+    "fp": 51,
+    "fn": 107,
+    "P": 0.8802816901408451,
+    "R": 0.7780082987551867,
+    "F1": 0.8259911894273128,
+    "F2": 0.7965165675446049
+   },
+   "test_patterns": {
+    "dict": {
+     "n": 458,
+     "true": 66,
+     "kept": 0,
+     "kept_true": 0
+    },
+    "dict+ner": {
+     "n": 390,
+     "true": 375,
+     "kept": 390,
+     "kept_true": 375
+    },
+    "ner": {
+     "n": 273,
+     "true": 28,
+     "kept": 0,
+     "kept_true": 0
+    }
+   },
+   "model": {
+    "mode": "precision",
+    "alpha": 0.1,
+    "nested": true,
+    "partition": "mask",
+    "search": "fixed_sequence",
+    "target_precision": 0.8,
+    "delta": 0.05,
+    "unseen_pattern_policy": "fail-open (keep)",
+    "patterns": {
+     "dict": {
+      "n": 3016,
+      "n_true": 1473,
+      "calib_precision_all": 0.488395225464191,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "ner": {
+      "n": 2138,
+      "n_true": 1291,
+      "calib_precision_all": 0.6038353601496725,
+      "threshold": -Infinity,
+      "calib_kept": 0,
+      "calib_precision_kept": null,
+      "fallback": false
+     },
+     "dict+ner": {
+      "n": 1292,
+      "n_true": 1207,
+      "calib_precision_all": 0.9342105263157895,
+      "threshold": 1.0,
+      "calib_kept": 1292,
+      "calib_precision_kept": 0.9342105263157895,
+      "fallback": false
+     }
+    }
+   }
+  }
+ },
+ "bootstrap": {
+  "PCCF coverage a=0.10 nested=False score=beam": {
+   "dP_95ci": [
+    0.0015093985843528945,
+    0.019524136563233985
+   ],
+   "dR_95ci": [
+    -0.09999999999999998,
+    -0.05405405405405406
+   ],
+   "dF1_95ci": [
+    -0.016197982471973238,
+    0.007555555555555538
+   ]
+  },
+  "PCCF precision>=0.70 nested=False score=beam": {
+   "dP_95ci": [
+    0.44162396600269327,
+    0.5124503714930562
+   ],
+   "dR_95ci": [
+    -0.2286902286902287,
+    -0.15352697095435686
+   ],
+   "dF1_95ci": [
+    0.2244330093386696,
+    0.28835070508890237
+   ]
+  }
+ },
+ "cv": {
+  "dict-only (layer alone)": {
+   "dP": [
+    0.08563789857834136,
+    0.08333174529065945,
+    0.07836812389930592,
+    0.0768411337013108,
+    0.08280231370214391
+   ],
+   "dR": [
+    -0.06921241050119331,
+    -0.043165467625899345,
+    -0.05035971223021585,
+    -0.050724637681159424,
+    -0.055023923444976086
+   ],
+   "dF1": [
+    0.06780799146084338,
+    0.07005073238679982,
+    0.06148228829755509,
+    0.062290927608443236,
+    0.06617982760509888
+   ]
+  },
+  "ner-only (layer alone)": {
+   "dP": [
+    0.1952057998129092,
+    0.21593810444874273,
+    0.2153089703485867,
+    0.21995043807936965,
+    0.21092783396599923
+   ],
+   "dR": [
+    -0.14558472553699287,
+    -0.1630695443645085,
+    -0.15587529976019177,
+    -0.14251207729468596,
+    -0.16028708133971292
+   ],
+   "dF1": [
+    0.1314355208036554,
+    0.13462597915925756,
+    0.1306669007034491,
+    0.14415723627887567,
+    0.13122368725422162
+   ]
+  },
+  "intersection (agreement only)": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF coverage a=0.05 nested=False score=presidio": {
+   "dP": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dR": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dF1": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "PCCF coverage a=0.10 nested=False score=presidio": {
+   "dP": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dR": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dF1": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "PCCF coverage a=0.20 nested=False score=presidio": {
+   "dP": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dR": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dF1": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "PCCF precision>=0.50 nested=False score=presidio": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF precision>=0.60 nested=False score=presidio": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF precision>=0.70 nested=False score=presidio": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF precision>=0.80 nested=False score=presidio": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF coverage a=0.05 nested=True score=presidio": {
+   "dP": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dR": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dF1": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "PCCF coverage a=0.10 nested=True score=presidio": {
+   "dP": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dR": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dF1": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "PCCF coverage a=0.20 nested=True score=presidio": {
+   "dP": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dR": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "dF1": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "PCCF precision>=0.50 nested=True score=presidio": {
+   "dP": [
+    0.17845822699737524,
+    0.19077497489536932,
+    0.17232194254016436,
+    0.17510631337912985,
+    0.19295574606353527
+   ],
+   "dR": [
+    -0.14558472553699287,
+    -0.1630695443645085,
+    -0.15587529976019177,
+    -0.14251207729468596,
+    -0.16028708133971292
+   ],
+   "dF1": [
+    0.11968198172976219,
+    0.11804656797462476,
+    0.1023591351694062,
+    0.11373774828603322,
+    0.11934196682411413
+   ]
+  },
+  "PCCF precision>=0.60 nested=True score=presidio": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF precision>=0.70 nested=True score=presidio": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF precision>=0.80 nested=True score=presidio": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF coverage a=0.05 nested=False score=beam": {
+   "dP": [
+    -0.008857297701431122,
+    -0.004275380696249276,
+    -0.003091017389608375,
+    0.011648202862195811,
+    -0.010894428152492641
+   ],
+   "dR": [
+    -0.042959427207637235,
+    -0.021582733812949728,
+    -0.02877697841726612,
+    -0.05314009661835739,
+    -0.04784688995215314
+   ],
+   "dF1": [
+    -0.016006091966677682,
+    -0.007922455530177674,
+    -0.008203601480286982,
+    0.0020588510679901972,
+    -0.01909131039504952
+   ]
+  },
+  "PCCF coverage a=0.10 nested=False score=beam": {
+   "dP": [
+    0.008920533355228966,
+    0.005926645319636548,
+    0.019213677916240846,
+    0.006016739223476397,
+    0.004538472280407768
+   ],
+   "dR": [
+    -0.08114558472553701,
+    -0.062350119904076795,
+    -0.043165467625899234,
+    -0.09178743961352653,
+    -0.08373205741626799
+   ],
+   "dF1": [
+    -0.005001250312578143,
+    -0.005042239326144227,
+    0.01030659630835673,
+    -0.010731482781591861,
+    -0.010693848761675007
+   ]
+  },
+  "PCCF coverage a=0.20 nested=False score=beam": {
+   "dP": [
+    0.008920533355228966,
+    0.005926645319636548,
+    0.019213677916240846,
+    0.006016739223476397,
+    0.004538472280407768
+   ],
+   "dR": [
+    -0.08114558472553701,
+    -0.062350119904076795,
+    -0.043165467625899234,
+    -0.09178743961352653,
+    -0.08373205741626799
+   ],
+   "dF1": [
+    -0.005001250312578143,
+    -0.005042239326144227,
+    0.01030659630835673,
+    -0.010731482781591861,
+    -0.010693848761675007
+   ]
+  },
+  "PCCF precision>=0.50 nested=False score=beam": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF precision>=0.60 nested=False score=beam": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF precision>=0.70 nested=False score=beam": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF precision>=0.80 nested=False score=beam": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF coverage a=0.05 nested=True score=beam": {
+   "dP": [
+    0.006433344723088874,
+    0.0070492155598538275,
+    0.011353092080126637,
+    0.009713532062781693,
+    0.0036893387569766345
+   ],
+   "dR": [
+    -0.04534606205250602,
+    -0.023980815347721895,
+    -0.02877697841726612,
+    -0.050724637681159424,
+    -0.05023923444976075
+   ],
+   "dF1": [
+    -0.0010120844778400695,
+    0.0029839970179621478,
+    0.0057146064536079955,
+    0.0006484323376294565,
+    -0.005184337884767909
+   ]
+  },
+  "PCCF coverage a=0.10 nested=True score=beam": {
+   "dP": [
+    0.008920533355228966,
+    0.005926645319636548,
+    0.019213677916240846,
+    0.006016739223476397,
+    0.004538472280407768
+   ],
+   "dR": [
+    -0.08114558472553701,
+    -0.062350119904076795,
+    -0.043165467625899234,
+    -0.09178743961352653,
+    -0.08373205741626799
+   ],
+   "dF1": [
+    -0.005001250312578143,
+    -0.005042239326144227,
+    0.01030659630835673,
+    -0.010731482781591861,
+    -0.010693848761675007
+   ]
+  },
+  "PCCF coverage a=0.20 nested=True score=beam": {
+   "dP": [
+    0.008920533355228966,
+    0.005926645319636548,
+    0.019213677916240846,
+    0.006016739223476397,
+    0.004538472280407768
+   ],
+   "dR": [
+    -0.08114558472553701,
+    -0.062350119904076795,
+    -0.043165467625899234,
+    -0.09178743961352653,
+    -0.08373205741626799
+   ],
+   "dF1": [
+    -0.005001250312578143,
+    -0.005042239326144227,
+    0.01030659630835673,
+    -0.010731482781591861,
+    -0.010693848761675007
+   ]
+  },
+  "PCCF precision>=0.50 nested=True score=beam": {
+   "dP": [
+    0.17845822699737524,
+    0.19077497489536932,
+    0.17232194254016436,
+    0.17510631337912985,
+    0.19295574606353527
+   ],
+   "dR": [
+    -0.14558472553699287,
+    -0.1630695443645085,
+    -0.15587529976019177,
+    -0.14251207729468596,
+    -0.16028708133971292
+   ],
+   "dF1": [
+    0.11968198172976219,
+    0.11804656797462476,
+    0.1023591351694062,
+    0.11373774828603322,
+    0.11934196682411413
+   ]
+  },
+  "PCCF precision>=0.60 nested=True score=beam": {
+   "dP": [
+    0.21950893570141095,
+    0.2229760111914465,
+    0.20509272481045077,
+    0.2163533157772114,
+    0.23401211390358212
+   ],
+   "dR": [
+    -0.14797136038186165,
+    -0.16546762589928066,
+    -0.15587529976019177,
+    -0.1473429951690821,
+    -0.16267942583732053
+   ],
+   "dF1": [
+    0.14715102491635002,
+    0.13825135159025193,
+    0.12409367963122331,
+    0.1400335249386695,
+    0.14513064772991247
+   ]
+  },
+  "PCCF precision>=0.70 nested=True score=beam": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  },
+  "PCCF precision>=0.80 nested=True score=beam": {
+   "dP": [
+    0.500428641038536,
+    0.5033244680851063,
+    0.42449338502737916,
+    0.4306045951660714,
+    0.5066843684091119
+   ],
+   "dR": [
+    -0.21479713603818618,
+    -0.20623501199040772,
+    -0.2062350119904076,
+    -0.19323671497584538,
+    -0.215311004784689
+   ],
+   "dF1": [
+    0.26664040688835455,
+    0.2640786722577766,
+    0.22067293769373497,
+    0.23863753038896118,
+    0.25927236174357415
+   ]
+  }
+ }
+}

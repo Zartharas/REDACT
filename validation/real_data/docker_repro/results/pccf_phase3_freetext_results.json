@@ -1,0 +1,531 @@
+{
+ "recall_by_type": {
+  "union": {
+   "in-dict/no-honorific": [
+    67,
+    67
+   ],
+   "OOV/no-honorific": [
+    87,
+    88
+   ],
+   "in-dict/honorific": [
+    30,
+    30
+   ],
+   "OOV/honorific": [
+    28,
+    31
+   ]
+  },
+  "intersection-rule": {
+   "in-dict/no-honorific": [
+    65,
+    67
+   ],
+   "OOV/no-honorific": [
+    0,
+    88
+   ],
+   "in-dict/honorific": [
+    28,
+    30
+   ],
+   "OOV/honorific": [
+    0,
+    31
+   ]
+  },
+  "LR-refit (injected train) coverage a=0.05": {
+   "in-dict/no-honorific": [
+    67,
+    67
+   ],
+   "OOV/no-honorific": [
+    87,
+    88
+   ],
+   "in-dict/honorific": [
+    30,
+    30
+   ],
+   "OOV/honorific": [
+    28,
+    31
+   ]
+  }
+ },
+ "T5_unit": {
+  "metrics": {
+   "tp": 187,
+   "fp": 14,
+   "fn": 33,
+   "P": 0.9303482587064676,
+   "R": 0.85,
+   "F1": 0.8883610451306414,
+   "F2": 0.8649398704902868
+  },
+  "kept": 201,
+  "threshold": 0.5
+ },
+ "table": {
+  "union": {
+   "tp": 216,
+   "fp": 506,
+   "fn": 4,
+   "P": 0.29916897506925205,
+   "R": 0.9818181818181818,
+   "F1": 0.45859872611464964,
+   "F2": 0.6741573033707865
+  },
+  "intersection": {
+   "tp": 97,
+   "fp": 13,
+   "fn": 123,
+   "P": 0.8818181818181818,
+   "R": 0.4409090909090909,
+   "F1": 0.5878787878787879,
+   "F2": 0.48989898989898994
+  },
+  "beam coverage a=0.02": {
+   "tp": 216,
+   "fp": 506,
+   "fn": 4,
+   "P": 0.29916897506925205,
+   "R": 0.9818181818181818,
+   "F1": 0.45859872611464964,
+   "F2": 0.6741573033707865
+  },
+  "beam coverage a=0.05": {
+   "tp": 216,
+   "fp": 506,
+   "fn": 4,
+   "P": 0.29916897506925205,
+   "R": 0.9818181818181818,
+   "F1": 0.45859872611464964,
+   "F2": 0.6741573033707865
+  },
+  "beam coverage a=0.10": {
+   "tp": 194,
+   "fp": 505,
+   "fn": 26,
+   "P": 0.27753934191702434,
+   "R": 0.8818181818181818,
+   "F1": 0.4221980413492927,
+   "F2": 0.6143128562381255
+  },
+  "LR-full (clean MEDDOCAN) coverage a=0.02": {
+   "tp": 216,
+   "fp": 450,
+   "fn": 4,
+   "P": 0.32432432432432434,
+   "R": 0.9818181818181818,
+   "F1": 0.48758465011286684,
+   "F2": 0.6985769728331177
+  },
+  "LR-full (clean MEDDOCAN) coverage a=0.05": {
+   "tp": 208,
+   "fp": 233,
+   "fn": 12,
+   "P": 0.47165532879818595,
+   "R": 0.9454545454545454,
+   "F1": 0.6293494704992436,
+   "F2": 0.7872823618470857
+  },
+  "LR-full (clean MEDDOCAN) coverage a=0.10": {
+   "tp": 208,
+   "fp": 233,
+   "fn": 12,
+   "P": 0.47165532879818595,
+   "R": 0.9454545454545454,
+   "F1": 0.6293494704992436,
+   "F2": 0.7872823618470857
+  },
+  "LR-refit (injected train) coverage a=0.02": {
+   "tp": 216,
+   "fp": 415,
+   "fn": 4,
+   "P": 0.34231378763866877,
+   "R": 0.9818181818181818,
+   "F1": 0.5076380728554643,
+   "F2": 0.7147584381204501
+  },
+  "LR-refit (injected train) coverage a=0.05": {
+   "tp": 216,
+   "fp": 176,
+   "fn": 4,
+   "P": 0.5510204081632653,
+   "R": 0.9818181818181818,
+   "F1": 0.7058823529411764,
+   "F2": 0.8490566037735849
+  },
+  "LR-refit (injected train) coverage a=0.10": {
+   "tp": 211,
+   "fp": 175,
+   "fn": 9,
+   "P": 0.5466321243523317,
+   "R": 0.9590909090909091,
+   "F1": 0.6963696369636965,
+   "F2": 0.8333333333333335
+  },
+  "rule coverage a=0.02": {
+   "tp": 215,
+   "fp": 448,
+   "fn": 5,
+   "P": 0.32428355957767724,
+   "R": 0.9772727272727273,
+   "F1": 0.48697621744054365,
+   "F2": 0.6966947504860661
+  },
+  "rule coverage a=0.05": {
+   "tp": 215,
+   "fp": 441,
+   "fn": 5,
+   "P": 0.3277439024390244,
+   "R": 0.9772727272727273,
+   "F1": 0.49086757990867574,
+   "F2": 0.6998697916666667
+  },
+  "rule coverage a=0.10": {
+   "tp": 215,
+   "fp": 441,
+   "fn": 5,
+   "P": 0.3277439024390244,
+   "R": 0.9772727272727273,
+   "F1": 0.49086757990867574,
+   "F2": 0.6998697916666667
+  },
+  "T5 alert tier (global, bonferroni, >=0.85)": {
+   "tp": 187,
+   "fp": 14,
+   "fn": 33,
+   "P": 0.9303482587064676,
+   "R": 0.85,
+   "F1": 0.8883610451306414,
+   "F2": 0.8649398704902868
+  }
+ },
+ "checks": {
+  "beam coverage a=0.02": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 370,
+    "kept_precision": 0.3108108108108108,
+    "threshold": 1.0
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 1.0,
+    "kept": 110,
+    "kept_precision": 0.8818181818181818,
+    "threshold": 1.0
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 242,
+    "kept_precision": 0.01652892561983471,
+    "threshold": Infinity
+   }
+  },
+  "beam coverage a=0.05": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 370,
+    "kept_precision": 0.3108108108108108,
+    "threshold": 1.0
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 1.0,
+    "kept": 110,
+    "kept_precision": 0.8818181818181818,
+    "threshold": 1.0
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 242,
+    "kept_precision": 0.01652892561983471,
+    "threshold": 0.0
+   }
+  },
+  "beam coverage a=0.10": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 370,
+    "kept_precision": 0.3108108108108108,
+    "threshold": 1.0
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 0.7731958762886598,
+    "kept": 87,
+    "kept_precision": 0.8620689655172413,
+    "threshold": 0.0
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 242,
+    "kept_precision": 0.01652892561983471,
+    "threshold": 0.0
+   }
+  },
+  "LR-full (clean MEDDOCAN) coverage a=0.02": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 320,
+    "kept_precision": 0.359375,
+    "threshold": 0.9946684957492423
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 1.0,
+    "kept": 104,
+    "kept_precision": 0.9326923076923077,
+    "threshold": 0.9297695486576065
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 242,
+    "kept_precision": 0.01652892561983471,
+    "threshold": Infinity
+   }
+  },
+  "LR-full (clean MEDDOCAN) coverage a=0.05": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 320,
+    "kept_precision": 0.359375,
+    "threshold": 0.9946684957492423
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 0.9175257731958762,
+    "kept": 94,
+    "kept_precision": 0.9468085106382979,
+    "threshold": 0.8601009086986221
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 27,
+    "kept_precision": 0.14814814814814814,
+    "threshold": 0.9967489295189896
+   }
+  },
+  "LR-full (clean MEDDOCAN) coverage a=0.10": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 320,
+    "kept_precision": 0.359375,
+    "threshold": 0.9946684957492423
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 0.9175257731958762,
+    "kept": 94,
+    "kept_precision": 0.9468085106382979,
+    "threshold": 0.8601009086986221
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 27,
+    "kept_precision": 0.14814814814814814,
+    "threshold": 0.9967489295189896
+   }
+  },
+  "LR-refit (injected train) coverage a=0.02": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 291,
+    "kept_precision": 0.3951890034364261,
+    "threshold": 0.7364855154565192
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 1.0,
+    "kept": 98,
+    "kept_precision": 0.9897959183673469,
+    "threshold": 0.1372802828632258
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 242,
+    "kept_precision": 0.01652892561983471,
+    "threshold": Infinity
+   }
+  },
+  "LR-refit (injected train) coverage a=0.05": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 270,
+    "kept_precision": 0.42592592592592593,
+    "threshold": 0.6921588744074104
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 1.0,
+    "kept": 98,
+    "kept_precision": 0.9897959183673469,
+    "threshold": 0.1372802828632258
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 24,
+    "kept_precision": 0.16666666666666666,
+    "threshold": 0.9013121859746952
+   }
+  },
+  "LR-refit (injected train) coverage a=0.10": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 270,
+    "kept_precision": 0.42592592592592593,
+    "threshold": 0.6921588744074104
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 0.9484536082474226,
+    "kept": 92,
+    "kept_precision": 1.0,
+    "threshold": 0.09439723834209879
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 24,
+    "kept_precision": 0.16666666666666666,
+    "threshold": 0.9013121859746952
+   }
+  },
+  "rule coverage a=0.02": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 319,
+    "kept_precision": 0.3605015673981191,
+    "threshold": 0.9
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 0.9896907216494846,
+    "kept": 102,
+    "kept_precision": 0.9411764705882353,
+    "threshold": 0.06000000000000005
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 242,
+    "kept_precision": 0.01652892561983471,
+    "threshold": Infinity
+   }
+  },
+  "rule coverage a=0.05": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 319,
+    "kept_precision": 0.3605015673981191,
+    "threshold": 0.9
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 0.9896907216494846,
+    "kept": 102,
+    "kept_precision": 0.9411764705882353,
+    "threshold": 0.06000000000000005
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 235,
+    "kept_precision": 0.01702127659574468,
+    "threshold": 0.85
+   }
+  },
+  "rule coverage a=0.10": {
+   "ner": {
+    "n_true": 115,
+    "cand_recall": 1.0,
+    "kept": 319,
+    "kept_precision": 0.3605015673981191,
+    "threshold": 0.9
+   },
+   "dict+ner": {
+    "n_true": 97,
+    "cand_recall": 0.9896907216494846,
+    "kept": 102,
+    "kept_precision": 0.9411764705882353,
+    "threshold": 0.06000000000000005
+   },
+   "dict": {
+    "n_true": 4,
+    "cand_recall": 1.0,
+    "kept": 235,
+    "kept_precision": 0.01702127659574468,
+    "threshold": 0.85
+   }
+  }
+ },
+ "bootstrap": {
+  "dP_95ci": [
+   0.2241109142935005,
+   0.28446097476231086
+  ],
+  "dR_95ci": [
+   0.0,
+   0.0
+  ],
+  "dF1_95ci": [
+   0.226475205466802,
+   0.26902989997128735
+  ]
+ },
+ "verdicts": {
+  "H6": true,
+  "H7": true,
+  "H6b (expectation)": true
+ },
+ "patterns": {
+  "dict": {
+   "n": 242,
+   "true": 4,
+   "precision": 0.01652892561983471,
+   "ner_conf_mean_true": null,
+   "ner_conf_mean_false": null,
+   "ner_conf_auroc_within_pattern": null
+  },
+  "dict+ner": {
+   "n": 110,
+   "true": 97,
+   "precision": 0.8818181818181818,
+   "ner_conf_mean_true": 0.7736758762886597,
+   "ner_conf_mean_false": 0.9870266153846153,
+   "ner_conf_auroc_within_pattern": 0.41633624107850914
+  },
+  "ner": {
+   "n": 370,
+   "true": 115,
+   "precision": 0.3108108108108108,
+   "ner_conf_mean_true": 0.842535452173913,
+   "ner_conf_mean_false": 0.8863591960784314,
+   "ner_conf_auroc_within_pattern": 0.5085763000852515
+  }
+ }
+}

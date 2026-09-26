@@ -1,0 +1,33 @@
+T1 (descriptive) + D1: in-language calibration infeasible for any pattern with < 19 true candidates.
+T4 H10: with MEDDOCAN-calibrated rule-scorer thresholds (coverage a=0.05), per-pattern candidate
+    recall on FR/RU >= 0.95 - tol for every pattern with n_true >= 5.
+
+MEDDOCAN-calibrated thresholds (rule scorer, a=0.05): dict+ner=0.970, dict=0.030, ner=0.970
+
+=== FR (11 docs) ===
+  T1 gold PERSON spans by slice: {'speaker-tag': 2, 'free-text': 9} (total 11)
+  pattern ner       n=   7 true=   6 precision=0.857
+  D1 in-language calibration per pattern: {'ner': 'INFEASIBLE'}
+  union          P=0.857 R=0.545 (TP=6 FP=1 FN=5)
+  intersection   P=0.000 R=0.000 (TP=0 FP=0 FN=11)
+  dict alone     P=0.000 R=0.000 (TP=0 FP=0 FN=11)
+  ner alone      P=0.857 R=0.545 (TP=6 FP=1 FN=5)
+  T4 rule/fr cues + MEDDOCAN thresholds: P=0.857 R=0.545 (dP=+0.000 dR=+0.000)
+    ner       n_true=  6 cand_recall=1.0 kept=7 H10-check=pass
+  rule-score AUROC within pattern: dict=n/a, ner=0.5, dict+ner=n/a
+
+=== RU (26 docs) ===
+  T1 gold PERSON spans by slice: {'free-text': 27, 'label-prefix': 6} (total 33)
+  pattern dict+ner  n=  10 true=   9 precision=0.900
+  pattern ner       n=   7 true=   5 precision=0.714
+  D1 in-language calibration per pattern: {'dict+ner': 'INFEASIBLE', 'ner': 'INFEASIBLE'}
+  union          P=0.824 R=0.424 (TP=14 FP=3 FN=19)
+  intersection   P=0.900 R=0.273 (TP=9 FP=1 FN=24)
+  dict alone     P=0.900 R=0.273 (TP=9 FP=1 FN=24)
+  ner alone      P=0.833 R=0.455 (TP=15 FP=3 FN=18)
+  T4 rule/ru cues + MEDDOCAN thresholds: P=0.824 R=0.424 (dP=+0.000 dR=+0.000)
+    dict+ner  n_true=  9 cand_recall=1.0 kept=10 H10-check=pass
+    ner       n_true=  5 cand_recall=1.0 kept=7 H10-check=pass
+  rule-score AUROC within pattern: dict=n/a, ner=0.45, dict+ner=1.0
+
+H10: SUPPORTED

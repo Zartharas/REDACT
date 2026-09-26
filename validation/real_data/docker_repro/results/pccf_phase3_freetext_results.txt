@@ -1,0 +1,48 @@
+H6: LR-refit coverage a=0.05 on the test narrative: precision >= union + 0.05, bootstrap 95% CI of dP excludes 0.
+H7: LR-refit coverage a=0.05: per-pattern test candidate recall >= 0.95 - tol for every pattern with n_true >= 19.
+H6b (expectation): LR-full (fit on clean, header-dominated MEDDOCAN) gains less than LR-refit.
+T5 unit: global Bonferroni alert tier (target 0.85) on LR-refit; precision >= 0.85 if >= 20 kept.
+
+Injected docs: 471 (skipped 49); colliding places used: 28
+Narrative-only gold PERSON: fit=376 cal=361 test=220
+  test pattern dict      n= 242 true=   4 precision=0.017
+  test pattern dict+ner  n= 110 true=  97 precision=0.882
+  test pattern ner       n= 370 true= 115 precision=0.311
+
+=== Test narrative (template set B) ===
+  union                                            P=0.299 (+0.000)  R=0.982 (+0.000)  F1=0.459
+  intersection                                     P=0.882 (+0.583)  R=0.441 (-0.541)  F1=0.588
+  beam coverage a=0.02                             P=0.299 (+0.000)  R=0.982 (+0.000)  F1=0.459
+  beam coverage a=0.05                             P=0.299 (+0.000)  R=0.982 (+0.000)  F1=0.459
+  beam coverage a=0.10                             P=0.278 (-0.022)  R=0.882 (-0.100)  F1=0.422
+    beam: within-pattern test AUROC dict=0.5, ner=0.509, dict+ner=0.392
+  LR-full (clean MEDDOCAN) coverage a=0.02         P=0.324 (+0.025)  R=0.982 (+0.000)  F1=0.488
+  LR-full (clean MEDDOCAN) coverage a=0.05         P=0.472 (+0.172)  R=0.945 (-0.036)  F1=0.629
+  LR-full (clean MEDDOCAN) coverage a=0.10         P=0.472 (+0.172)  R=0.945 (-0.036)  F1=0.629
+    LR-full (clean MEDDOCAN): within-pattern test AUROC dict=0.983, ner=0.685, dict+ner=0.823
+  LR-refit (injected train) coverage a=0.02        P=0.342 (+0.043)  R=0.982 (+0.000)  F1=0.508
+  LR-refit (injected train) coverage a=0.05        P=0.551 (+0.252)  R=0.982 (+0.000)  F1=0.706
+  LR-refit (injected train) coverage a=0.10        P=0.547 (+0.247)  R=0.959 (-0.023)  F1=0.696
+    LR-refit (injected train): within-pattern test AUROC dict=0.996, ner=0.933, dict+ner=0.996
+  rule coverage a=0.02                             P=0.324 (+0.025)  R=0.977 (-0.005)  F1=0.487
+  rule coverage a=0.05                             P=0.328 (+0.029)  R=0.977 (-0.005)  F1=0.491
+  rule coverage a=0.10                             P=0.328 (+0.029)  R=0.977 (-0.005)  F1=0.491
+    rule: within-pattern test AUROC dict=0.757, ner=0.6, dict+ner=0.764
+
+  Per-pattern checks for LR-refit (injected train) coverage a=0.05:
+    dict      n_true=   4 cand_recall=1.0 kept=24 kept_P=0.167 check=n/a
+    dict+ner  n_true=  97 cand_recall=1.0 kept=98 kept_P=0.99 check=pass
+    ner       n_true= 115 cand_recall=1.0 kept=270 kept_P=0.426 check=pass
+  Recall of injected names by type (test):
+    union                                        OOV/honorific=28/31  OOV/no-honorific=87/88  in-dict/honorific=30/30  in-dict/no-honorific=67/67
+    intersection-rule                            OOV/honorific=0/31  OOV/no-honorific=0/88  in-dict/honorific=28/30  in-dict/no-honorific=65/67
+    LR-refit (injected train) coverage a=0.05    OOV/honorific=28/31  OOV/no-honorific=87/88  in-dict/honorific=30/30  in-dict/no-honorific=67/67
+
+  Bootstrap LR-refit (injected train) coverage a=0.05 vs union: dP=[+0.224,+0.284] dR=[+0.000,+0.000]
+
+  T5 alert tier (global, bonferroni, >=0.85)       P=0.930 (+0.631)  R=0.850 (-0.132)  F1=0.888
+
+=== Verdicts (mechanical) ===
+  H6: SUPPORTED
+  H7: SUPPORTED
+  H6b (expectation): SUPPORTED

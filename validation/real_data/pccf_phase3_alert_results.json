@@ -1,0 +1,136 @@
+{
+ "units": [
+  {
+   "source": "MEDDOCAN fold 0",
+   "kept": 368,
+   "P": 0.8911917098445595,
+   "R": 0.8210023866348448
+  },
+  {
+   "source": "MEDDOCAN fold 1",
+   "kept": 349,
+   "P": 0.900804289544236,
+   "R": 0.8057553956834532
+  },
+  {
+   "source": "MEDDOCAN fold 2",
+   "kept": 358,
+   "P": 0.8446115288220551,
+   "R": 0.8081534772182254
+  },
+  {
+   "source": "MEDDOCAN fold 3",
+   "kept": 357,
+   "P": 0.845771144278607,
+   "R": 0.821256038647343
+  },
+  {
+   "source": "MEDDOCAN fold 4",
+   "kept": 358,
+   "P": 0.9146666666666666,
+   "R": 0.8205741626794258
+  },
+  {
+   "source": "T2 Spanish free text",
+   "kept": 201,
+   "P": 0.9303482587064676,
+   "R": 0.85
+  },
+  {
+   "source": "T3 OpenSSH seed 42",
+   "kept": 166,
+   "P": 0.9156626506024096,
+   "R": 0.7272727272727273
+  },
+  {
+   "source": "T3 Linux seed 42",
+   "kept": 101,
+   "P": 0.900990099009901,
+   "R": 0.7459016393442623
+  },
+  {
+   "source": "T3 Thunderbird seed 42",
+   "kept": 78,
+   "P": 0.20512820512820512,
+   "R": 0.8421052631578947
+  },
+  {
+   "source": "T3 windows_event seed 42",
+   "kept": 5,
+   "P": 1.0,
+   "R": 1.0
+  },
+  {
+   "source": "T3 cloudtrail seed 42",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0
+  },
+  {
+   "source": "T3 OpenSSH seed 43",
+   "kept": 178,
+   "P": 0.9325842696629213,
+   "R": 0.7545454545454545
+  },
+  {
+   "source": "T3 Linux seed 43",
+   "kept": 107,
+   "P": 0.897196261682243,
+   "R": 0.7619047619047619
+  },
+  {
+   "source": "T3 Thunderbird seed 43",
+   "kept": 76,
+   "P": 0.18421052631578946,
+   "R": 0.7777777777777778
+  },
+  {
+   "source": "T3 windows_event seed 43",
+   "kept": 4,
+   "P": 1.0,
+   "R": 0.6666666666666666
+  },
+  {
+   "source": "T3 cloudtrail seed 43",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0
+  },
+  {
+   "source": "T3 OpenSSH seed 44",
+   "kept": 174,
+   "P": 0.867816091954023,
+   "R": 0.7023255813953488
+  },
+  {
+   "source": "T3 Linux seed 44",
+   "kept": 91,
+   "P": 0.8901098901098901,
+   "R": 0.6532258064516129
+  },
+  {
+   "source": "T3 Thunderbird seed 44",
+   "kept": 73,
+   "P": 0.1506849315068493,
+   "R": 0.55
+  },
+  {
+   "source": "T3 windows_event seed 44",
+   "kept": 5,
+   "P": 1.0,
+   "R": 1.0
+  },
+  {
+   "source": "T3 cloudtrail seed 44",
+   "kept": 0,
+   "P": 0.0,
+   "R": 0.0
+  }
+ ],
+ "H11a": false,
+ "H11b": false,
+ "meddocan_mean_recall": {
+  "alert": 0.8153482921726585,
+  "intersection": 0.7582971954264724
+ }
+}

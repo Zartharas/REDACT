@@ -1,0 +1,236 @@
+ok   phase5/pccf_phase5_fr_ru_de_it_nl_pt_fi_tr_hi_te_ar_ar_wiki_ja_id_id_hf_ko_zh_in_ko_kdpii_ko_legal_tr_mit_ko_klue_bg_pl_cs_lt_et_sv_sk_lv_hu_ro_el_da_sl_hr_sr_vi_ms_tl_bg_gl_cs_gl_et_gl_sk_gl_lv_gl_hu_gl_sr_gl_vi_gl_ms_gl_tl_gl_results.json
+ok   phase6/results/ar_wiki__E1.json
+ok   phase6/results/ar_wiki__E2.json
+ok   phase6/results/de__E1.json
+ok   phase6/results/de__E2.json
+ok   phase6/results/fi__E1.json
+ok   phase6/results/fi__E2.json
+ok   phase6/results/fr__E1.json
+ok   phase6/results/fr__E2.json
+ok   phase6/results/hi__E1.json
+ok   phase6/results/hi__E2.json
+ok   phase6/results/id__E1.json
+ok   phase6/results/id__E2.json
+ok   phase6/results/id_hf__E1.json
+ok   phase6/results/id_hf__E2.json
+DIFF phase6/results/in__E1.json  (1 differences; first: ('phase6/results/in__E1.json/46/LR-UD/ner/recall', 0.9189655172413793, 0.9258620689655173))
+DIFF phase6/results/in__E2.json  (1 differences; first: ('phase6/results/in__E2.json/46/LR-UD/ner/recall', 0.9189655172413793, 0.9258620689655173))
+ok   phase6/results/it__E1.json
+ok   phase6/results/it__E2.json
+DIFF phase6/results/ja__E1.json  (1 differences; first: ('phase6/results/ja__E1.json/28/LR-UD/dict/recall', 0.9851851851851852, 0.9777777777777777))
+DIFF phase6/results/ja__E2.json  (1 differences; first: ('phase6/results/ja__E2.json/6/LR-UD/dict/recall', 0.9829059829059829, 0.9914529914529915))
+ok   phase6/results/ko__E1.json
+ok   phase6/results/ko__E2.json
+ok   phase6/results/ko_kdpii__E1.json
+ok   phase6/results/ko_kdpii__E2.json
+ok   phase6/results/nl__E1.json
+ok   phase6/results/nl__E2.json
+DIFF phase6/results/pt__E1.json  (1 differences; first: ('phase6/results/pt__E1.json/3/LR-UD/ner/recall', 0.9323241317898486, 0.9225289403383793))
+DIFF phase6/results/pt__E2.json  (2 differences; first: ('phase6/results/pt__E2.json/27/LR-UD/ner/recall', 0.9384133611691023, 0.9321503131524008))
+ok   phase6/results/ru__E1.json
+ok   phase6/results/ru__E2.json
+ok   phase6/results/te__E1.json
+ok   phase6/results/te__E2.json
+ok   phase6/results/tl_gl__E1.json
+ok   phase6/results/tl_gl__E2.json
+ok   phase6/results/tr__E1.json
+ok   phase6/results/tr__E2.json
+ok   phase6/results/zh__E1.json
+ok   phase6/results/zh__E2.json
+ok   phase7/results/ar_wiki.json
+ok   phase7/results/bg_gl.json
+DIFF phase7/results/bg.json  (1 differences; first: ('phase7/results/bg.json/b1_threshold', 0.7708660359697543, 0.7777203861528081))
+ok   phase7/results/cs_gl.json
+DIFF phase7/results/cs.json  (3 differences; first: ('phase7/results/cs.json/B1 F1-tuned/marginal_recall', 0.7727727727727728, 0.7637637637637638))
+ok   phase7/results/da.json
+ok   phase7/results/de.json
+ok   phase7/results/el.json
+ok   phase7/results/et_gl.json
+ok   phase7/results/et.json
+ok   phase7/results/fi.json
+ok   phase7/results/fr.json
+ok   phase7/results/hi.json
+ok   phase7/results/hr.json
+ok   phase7/results/hu_gl.json
+ok   phase7/results/hu.json
+ok   phase7/results/id_hf.json
+ok   phase7/results/id.json
+ok   phase7/results/in.json
+ok   phase7/results/it.json
+ok   phase7/results/ja.json
+ok   phase7/results/ko_kdpii.json
+ok   phase7/results/ko_klue.json
+ok   phase7/results/ko.json
+ok   phase7/results/lt.json
+ok   phase7/results/lv_gl.json
+ok   phase7/results/lv.json
+ok   phase7/results/ms_gl.json
+ok   phase7/results/ms.json
+ok   phase7/results/nl.json
+ok   phase7/results/pl.json
+ok   phase7/results/pt.json
+ok   phase7/results/ro.json
+ok   phase7/results/ru.json
+ok   phase7/results/sk_gl.json
+ok   phase7/results/sk.json
+ok   phase7/results/sl.json
+ok   phase7/results/sr_gl.json
+DIFF phase7/results/sr.json  (4 differences; first: ('phase7/results/sr.json/B1 F1-tuned/marginal_recall', 0.8073298429319372, 0.7455497382198953))
+ok   phase7/results/sv.json
+ok   phase7/results/te.json
+ok   phase7/results/tl_gl.json
+DIFF phase7/results/tl.json  (3 differences; first: ('phase7/results/tl.json/B2 global conformal/groups/ner/recall', 0.8212435233160622, 0.8290155440414507))
+ok   phase7/results/tr_mit.json
+ok   phase7/results/tr.json
+ok   phase7/results/vi_gl.json
+ok   phase7/results/vi.json
+ok   phase7/results/zh.json
+ok   phase8/results/ar_wiki.json
+ok   phase8/results/bg_gl.json
+ok   phase8/results/bg.json
+ok   phase8/results/cs_gl.json
+ok   phase8/results/cs.json
+ok   phase8/results/da.json
+ok   phase8/results/de.json
+ok   phase8/results/el.json
+ok   phase8/results/et_gl.json
+ok   phase8/results/et.json
+ok   phase8/results/fi.json
+ok   phase8/results/fr.json
+ok   phase8/results/hi.json
+ok   phase8/results/hr.json
+ok   phase8/results/hu_gl.json
+ok   phase8/results/hu.json
+ok   phase8/results/id_hf.json
+ok   phase8/results/id.json
+ok   phase8/results/in.json
+ok   phase8/results/it.json
+ok   phase8/results/ja.json
+ok   phase8/results/ko_kdpii.json
+ok   phase8/results/ko_klue.json
+ok   phase8/results/ko.json
+ok   phase8/results/lt.json
+ok   phase8/results/lv_gl.json
+ok   phase8/results/lv.json
+ok   phase8/results/ms_gl.json
+ok   phase8/results/ms.json
+ok   phase8/results/nl.json
+ok   phase8/results/pl.json
+ok   phase8/results/pt.json
+ok   phase8/results/ro.json
+ok   phase8/results/ru.json
+ok   phase8/results/sk_gl.json
+ok   phase8/results/sk.json
+ok   phase8/results/sl.json
+ok   phase8/results/sr_gl.json
+ok   phase8/results/sr.json
+ok   phase8/results/sv.json
+ok   phase8/results/te.json
+ok   phase8/results/tl_gl.json
+DIFF phase8/results/tl.json  (9 differences; first: ('phase8/results/tl.json/CLUST/P', 0.4457946913975056, 0.4377346683354193))
+ok   phase8/results/tr_mit.json
+ok   phase8/results/tr.json
+ok   phase8/results/vi_gl.json
+ok   phase8/results/vi.json
+ok   phase8/results/zh.json
+ok   phase9/results/A_ar_wiki.json
+ok   phase9/results/A_bg_gl.json
+ok   phase9/results/A_bg.json
+ok   phase9/results/A_cs_gl.json
+ok   phase9/results/A_cs.json
+ok   phase9/results/A_da.json
+ok   phase9/results/A_de.json
+ok   phase9/results/A_el.json
+ok   phase9/results/A_et_gl.json
+ok   phase9/results/A_et.json
+ok   phase9/results/A_fi.json
+ok   phase9/results/A_fr.json
+ok   phase9/results/A_hi.json
+ok   phase9/results/A_hr.json
+ok   phase9/results/A_hu_gl.json
+ok   phase9/results/A_hu.json
+ok   phase9/results/A_id_hf.json
+ok   phase9/results/A_id.json
+ok   phase9/results/A_in.json
+ok   phase9/results/A_it.json
+ok   phase9/results/A_ja.json
+ok   phase9/results/A_ko_kdpii.json
+ok   phase9/results/A_ko_klue.json
+ok   phase9/results/A_ko.json
+ok   phase9/results/A_lt.json
+ok   phase9/results/A_lv_gl.json
+ok   phase9/results/A_lv.json
+ok   phase9/results/A_ms_gl.json
+ok   phase9/results/A_ms.json
+ok   phase9/results/A_nl.json
+ok   phase9/results/A_pl.json
+ok   phase9/results/A_pt.json
+ok   phase9/results/A_ro.json
+ok   phase9/results/A_ru.json
+ok   phase9/results/A_sk_gl.json
+ok   phase9/results/A_sk.json
+ok   phase9/results/A_sl.json
+ok   phase9/results/A_sr_gl.json
+ok   phase9/results/A_sr.json
+ok   phase9/results/A_sv.json
+ok   phase9/results/A_te.json
+ok   phase9/results/A_tl_gl.json
+DIFF phase9/results/A_tl.json  (2 differences; first: ('phase9/results/A_tl.json/NOISE-DROP/P', 0.4457946913975056, 0.4377346683354193))
+ok   phase9/results/A_tr_mit.json
+ok   phase9/results/A_tr.json
+ok   phase9/results/A_vi_gl.json
+ok   phase9/results/A_vi.json
+ok   phase9/results/A_zh.json
+ok   phase9/results/B_ar_wiki.json
+ok   phase9/results/B_bg_gl.json
+DIFF phase9/results/B_bg.json  (6 differences; first: ('phase9/results/B_bg.json[8]/dP', 0.11200143082671543, 0.10485221913573461))
+ok   phase9/results/B_cs_gl.json
+DIFF phase9/results/B_cs.json  (13 differences; first: ('phase9/results/B_cs.json[16]/dP', 0.15362541633774185, 0.12027681789242017))
+ok   phase9/results/B_da.json
+ok   phase9/results/B_de.json
+ok   phase9/results/B_el.json
+ok   phase9/results/B_et_gl.json
+ok   phase9/results/B_et.json
+ok   phase9/results/B_fi.json
+ok   phase9/results/B_fr.json
+ok   phase9/results/B_hi.json
+ok   phase9/results/B_hr.json
+ok   phase9/results/B_hu_gl.json
+DIFF phase9/results/B_hu.json  (11 differences; first: ('phase9/results/B_hu.json[13]/groups/ner/recall', 0.9486381322957198, 0.9431906614785992))
+ok   phase9/results/B_id_hf.json
+ok   phase9/results/B_id.json
+DIFF phase9/results/B_in.json  (1 differences; first: ('phase9/results/B_in.json[32]/groups/ner/recall', 0.900523560209424, 0.9057591623036649))
+ok   phase9/results/B_it.json
+ok   phase9/results/B_ja.json
+ok   phase9/results/B_ko_kdpii.json
+ok   phase9/results/B_ko_klue.json
+ok   phase9/results/B_ko.json
+ok   phase9/results/B_lt.json
+ok   phase9/results/B_lv_gl.json
+DIFF phase9/results/B_lv.json  (8 differences; first: ('phase9/results/B_lv.json[35]/dP', 0.13591661377592856, 0.09071735151641752))
+ok   phase9/results/B_ms_gl.json
+DIFF phase9/results/B_ms.json  (1 differences; first: ('phase9/results/B_ms.json[49]/groups/ner/recall', 0.9517948717948718, 0.9579487179487179))
+ok   phase9/results/B_nl.json
+ok   phase9/results/B_pl.json
+DIFF phase9/results/B_pt.json  (1 differences; first: ('phase9/results/B_pt.json[14]/groups/ner/recall', 0.9323241317898486, 0.9225289403383793))
+ok   phase9/results/B_ro.json
+ok   phase9/results/B_ru.json
+ok   phase9/results/B_sk_gl.json
+DIFF phase9/results/B_sk.json  (6 differences; first: ('phase9/results/B_sk.json[0]/dP', 0.022417179162167622, 0.004419496036206394))
+ok   phase9/results/B_sl.json
+ok   phase9/results/B_sr_gl.json
+DIFF phase9/results/B_sr.json  (7 differences; first: ('phase9/results/B_sr.json[0]/dP', 0.00274535654736513, 0.008677520250220505))
+ok   phase9/results/B_sv.json
+ok   phase9/results/B_te.json
+ok   phase9/results/B_tl_gl.json
+DIFF phase9/results/B_tl.json  (6 differences; first: ('phase9/results/B_tl.json[42]/dP', 0.0005678908904715452, 0.009508304003958468))
+ok   phase9/results/B_tr_mit.json
+ok   phase9/results/B_tr.json
+ok   phase9/results/B_vi_gl.json
+DIFF phase9/results/B_vi.json  (2 differences; first: ('phase9/results/B_vi.json[5]/groups/ner/recall', 0.8480519480519481, 0.861038961038961))
+ok   phase9/results/B_zh.json
+ok   phase10/results/seed42.json
+ok   phase10/results/seed43.json
+ok   phase10/results/seed44.json
+compared 234 files, 91 differences
+FAIL

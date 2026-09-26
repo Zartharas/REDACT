@@ -1,0 +1,7 @@
+compared 7 result files
+verdict: 0
+float: 0
+count: 0
+missing: 0
+other: 0
+PASS

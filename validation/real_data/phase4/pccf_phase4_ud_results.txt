@@ -1,0 +1,17 @@
+H20: on the T2 test narrative, LR-UD coverage a=0.05 recovers >= 70% of LR-refit's precision gain over union
+     (LR-refit: +0.252 in phase 3), with per-pattern candidate recall >= 0.95 - tol (n_true >= 19).
+MEDDOCAN phase-2 protocol: descriptive.
+
+=== t2: fit=train, calibrate=validation, test=test; coverage a=0.05 ===
+  union                          P=0.299 R=0.982
+  LR hand cues (phase 2/3)       P=0.551 (+0.252) R=0.982 (+0.000)  dict: rec=1.000 n_true=4 | dict+ner: rec=1.000 n_true=97 | ner: rec=1.000 n_true=115
+  LR-UD (no word lists)          P=0.988 (+0.689) R=0.741 (-0.241)  dict: rec=0.500 n_true=4 | dict+ner: rec=0.660 n_true=97 | ner: rec=0.843 n_true=115
+
+=== meddocan: fit=train, calibrate=validation, test=test; coverage a=0.05 ===
+  union                          P=0.404 R=0.969
+  LR hand cues (phase 2/3)       P=0.732 (+0.328) R=0.929 (-0.039)  dict: rec=0.985 n_true=66 | dict+ner: rec=0.949 n_true=375 | ner: rec=1.000 n_true=28
+  LR-UD (no word lists)          P=0.635 (+0.232) R=0.915 (-0.054)  dict: rec=0.970 n_true=66 | dict+ner: rec=0.931 n_true=375 | ner: rec=1.000 n_true=28
+
+  T2 precision gain: hand cues +0.252, UD +0.689 (273% recovered); floors hold: False
+=== Verdicts (mechanical) ===
+  H20: NOT SUPPORTED

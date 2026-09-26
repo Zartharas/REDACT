@@ -1,0 +1,28 @@
+# Clean-room reproduction of every PCCF result (phases 1-3). See
+# PCCF_PHASE3_PREREGISTRATION.md (T6) and run_pccf_docker.sh.
+#
+# Python 3.10, not 3.11: ru_detect.py uses pymorphy2 0.9.1, which calls
+# inspect.getargspec (removed in Python 3.11). 3.10.x is also the version
+# the committed results were produced with.
+FROM python:3.10-slim
+
+WORKDIR /work
+RUN pip install --no-cache-dir \
+    "spacy==3.8.16" "thinc==8.3.13" \
+    "presidio-analyzer==2.2.364" \
+    "Faker==40.39.0" \
+    "numpy==2.2.6" \
+    "pyahocorasick==2.3.1" \
+    "pymorphy2==0.9.1" "pymorphy2-dicts-ru==2.4.417127.4579844" "setuptools<81" \
+    "tldextract==5.3.2" \
+    "pytest==9.1.1"
+
+# Pinned model versions (the exact versions the committed results used).
+RUN python -m spacy download es_core_news_md-3.8.0 --direct \
+ && python -m spacy download fr_core_news_md-3.8.0 --direct \
+ && python -m spacy download ru_core_news_md-3.8.0 --direct \
+ && python -m spacy download en_core_web_lg-3.8.0 --direct
+
+# The repo is mounted read-only at /src at run time and copied into /work,
+# so the container never writes to your checkout (see run_pccf_docker.sh).
+CMD ["bash", "/src/validation/real_data/run_pccf_all.sh"]

@@ -1,0 +1,69 @@
+H8: KV rule scorer, coverage a=0.05, pooled over held-out datasets and seeds: precision >= union + 0.05,
+    recall drop <= 0.03 vs union, bootstrap 95% CI of dP excludes 0.
+H9 (descriptive): recall by name format (spaced vs flattened) for union, PCCF, production field-gated.
+H8c (descriptive): PCCF vs production detect_all_field_gated, side by side.
+T5 units: global Bonferroni alert tier (target 0.85) per (held-out dataset, seed); precision >= 0.85 where >= 20 kept.
+
+=== Corpus (seed 42) ===
+  OpenSSH       lines= 2000 gold= 209  flat:n=46,P=1.00  ner:n=130,P=0.82
+  Linux         lines= 2000 gold= 122  flat:n=27,P=1.00  flat+ner:n=1,P=1.00  ner:n=94,P=0.68
+  Thunderbird   lines= 2000 gold=  19  flat:n=9,P=1.00  ner:n=112,P=0.06
+  windows_event lines=   33 gold=   5  flat:n=4,P=1.00  ner:n=4,P=0.25
+  cloudtrail    lines= 2000 gold= 815  flat:n=170,P=1.00  flat+ner:n=10,P=1.00  ner:n=517,P=0.82
+
+=== Pooled over held-out datasets x seeds ===
+  union                                            P=0.776 (+0.000)  R=0.739 (+0.000)  F1=0.757
+  intersection                                     P=1.000 (+0.224)  R=0.013 (-0.726)  F1=0.025
+  ner alone                                        P=0.706 (-0.070)  R=0.512 (-0.227)  F1=0.594
+  flat alone                                       P=1.000 (+0.224)  R=0.240 (-0.499)  F1=0.387
+  production field-gated (raw)                     P=0.786 (+0.010)  R=0.739 (+0.000)  F1=0.762
+  production field-gated (header-stripped sim.)    P=0.803 (+0.026)  R=0.739 (+0.000)  F1=0.770
+  KV-rule coverage a=0.02                          P=0.923 (+0.146)  R=0.736 (-0.003)  F1=0.819
+  KV-rule coverage a=0.05                          P=0.974 (+0.197)  R=0.729 (-0.010)  F1=0.834
+  KV-rule coverage a=0.10                          P=0.974 (+0.197)  R=0.729 (-0.010)  F1=0.834
+  KV-LR coverage a=0.02                            P=0.969 (+0.192)  R=0.733 (-0.006)  F1=0.835
+  KV-LR coverage a=0.05                            P=0.990 (+0.214)  R=0.708 (-0.031)  F1=0.826
+  KV-LR coverage a=0.10                            P=1.000 (+0.224)  R=0.660 (-0.079)  F1=0.795
+  T5 alert (KV-rule, global bonferroni >=0.85)     P=0.749 (-0.028)  R=0.224 (-0.515)  F1=0.344
+
+=== Per held-out dataset (pooled over seeds): union | KV-rule a=0.05 | KV-LR a=0.05 | field-gated raw | field-gated strip ===
+  OpenSSH       P=0.88 R=0.73 | P=0.92 R=0.73 | P=0.97 R=0.71 | P=0.88 R=0.73 | P=0.91 R=0.74
+  Linux         P=0.75 R=0.73 | P=0.90 R=0.72 | P=1.00 R=0.70 | P=0.75 R=0.73 | P=0.87 R=0.73
+  Thunderbird   P=0.12 R=0.72 | P=1.00 R=0.72 | P=1.00 R=0.70 | P=0.12 R=0.72 | P=0.12 R=0.72
+  windows_event P=0.61 R=0.88 | P=1.00 R=0.88 | P=1.00 R=0.88 | P=0.61 R=0.88 | P=0.61 R=0.88
+  cloudtrail    P=0.87 R=0.74 | P=1.00 R=0.73 | P=0.99 R=0.71 | P=0.89 R=0.74 | P=0.89 R=0.74
+
+=== H9: recall by name format (pooled) ===
+  union                                            flattened: R=0.504 (n=1792)  spaced: R=0.980 (n=1748)
+  ner alone                                        flattened: R=0.056 (n=1792)  spaced: R=0.980 (n=1748)
+  flat alone                                       flattened: R=0.472 (n=1792)  spaced: R=0.001 (n=1748)
+  KV-rule coverage a=0.05                          flattened: R=0.504 (n=1792)  spaced: R=0.961 (n=1748)
+  production field-gated (raw)                     flattened: R=0.504 (n=1792)  spaced: R=0.980 (n=1748)
+  production field-gated (header-stripped sim.)    flattened: R=0.504 (n=1792)  spaced: R=0.980 (n=1748)
+
+=== KV-rule a=0.05 per-pattern candidate recall (pooled over units) ===
+  flat      n_true=  803 cand_recall=1.000
+  flat+ner  n_true=   45 cand_recall=1.000
+  ner       n_true= 1768 cand_recall=0.981
+
+  Bootstrap (1,000 resamples over lines) KV-rule a=0.05 vs union: dP=[+0.179,+0.215] dR=[-0.013,-0.007]
+
+=== T5 units (KV-rule, global bonferroni >=0.85) ===
+  seed=42 held=OpenSSH       kept= 166 P=0.916 R=0.727
+  seed=42 held=Linux         kept= 101 P=0.901 R=0.746
+  seed=42 held=Thunderbird   kept=  78 P=0.205 R=0.842
+  seed=42 held=windows_event kept=   5 P=1.000 R=1.000
+  seed=42 held=cloudtrail    kept=   0 P=0.000 R=0.000
+  seed=43 held=OpenSSH       kept= 178 P=0.933 R=0.755
+  seed=43 held=Linux         kept= 107 P=0.897 R=0.762
+  seed=43 held=Thunderbird   kept=  76 P=0.184 R=0.778
+  seed=43 held=windows_event kept=   4 P=1.000 R=0.667
+  seed=43 held=cloudtrail    kept=   0 P=0.000 R=0.000
+  seed=44 held=OpenSSH       kept= 174 P=0.868 R=0.702
+  seed=44 held=Linux         kept=  91 P=0.890 R=0.653
+  seed=44 held=Thunderbird   kept=  73 P=0.151 R=0.550
+  seed=44 held=windows_event kept=   5 P=1.000 R=1.000
+  seed=44 held=cloudtrail    kept=   0 P=0.000 R=0.000
+
+=== Verdicts (mechanical) ===
+  H8: SUPPORTED

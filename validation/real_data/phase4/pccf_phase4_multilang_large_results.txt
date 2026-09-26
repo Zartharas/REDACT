@@ -1,0 +1,24 @@
+H21: per language, in-language calibration keeps per-group candidate recall >= 0.95 - tol for every group with
+     n_true >= 19, AND LR-UD coverage a=0.05 gains >= +0.03 precision over union.
+data dir: /sessions/rcw-013p7wz3sqkkmv4up7durgns/mnt/REDACT/validation/real_data/datasets/large
+
+=== FR: 3500 docs (fit 1000 / calibrate 1000 / test 1500) ===
+  test pattern dict      n=   32 true=    9 precision=0.281
+  test pattern dict+ner  n=   31 true=   28 precision=0.903
+  test pattern ner       n=  908 true=  702 precision=0.773
+  union                      P=0.754 R=0.473
+  rule (lang cues)           P=0.754 (+0.000) R=0.473 (+0.000) floors=ok fallback={'ner': False, 'dict': True, 'dict+ner': True}
+  LR hand cues               P=0.815 (+0.061) R=0.459 (-0.015) floors=ok fallback={'ner': False, 'dict': True, 'dict+ner': True}
+  LR-UD                      P=0.899 (+0.145) R=0.448 (-0.026) floors=ok fallback={'ner': False, 'dict': True, 'dict+ner': True}
+
+=== RU: 2841 docs (fit 710 / calibrate 710 / test 1421) ===
+  test pattern dict      n=   38 true=   20 precision=0.526
+  test pattern dict+ner  n=  162 true=  158 precision=0.975
+  test pattern ner       n=  167 true=   71 precision=0.425
+  union                      P=0.679 R=0.424
+  rule (lang cues)           P=0.691 (+0.011) R=0.420 (-0.003) floors=ok fallback={'ner': False, 'dict+ner': False, 'dict': True}
+  LR hand cues               P=0.699 (+0.019) R=0.405 (-0.019) floors=ok fallback={'ner': False, 'dict+ner': False, 'dict': True}
+  LR-UD                      P=0.747 (+0.067) R=0.390 (-0.034) floors=FAIL fallback={'ner': False, 'dict+ner': False, 'dict': True}
+
+=== Verdicts (mechanical) ===
+  H21: NOT SUPPORTED

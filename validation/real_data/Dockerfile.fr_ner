@@ -1,0 +1,50 @@
+# Standalone image for the ONE thing this project's own sandbox structurally
+# cannot do: download a spaCy NER model. Everything else about the OpenPII
+# French evaluation (regex, fr_detect.py's dictionary layer, scoring)
+# already runs fine without Docker -- this image exists only to add the
+# French NER condition (`fr-ner` / `full`) to evaluate_fr.py's results, so
+# it can be compared against the dictionary-only numbers already measured
+# and written up without it. Near-identical to Dockerfile.meddocan_ner,
+# with only the model name and entrypoint script swapped.
+#
+# Why a SEPARATE French model, not just "unblock the existing English one":
+# the OpenPII French sample's carrier text is French. Presidio's default
+# AnalyzerEngine (used everywhere else in this project, see detect.py's own
+# _get_analyzer()) loads an English spaCy model -- running it against
+# French text would not error, but would silently produce near-zero real
+# PERSON recall (an English NER model has no meaningful signal on French
+# sentence structure), which would look like "NER doesn't help here" when
+# the real story is "wrong model was loaded." fr_core_news_md is spaCy's
+# medium French pipeline (~45MB, NER-capable with PER/LOC/ORG/MISC labels
+# -- Presidio's built-in SpacyRecognizer maps "PER" -> PERSON automatically,
+# same label-mapping logic it already uses for English "PERSON"/"PER" and
+# Spanish "PER").
+#
+# Usage: don't build/run this by hand -- run run_fr_ner.sh from the repo
+# (any working directory; it resolves paths itself). It builds this image,
+# mounts the whole repo read-only at /app (so evaluate_fr.py sees your real
+# src/, fr_detect.py, fr_ner.py, and staged OpenPII_FR_raw.jsonl exactly as
+# they are locally), and tees results to a file.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Only what evaluate_fr.py + fr_ner.py actually need -- not the full
+# requirements.txt (same reasoning as Dockerfile.meddocan_ner).
+RUN pip install --no-cache-dir \
+    presidio-analyzer \
+    presidio-anonymizer \
+    faker \
+    pyahocorasick \
+    spacy
+
+# Real network access (this is the whole point of running in Docker rather
+# than this project's own sandbox) -- downloads spaCy's medium French
+# pipeline directly from spaCy's own model release, not from this project's
+# blocked huggingface.co/github.com allowlist gap.
+RUN python -m spacy download fr_core_news_md
+
+# Source and validation code are mounted at runtime (see run_fr_ner.sh)
+# rather than baked into the image, so local edits to fr_detect.py /
+# evaluate_fr.py / fr_ner.py are picked up without a rebuild.
+CMD ["python", "/app/validation/real_data/evaluate_fr.py", "--with-ner"]

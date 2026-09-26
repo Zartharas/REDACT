@@ -1,0 +1,344 @@
+{
+ "table": {
+  "union (old flattened)": {
+   "tp": 5382,
+   "fp": 1234,
+   "fn": 1759,
+   "P": 0.8134824667472793,
+   "R": 0.7536759557484947,
+   "F1": 0.7824380315475759,
+   "F2": 0.7649232518476408,
+   "recall_split": {
+    "field/flattened": 0.5044642857142857,
+    "field/spaced": 0.9788329519450801,
+    "message/flattened": 0.5413363533408834,
+    "message/spaced": 0.987465940054496
+   }
+  },
+  "union (extended flattened)": {
+   "tp": 6809,
+   "fp": 5984,
+   "fn": 332,
+   "P": 0.532244196044712,
+   "R": 0.9535079120571348,
+   "F1": 0.68315440955152,
+   "F2": 0.8231980075924269,
+   "recall_split": {
+    "field/flattened": 0.9202008928571429,
+    "field/spaced": 0.9799771167048055,
+    "message/flattened": 0.9263873159682899,
+    "message/spaced": 0.987465940054496
+   }
+  },
+  "policy + union (old)": {
+   "tp": 6307,
+   "fp": 3379,
+   "fn": 834,
+   "P": 0.6511459838942804,
+   "R": 0.8832096345049713,
+   "F1": 0.7496285731265229,
+   "F2": 0.8244444444444445,
+   "recall_split": {
+    "field/flattened": 1.0,
+    "field/spaced": 1.0,
+    "message/flattened": 0.5413363533408834,
+    "message/spaced": 0.9869209809264305
+   }
+  },
+  "policy + union (extended)": {
+   "tp": 6987,
+   "fp": 8136,
+   "fn": 154,
+   "P": 0.46201150565364013,
+   "R": 0.9784343929421649,
+   "F1": 0.6276500179662234,
+   "F2": 0.7996658044727265,
+   "recall_split": {
+    "field/flattened": 1.0,
+    "field/spaced": 1.0,
+    "message/flattened": 0.9263873159682899,
+    "message/spaced": 0.9869209809264305
+   }
+  },
+  "E4 [exploratory] union (ext. without initial+surname)": {
+   "tp": 5974,
+   "fp": 1235,
+   "fn": 1167,
+   "P": 0.8286863642668886,
+   "R": 0.8365775101526397,
+   "F1": 0.8326132404181185,
+   "F2": 0.8349872809101836,
+   "recall_split": {
+    "field/flattened": 0.6729910714285714,
+    "field/spaced": 0.9799771167048055,
+    "message/flattened": 0.7044167610419027,
+    "message/spaced": 0.987465940054496
+   }
+  },
+  "E4 [exploratory] policy + union (ext. without initial+surname)": {
+   "tp": 6595,
+   "fp": 3408,
+   "fn": 546,
+   "P": 0.6593022093371989,
+   "R": 0.9235401204313122,
+   "F1": 0.7693653756416239,
+   "F2": 0.8550055747141339,
+   "recall_split": {
+    "field/flattened": 1.0,
+    "field/spaced": 1.0,
+    "message/flattened": 0.7044167610419027,
+    "message/spaced": 0.9869209809264305
+   }
+  }
+ },
+ "new_shape_tp": {
+  "flattened_ext:given+digits": 637,
+  "flattened_ext:initial+surname": 876,
+  "flattened_ext:given+surname": 193
+ },
+ "new_shape_fp": {
+  "flattened_ext:initial+surname": 4805
+ },
+ "fp_examples": [
+  [
+   "rhost",
+   2982
+  ],
+  [
+   "check",
+   792
+  ],
+  [
+   "flaws",
+   764
+  ],
+  [
+   "using",
+   63
+  ],
+  [
+   "class",
+   30
+  ],
+  [
+   "xdelay",
+   30
+  ],
+  [
+   "table",
+   21
+  ],
+  [
+   "ready",
+   18
+  ],
+  [
+   "tbird",
+   15
+  ],
+  [
+   "state",
+   12
+  ],
+  [
+   "kshell",
+   9
+  ],
+  [
+   "times",
+   6
+  ],
+  [
+   "tables",
+   6
+  ],
+  [
+   "bridge",
+   6
+  ],
+  [
+   "scanning",
+   6
+  ],
+  [
+   "stopping",
+   6
+  ],
+  [
+   "butter",
+   5
+  ],
+  [
+   "ghost",
+   5
+  ],
+  [
+   "cheng",
+   5
+  ],
+  [
+   "memory",
+   3
+  ],
+  [
+   "block",
+   3
+  ],
+  [
+   "across",
+   3
+  ],
+  [
+   "drivers",
+   3
+  ],
+  [
+   "speed",
+   3
+  ],
+  [
+   "drives",
+   3
+  ],
+  [
+   "since",
+   3
+  ],
+  [
+   "stack",
+   3
+  ]
+ ],
+ "policy_nongold": 2154,
+ "policy_nongold_top": [
+  [
+   "backup",
+   670
+  ],
+  [
+   "level6",
+   300
+  ],
+  [
+   "test",
+   149
+  ],
+  [
+   "news",
+   139
+  ],
+  [
+   "cyrus",
+   112
+  ],
+  [
+   "811596193553",
+   93
+  ],
+  [
+   "authentication",
+   73
+  ],
+  [
+   "securitymokey",
+   69
+  ],
+  [
+   "self",
+   42
+  ],
+  [
+   "support",
+   37
+  ],
+  [
+   "oracle",
+   18
+  ],
+  [
+   "user",
+   17
+  ],
+  [
+   "uucp",
+   15
+  ],
+  [
+   "0",
+   15
+  ],
+  [
+   "1234",
+   15
+  ],
+  [
+   "inspur",
+   13
+  ],
+  [
+   "piper",
+   13
+  ],
+  [
+   "matlab",
+   12
+  ],
+  [
+   "cisco",
+   12
+  ],
+  [
+   "magnos",
+   11
+  ],
+  [
+   "from",
+   10
+  ],
+  [
+   "ubnt",
+   10
+  ],
+  [
+   "0101",
+   9
+  ],
+  [
+   "ftp",
+   9
+  ],
+  [
+   "123",
+   9
+  ],
+  [
+   "git",
+   9
+  ],
+  [
+   "null\",",
+   9
+  ],
+  [
+   "webmaster",
+   8
+  ],
+  [
+   "ftpuser",
+   8
+  ],
+  [
+   "ubuntu",
+   8
+  ]
+ ],
+ "policy_allowlisted": 3261,
+ "H17b": {
+  "old": 0.1525,
+  "extended": 0.6085
+ },
+ "verdicts": {
+  "H16": true,
+  "H17": false
+ }
+}

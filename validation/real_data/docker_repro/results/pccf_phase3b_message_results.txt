@@ -1,0 +1,50 @@
+(Rows tagged [exploratory] were added after the pre-registered verdicts were first computed. They are not judged.)
+H12: T3 config (KV rule, mask-only groups) recalls message-text names at < 0.80 x union's message-text recall.
+H13: Hybrid + mask x key groups: pooled per-group candidate recall >= 0.95 - tol for every group with n_true >= 19.
+H14: Hybrid + mask x key groups: message-text recall >= union's - 0.03 AND precision >= union + 0.05, CI of dP excludes 0.
+H15 (descriptive): Hybrid vs production detect_all_field_gated, by gold location and name format.
+
+=== Pooled over held-out datasets x seeds (held-out uses template set B) ===
+  union                                            P=0.813 (+0.000)  R=0.754 (+0.000)  R_field=0.739  R_message=0.769
+  production field-gated (raw)                     P=0.819 (+0.005)  R=0.754 (+0.000)  R_field=0.739  R_message=0.769
+  production field-gated (header-stripped sim.)    P=0.827 (+0.014)  R=0.747 (-0.006)  R_field=0.739  R_message=0.756
+  S1 KV-rule, mask groups (T3 config)              P=0.874 (+0.060)  R=0.724 (-0.029)  R_field=0.738  R_message=0.712
+  S2 KV-rule, mask x key groups                    P=0.854 (+0.040)  R=0.738 (-0.016)  R_field=0.738  R_message=0.738
+  S3 Hybrid, mask x key groups                     P=0.880 (+0.066)  R=0.579 (-0.175)  R_field=0.729  R_message=0.431
+  S4 KV-LR+text, mask x key groups                 P=0.864 (+0.050)  R=0.390 (-0.363)  R_field=0.351  R_message=0.429
+  E3 [exploratory] Hybrid without lexical features, mask x key P=0.844 (+0.030)  R=0.739 (-0.015)  R_field=0.738  R_message=0.740
+  E2 [exploratory] T3 model as deployed (no unkeyed names in calibration) P=0.974 (+0.160)  R=0.366 (-0.388)  R_field=0.729  R_message=0.009
+
+=== Recall by gold location / name format ===
+  union                                            field/flattened=0.504(n=1792)  field/spaced=0.979(n=1748)  message/flattened=0.541(n=1766)  message/spaced=0.987(n=1835)
+  production field-gated (raw)                     field/flattened=0.504(n=1792)  field/spaced=0.979(n=1748)  message/flattened=0.541(n=1766)  message/spaced=0.987(n=1835)
+  production field-gated (header-stripped sim.)    field/flattened=0.506(n=1792)  field/spaced=0.979(n=1748)  message/flattened=0.541(n=1766)  message/spaced=0.962(n=1835)
+  S1 KV-rule, mask groups (T3 config)              field/flattened=0.504(n=1792)  field/spaced=0.977(n=1748)  message/flattened=0.507(n=1766)  message/spaced=0.908(n=1835)
+  S2 KV-rule, mask x key groups                    field/flattened=0.504(n=1792)  field/spaced=0.977(n=1748)  message/flattened=0.530(n=1766)  message/spaced=0.938(n=1835)
+  S3 Hybrid, mask x key groups                     field/flattened=0.504(n=1792)  field/spaced=0.960(n=1748)  message/flattened=0.303(n=1766)  message/spaced=0.555(n=1835)
+  S4 KV-LR+text, mask x key groups                 field/flattened=0.249(n=1792)  field/spaced=0.456(n=1748)  message/flattened=0.298(n=1766)  message/spaced=0.555(n=1835)
+  E3 [exploratory] Hybrid without lexical features, mask x key field/flattened=0.504(n=1792)  field/spaced=0.977(n=1748)  message/flattened=0.512(n=1766)  message/spaced=0.959(n=1835)
+  E2 [exploratory] T3 model as deployed (no unkeyed names in calibration) field/flattened=0.504(n=1792)  field/spaced=0.959(n=1748)  message/flattened=0.018(n=1766)  message/spaced=0.002(n=1835)
+
+=== S3 per-group candidate recall (pooled) ===
+  flat      identity-key  n=  802 n_true=  802 cand_recall=1.000 kept=  802 check=pass
+  flat      no-key        n=  815 n_true=  815 cand_recall=0.524 kept=  427 check=FAIL
+  flat      other-key     n=   42 n_true=   42 cand_recall=1.000 kept=   42 check=pass
+  flat+ner  identity-key  n=   46 n_true=   46 cand_recall=1.000 kept=   46 check=pass
+  flat+ner  no-key        n=   26 n_true=   26 cand_recall=1.000 kept=   26 check=pass
+  flat+ner  other-key     n=    7 n_true=    7 cand_recall=1.000 kept=    7 check=n/a
+  ner       identity-key  n= 1803 n_true= 1733 cand_recall=1.000 kept= 1803 check=pass
+  ner       no-key        n= 2673 n_true= 1800 cand_recall=0.522 kept= 1144 check=FAIL
+  ner       other-key     n=  402 n_true=  111 cand_recall=1.000 kept=  402 check=pass
+
+=== Per-group candidate recall, no-key groups only (S2 / S3 / E3) ===
+  E3: flat: 813/815=0.998 | flat+ner: 26/26=1.000 | ner: 1694/1800=0.941
+  S2: flat: 815/815=1.000 | flat+ner: 26/26=1.000 | ner: 1685/1800=0.936
+  S3: flat: 427/815=0.524 | flat+ner: 26/26=1.000 | ner: 940/1800=0.522
+
+  Bootstrap (1,000 over lines) S3 vs union: dP=[+0.057,+0.077] dR=[-0.183,-0.166]
+
+=== Verdicts (mechanical) ===
+  H12: NOT SUPPORTED
+  H13: NOT SUPPORTED
+  H14: NOT SUPPORTED
