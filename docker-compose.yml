@@ -5,7 +5,7 @@
 # stack's output, not as a live pipeline component, and bundling a full
 # Airflow deployment (webserver + scheduler + metadata DB) into this
 # compose file would conflate two different operational concerns. See
-# requirements-airflow.txt and dags/redact_weekly_validation.py for that
+# requirements-airflow.txt and infra/dags/redact_weekly_validation.py for that
 # piece, run separately.
 #
 # VERIFICATION STATUS, stated plainly: this file was originally written
@@ -259,14 +259,14 @@ services:
       - redact-output:/app/output
       # Bind-mounts the HOST's config/policy.json over the image's own
       # baked-in copy, read-only. This is what makes Phase 1's decoupling
-      # real rather than theoretical: an operator edits ./config/policy.json
+      # real rather than theoretical: an operator edits ./infra/config/policy.json
       # on the host and restarts this service (`docker compose restart
       # redact-service`) to change policy -- no image rebuild, no `docker
       # compose build`. anonymize.load_policy() re-validates the file at
       # every startup (fail-closed on an invalid edit -- see
       # PolicyConfigError in anonymize.py), so a bad edit fails the restart
       # loudly rather than silently running with broken protection.
-      - ./config/policy.json:/app/config/policy.json:ro
+      - ./infra/config/policy.json:/app/config/policy.json:ro
       # Same bind-mount convenience as policy.json above, but NOTE the
       # real difference: schema_trust.json has NO hot-reload mechanism
       # (unlike Phase 2's PolicyWatcher) -- Phase 3's own devil's-advocate
@@ -276,7 +276,7 @@ services:
       # container restart (`docker compose restart redact-service`) to
       # take effect, not just a wait for the next poll -- disclosed here
       # so this isn't assumed to behave like policy.json's own mount.
-      - ./config/schema_trust.json:/app/config/schema_trust.json:ro
+      - ./infra/config/schema_trust.json:/app/config/schema_trust.json:ro
     # No host port mapping (see comment above) -- reachable only over
     # redact-net now, from logstash, redact-lb, and queue-consumer.
     networks:
@@ -312,7 +312,7 @@ services:
     depends_on:
       - redact-service
     volumes:
-      - ./logstash/nginx-lb.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/logstash/nginx-lb.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - redact-net
 
@@ -422,7 +422,7 @@ services:
     image: redis:7-alpine
     container_name: redact-redis-sentinel-1
     volumes:
-      - ./redis/sentinel.conf:/etc/redis/sentinel.conf.template:ro
+      - ./infra/redis/sentinel.conf:/etc/redis/sentinel.conf.template:ro
     command: ["sh", "-c", "cp /etc/redis/sentinel.conf.template /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
     depends_on:
       redis-master:
@@ -444,7 +444,7 @@ services:
     image: redis:7-alpine
     container_name: redact-redis-sentinel-2
     volumes:
-      - ./redis/sentinel.conf:/etc/redis/sentinel.conf.template:ro
+      - ./infra/redis/sentinel.conf:/etc/redis/sentinel.conf.template:ro
     command: ["sh", "-c", "cp /etc/redis/sentinel.conf.template /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
     depends_on:
       redis-master:
@@ -466,7 +466,7 @@ services:
     image: redis:7-alpine
     container_name: redact-redis-sentinel-3
     volumes:
-      - ./redis/sentinel.conf:/etc/redis/sentinel.conf.template:ro
+      - ./infra/redis/sentinel.conf:/etc/redis/sentinel.conf.template:ro
     command: ["sh", "-c", "cp /etc/redis/sentinel.conf.template /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
     depends_on:
       redis-master:
@@ -564,7 +564,7 @@ services:
       - REDACT_QUEUE_KEY=${REDACT_QUEUE_KEY:-redact:raw-events}
     volumes:
       - ./data/raw:/var/log/security:ro
-      - ./logstash/redact-pipeline-queued.conf:/usr/share/logstash/pipeline/redact-pipeline.conf:ro
+      - ./infra/logstash/redact-pipeline-queued.conf:/usr/share/logstash/pipeline/redact-pipeline.conf:ro
     networks:
       - redact-net
     profiles: ["queued"]
@@ -688,7 +688,7 @@ services:
       - KAFKA_SASL_JAAS_CONFIG=${KAFKA_SASL_JAAS_CONFIG:-}
     volumes:
       - ./data/raw:/var/log/security:ro
-      - ./logstash/redact-pipeline-kafka.conf:/usr/share/logstash/pipeline/redact-pipeline.conf:ro
+      - ./infra/logstash/redact-pipeline-kafka.conf:/usr/share/logstash/pipeline/redact-pipeline.conf:ro
     networks:
       - redact-net
     profiles: ["kafka-queued"]
@@ -850,8 +850,8 @@ services:
     depends_on:
       - pushgateway
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
     ports:
       - "9090:9090"
     networks:
@@ -862,7 +862,7 @@ services:
     image: prom/alertmanager:v0.28.0
     container_name: redact-alertmanager
     volumes:
-      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./infra/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     ports:
       - "9093:9093"
     networks:

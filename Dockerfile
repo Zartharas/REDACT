@@ -22,8 +22,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
-COPY requirements.txt requirements-redis.txt requirements-kafka.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-redis.txt -r requirements-kafka.txt \
+COPY requirements.txt requirements/redis.txt requirements/kafka.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r redis.txt -r kafka.txt \
     && python -m spacy download en_core_web_lg
 # requirements-redis.txt added to the base install, 2026-08-10 (ROADMAP
 # item 12): this same image now also runs src/queue_consumer.py
@@ -83,7 +83,7 @@ COPY src/ ./src/
 # so an operator can change policy by editing that host file and restarting
 # the container -- the actual decoupling this build step exists to support
 # -- without needing to rebuild this image at all.
-COPY config/ ./config/
+COPY infra/config/ ./config/
 
 ENV REDACT_TOKEN_STORE_PATH=/app/output/token_store.json
 # REDACT_PSEUDO_KEY and REDACT_AUDIT_KEY are intentionally NOT baked in here.

@@ -80,10 +80,10 @@ validation/real_data/datasets/CloudTrailFlaws_raw.jsonl
 # corpora (equivalence_test.py/real_data_equivalence_test.py both write
 # a plain-text working file under tests/ before invoking Node) are
 # regenerated fresh on every run and not meant to be tracked either.
-wasm/layer1_4/node_modules/
-wasm/layer1_4/build/
-wasm/layer1_4/tests/_equivalence_corpus.txt
-wasm/layer1_4/tests/_real_data_equivalence_corpus.txt
+infra/wasm/layer1_4/node_modules/
+infra/wasm/layer1_4/build/
+infra/wasm/layer1_4/tests/_equivalence_corpus.txt
+infra/wasm/layer1_4/tests/_real_data_equivalence_corpus.txt
 
 # PIIBench evaluation output (validation/piibench/evaluate_piibench.py) --
 # a per-run results JSON against a large third-party benchmark file that

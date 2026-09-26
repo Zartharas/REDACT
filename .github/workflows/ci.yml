@@ -79,8 +79,8 @@ jobs:
           # installing the real dependency is what makes these 13 tests
           # (9 fpe + 4 kafka) actually run in CI instead of always
           # silently no-op'ing.
-          pip install -r requirements-fpe.txt
-          pip install -r requirements-kafka.txt
+          pip install -r requirements/fpe.txt
+          pip install -r requirements/kafka.txt
           pip install pytest
       - name: Run fast validation suite
         run: pytest tests/ -v -m "not needs_redis"
@@ -105,7 +105,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install -r requirements-redis.txt
+          pip install -r requirements/redis.txt
           pip install pytest
       - name: Run Redis-backed validation suite
         env:
