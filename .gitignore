@@ -7,7 +7,7 @@ venv/
 .DS_Store
 *.log
 Academic Documentation/
-PROJECT_STATUS.md
+docs/internal/PROJECT_STATUS.md
 validation/entropy_fair_test/secrets_corpus.jsonl
 skill-observations/
 .claude/
