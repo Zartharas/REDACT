@@ -19,14 +19,14 @@ pytest tests/test_redis_validation.py  # needs a live Redis (auto-skips if none 
 
 **Optional-dependency test files, disclosed plainly:** `test_fpe_provider.py`
 and part of `test_queue_consumer.py` (the Kafka-path tests) need
-`requirements-fpe.txt` (`ff3`) and `requirements-kafka.txt`
+`requirements/fpe.txt` (`ff3`) and `requirements/kafka.txt`
 (`kafka-python`) respectively, on top of the base `requirements.txt`
 install above -- neither needs a live external service (unlike Redis/
 Vault below), so it's safe to install both alongside the base
 requirements if you want full coverage:
 
 ```bash
-pip install -r requirements-fpe.txt -r requirements-kafka.txt
+pip install -r requirements/fpe.txt -r requirements/kafka.txt
 ```
 
 Without them, both files **skip cleanly** rather than failing --
