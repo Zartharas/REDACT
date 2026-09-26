@@ -1,0 +1,683 @@
+{
+ "en_tab_redact": {
+  "lang": "en_tab_redact",
+  "docs": 1268,
+  "docs_uncached_or_error": 0,
+  "gold_person": 16266,
+  "label_inventory": [
+   [
+    "PERSON",
+    16266
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 60,
+  "ner_hits": 15974,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [],
+  "test_patterns": {
+   "dict": {
+    "n": 7,
+    "true": 0,
+    "precision": 0.0,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 1,
+    "true": 1,
+    "precision": 1.0,
+    "ner_conf_mean_true": 1.0,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "ner": {
+    "n": 2266,
+    "true": 2034,
+    "precision": 0.8976169461606355,
+    "ner_conf_mean_true": 0.8130452236971485,
+    "ner_conf_mean_false": 0.5833678663793104,
+    "ner_conf_auroc_within_pattern": 0.6248368256874512
+   }
+  },
+  "status": "ok"
+ },
+ "en_tab_spacy": {
+  "lang": "en_tab_spacy",
+  "docs": 1268,
+  "docs_uncached_or_error": 0,
+  "gold_person": 16266,
+  "label_inventory": [
+   [
+    "PERSON",
+    16266
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 52266,
+  "ner_hits": 15992,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [],
+  "test_patterns": {
+   "dict": {
+    "n": 7116,
+    "true": 117,
+    "precision": 0.016441821247892074,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 923,
+    "true": 895,
+    "precision": 0.9696641386782232,
+    "ner_conf_mean_true": 0.8179120011173184,
+    "ner_conf_mean_false": 0.6594246428571429,
+    "ner_conf_auroc_within_pattern": 0.5817238627294493
+   },
+   "ner": {
+    "n": 1344,
+    "true": 1140,
+    "precision": 0.8482142857142857,
+    "ner_conf_mean_true": 0.8093883719298246,
+    "ner_conf_mean_false": 0.5729287009803922,
+    "ner_conf_auroc_within_pattern": 0.6292397660818714
+   }
+  },
+  "status": "ok"
+ },
+ "en_btc_redact": {
+  "lang": "en_btc_redact",
+  "docs": 3500,
+  "docs_uncached_or_error": 1,
+  "gold_person": 2374,
+  "label_inventory": [
+   [
+    "PERSON",
+    2374
+   ],
+   [
+    "ORG",
+    964
+   ],
+   [
+    "LOC",
+    447
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 49,
+  "ner_hits": 949,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [
+   "ValueError('Shape mismatch for blis.gemm: (0, 0), (480, 288)')"
+  ],
+  "test_patterns": {
+   "dict": {
+    "n": 23,
+    "true": 23,
+    "precision": 1.0,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 1,
+    "true": 1,
+    "precision": 1.0,
+    "ner_conf_mean_true": 0.0,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "ner": {
+    "n": 368,
+    "true": 258,
+    "precision": 0.7010869565217391,
+    "ner_conf_mean_true": 0.7974606511627907,
+    "ner_conf_mean_false": 0.6747502818181819,
+    "ner_conf_auroc_within_pattern": 0.6539640591966174
+   }
+  },
+  "status": "ok"
+ },
+ "en_btc_spacy": {
+  "lang": "en_btc_spacy",
+  "docs": 3500,
+  "docs_uncached_or_error": 1,
+  "gold_person": 2374,
+  "label_inventory": [
+   [
+    "PERSON",
+    2374
+   ],
+   [
+    "ORG",
+    964
+   ],
+   [
+    "LOC",
+    447
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 1512,
+  "ner_hits": 1042,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [
+   "ValueError('Shape mismatch for blis.gemm: (0, 0), (480, 288)')"
+  ],
+  "test_patterns": {
+   "dict": {
+    "n": 468,
+    "true": 30,
+    "precision": 0.0641025641025641,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 127,
+    "true": 115,
+    "precision": 0.905511811023622,
+    "ner_conf_mean_true": 0.781158347826087,
+    "ner_conf_mean_false": 0.5824196666666667,
+    "ner_conf_auroc_within_pattern": 0.6829710144927537
+   },
+   "ner": {
+    "n": 299,
+    "true": 154,
+    "precision": 0.5150501672240803,
+    "ner_conf_mean_true": 0.8113630649350649,
+    "ner_conf_mean_false": 0.7054361379310344,
+    "ner_conf_auroc_within_pattern": 0.6152261531571876
+   }
+  },
+  "status": "ok"
+ },
+ "en_wnut_redact": {
+  "lang": "en_wnut_redact",
+  "docs": 3500,
+  "docs_uncached_or_error": 0,
+  "gold_person": 1017,
+  "label_inventory": [
+   [
+    "PERSON",
+    1017
+   ],
+   [
+    "location",
+    472
+   ],
+   [
+    "group",
+    247
+   ],
+   [
+    "product",
+    243
+   ],
+   [
+    "creative-work",
+    222
+   ],
+   [
+    "corporation",
+    203
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 30,
+  "ner_hits": 1039,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [],
+  "test_patterns": {
+   "dict": {
+    "n": 3,
+    "true": 0,
+    "precision": 0.0,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 1,
+    "true": 1,
+    "precision": 1.0,
+    "ner_conf_mean_true": 0.792858,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "ner": {
+    "n": 515,
+    "true": 381,
+    "precision": 0.7398058252427184,
+    "ner_conf_mean_true": 0.8157245905511811,
+    "ner_conf_mean_false": 0.7377490298507463,
+    "ner_conf_auroc_within_pattern": 0.63088102793121
+   }
+  },
+  "status": "ok"
+ },
+ "en_wnut_spacy": {
+  "lang": "en_wnut_spacy",
+  "docs": 3500,
+  "docs_uncached_or_error": 0,
+  "gold_person": 1017,
+  "label_inventory": [
+   [
+    "PERSON",
+    1017
+   ],
+   [
+    "location",
+    472
+   ],
+   [
+    "group",
+    247
+   ],
+   [
+    "product",
+    243
+   ],
+   [
+    "creative-work",
+    222
+   ],
+   [
+    "corporation",
+    203
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 1765,
+  "ner_hits": 1173,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [],
+  "test_patterns": {
+   "dict": {
+    "n": 420,
+    "true": 70,
+    "precision": 0.16666666666666666,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 202,
+    "true": 183,
+    "precision": 0.905940594059406,
+    "ner_conf_mean_true": 0.8238728142076502,
+    "ner_conf_mean_false": 0.7494682105263157,
+    "ner_conf_auroc_within_pattern": 0.6220880069025022
+   },
+   "ner": {
+    "n": 318,
+    "true": 199,
+    "precision": 0.6257861635220126,
+    "ner_conf_mean_true": 0.8081165929648241,
+    "ner_conf_mean_false": 0.7328471176470588,
+    "ner_conf_auroc_within_pattern": 0.6148389003842744
+   }
+  },
+  "status": "ok"
+ },
+ "de_germeval": {
+  "lang": "de_germeval",
+  "docs": 3500,
+  "docs_uncached_or_error": 0,
+  "gold_person": 1118,
+  "label_inventory": [
+   [
+    "LOC",
+    1200
+   ],
+   [
+    "PERSON",
+    1118
+   ],
+   [
+    "ORG",
+    767
+   ],
+   [
+    "OTH",
+    455
+   ],
+   [
+    "LOCderiv",
+    403
+   ],
+   [
+    "ORGpart",
+    133
+   ],
+   [
+    "LOCpart",
+    80
+   ],
+   [
+    "OTHpart",
+    31
+   ],
+   [
+    "PERpart",
+    30
+   ],
+   [
+    "OTHderiv",
+    28
+   ],
+   [
+    "PERderiv",
+    7
+   ],
+   [
+    "ORGderiv",
+    1
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 582,
+  "ner_hits": 1188,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [],
+  "test_patterns": {
+   "dict": {
+    "n": 49,
+    "true": 11,
+    "precision": 0.22448979591836735,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 215,
+    "true": 208,
+    "precision": 0.9674418604651163,
+    "ner_conf_mean_true": 0.9055897067307692,
+    "ner_conf_mean_false": 0.6404545714285714,
+    "ner_conf_auroc_within_pattern": 0.7534340659340659
+   },
+   "ner": {
+    "n": 313,
+    "true": 213,
+    "precision": 0.6805111821086262,
+    "ner_conf_mean_true": 0.9177986150234742,
+    "ner_conf_mean_false": 0.70183482,
+    "ner_conf_auroc_within_pattern": 0.7885446009389672
+   }
+  },
+  "status": "ok"
+ },
+ "ru_factrueval": {
+  "lang": "ru_factrueval",
+  "docs": 254,
+  "docs_uncached_or_error": 0,
+  "gold_person": 3388,
+  "label_inventory": [
+   [
+    "PERSON",
+    3388
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 821,
+  "ner_hits": 2064,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [],
+  "test_patterns": {
+   "dict": {
+    "n": 18,
+    "true": 14,
+    "precision": 0.7777777777777778,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 429,
+    "true": 427,
+    "precision": 0.9953379953379954,
+    "ner_conf_mean_true": 0.9718314730679157,
+    "ner_conf_mean_false": 1.0,
+    "ner_conf_auroc_within_pattern": 0.4765807962529274
+   },
+   "ner": {
+    "n": 647,
+    "true": 594,
+    "precision": 0.9180834621329211,
+    "ner_conf_mean_true": 0.9584419848484849,
+    "ner_conf_mean_false": 0.8927326981132075,
+    "ner_conf_auroc_within_pattern": 0.583889206530716
+   }
+  },
+  "status": "ok"
+ },
+ "ar_anercorp": {
+  "lang": "ar_anercorp",
+  "docs": 2952,
+  "docs_uncached_or_error": 0,
+  "gold_person": 2273,
+  "label_inventory": [
+   [
+    "LOC",
+    2581
+   ],
+   [
+    "PERSON",
+    2273
+   ],
+   [
+    "ORG",
+    1045
+   ],
+   [
+    "MISC",
+    646
+   ],
+   [
+    "PRG",
+    3
+   ],
+   [
+    "MSIC",
+    1
+   ],
+   [
+    "ERS",
+    1
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 1407,
+  "ner_hits": 2632,
+  "ner_backend": "hf",
+  "cache_errors_sample": [],
+  "test_patterns": {
+   "dict": {
+    "n": 257,
+    "true": 1,
+    "precision": 0.0038910505836575876,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 211,
+    "true": 205,
+    "precision": 0.9715639810426541,
+    "ner_conf_mean_true": 0.9817724097560976,
+    "ner_conf_mean_false": 0.8457943333333333,
+    "ner_conf_auroc_within_pattern": 0.6796747967479675
+   },
+   "ner": {
+    "n": 788,
+    "true": 706,
+    "precision": 0.8959390862944162,
+    "ner_conf_mean_true": 0.9490876657223796,
+    "ner_conf_mean_false": 0.8180473902439025,
+    "ner_conf_auroc_within_pattern": 0.7634647274234782
+   }
+  },
+  "status": "ok"
+ },
+ "en_enron_redact": {
+  "lang": "en_enron_redact",
+  "docs": 1656,
+  "docs_uncached_or_error": 0,
+  "gold_person": 7450,
+  "label_inventory": [
+   [
+    "PERSON",
+    7450
+   ],
+   [
+    "predicted_name",
+    823
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 58,
+  "ner_hits": 6086,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [],
+  "test_patterns": {
+   "dict": {
+    "n": 13,
+    "true": 3,
+    "precision": 0.23076923076923078,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 11,
+    "true": 9,
+    "precision": 0.8181818181818182,
+    "ner_conf_mean_true": 1.0,
+    "ner_conf_mean_false": 1.0,
+    "ner_conf_auroc_within_pattern": 0.5
+   },
+   "ner": {
+    "n": 2974,
+    "true": 1563,
+    "precision": 0.5255548083389374,
+    "ner_conf_mean_true": 0.8992922693538068,
+    "ner_conf_mean_false": 0.8959253465627215,
+    "ner_conf_auroc_within_pattern": 0.5351393153057075
+   }
+  },
+  "status": "ok"
+ },
+ "en_enron_spacy": {
+  "lang": "en_enron_spacy",
+  "docs": 1656,
+  "docs_uncached_or_error": 0,
+  "gold_person": 7450,
+  "label_inventory": [
+   [
+    "PERSON",
+    7450
+   ],
+   [
+    "predicted_name",
+    823
+   ]
+  ],
+  "person_labels_matched": [
+   "PERSON"
+  ],
+  "dict_hits": 12983,
+  "ner_hits": 7237,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [],
+  "test_patterns": {
+   "dict": {
+    "n": 3266,
+    "true": 453,
+    "precision": 0.13870177587262705,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 2718,
+    "true": 1715,
+    "precision": 0.6309786607799853,
+    "ner_conf_mean_true": 0.9029630285714285,
+    "ner_conf_mean_false": 0.9024129142572284,
+    "ner_conf_auroc_within_pattern": 0.5169308401326632
+   },
+   "ner": {
+    "n": 872,
+    "true": 275,
+    "precision": 0.31536697247706424,
+    "ner_conf_mean_true": 0.8725052872727272,
+    "ner_conf_mean_false": 0.8301511306532663,
+    "ner_conf_auroc_within_pattern": 0.5767656464138876
+   }
+  },
+  "status": "ok"
+ },
+ "ko_legal_precedents": {
+  "lang": "ko_legal_precedents",
+  "docs": 1500,
+  "docs_uncached_or_error": 0,
+  "gold_person": 0,
+  "label_inventory": [],
+  "person_labels_matched": [],
+  "dict_hits": 885,
+  "ner_hits": 21087,
+  "ner_backend": "spacy/presidio",
+  "cache_errors_sample": [],
+  "test_patterns": {
+   "dict": {
+    "n": 75,
+    "true": 0,
+    "precision": 0.0,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": null,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "dict+ner": {
+    "n": 353,
+    "true": 0,
+    "precision": 0.0,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": 0.9872637393767706,
+    "ner_conf_auroc_within_pattern": null
+   },
+   "ner": {
+    "n": 10011,
+    "true": 0,
+    "precision": 0.0,
+    "ner_conf_mean_true": null,
+    "ner_conf_mean_false": 0.9580480551393468,
+    "ner_conf_auroc_within_pattern": null
+   }
+  },
+  "status": "ok"
+ }
+}

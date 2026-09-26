@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # PCCF phase 11 (real documents), end to end in the Docker image:
-#   1. fetch the datasets that are missing (TAB, BTC, WNUT-17, GermEval, FactRuEval, Enron;
+#   1. fetch the datasets that are missing (TAB, BTC, WNUT-17, GermEval, FactRuEval, Enron,
+#      ko_legal_precedents (open, no permission needed);
 #      ANERcorp only if you downloaded it manually into datasets/manual/anercorp/),
 #   2. run the detection layers into the persistent cache (progress printed),
 #   3. evaluate H41/H42 with the phase-5 harness, then H43 + descriptive arms.
@@ -13,10 +14,10 @@ mkdir -p "${OUT}" "${P5}/docker_run/cache" "${P5}/docker_run/hf_cache" "${MANUAL
 source "${RD}/hf_token_prompt.sh"
 if [[ -n "$(docker ps -q --filter name=redact-pccf-)" ]]; then
   echo "!! another PCCF container is running:"; docker ps --filter name=redact-pccf-; exit 1; fi
-ROWS="en_tab_redact,en_tab_spacy,en_btc_redact,en_btc_spacy,en_wnut_redact,en_wnut_spacy,de_germeval,ru_factrueval,ar_anercorp,en_enron_redact,en_enron_spacy"
+ROWS="en_tab_redact,en_tab_spacy,en_btc_redact,en_btc_spacy,en_wnut_redact,en_wnut_spacy,de_germeval,ru_factrueval,ar_anercorp,en_enron_redact,en_enron_spacy,ko_legal_precedents"
 docker build -q -f "${P5}/Dockerfile.pccf_multilang" -t redact-pccf-multilang "${P5}" >/dev/null
 MISSING=""
-for pair in tab:EN_TAB btc:EN_BTC wnut:EN_WNUT germeval:DE_GERMEVAL factrueval:RU_FACTRUEVAL enron:EN_ENRON anercorp:AR_ANERCORP; do
+for pair in tab:EN_TAB btc:EN_BTC wnut:EN_WNUT germeval:DE_GERMEVAL factrueval:RU_FACTRUEVAL enron:EN_ENRON anercorp:AR_ANERCORP ko_legal_precedents:KO_LEGAL_PRECEDENTS; do
   k=${pair%%:*}; f=${pair#*:}_large.jsonl
   [[ -s "${DATA}/${f}" ]] || MISSING="${MISSING:+${MISSING},}${k}"
 done

@@ -63,7 +63,9 @@ HF_NER = {"ar": "Davlan/xlm-roberta-base-ner-hrl",
           # the data. Davlan XLM-R: AFL-3.0, ungated.
           "hi": "Davlan/xlm-roberta-base-ner-hrl", "te": "Davlan/xlm-roberta-base-ner-hrl",
           "tr": "savasy/bert-base-turkish-ner-cased",
-          "tr_mit": "akdeniz27/bert-base-turkish-cased-ner",  # amendment 6: MIT-licensed alternative  # model card shows NO licence: research use only, flag it
+          "tr_mit": "akdeniz27/bert-base-turkish-cased-ner",  # amendment 6; MIT confirmed via HF API 2026-09-26
+          # (cardData.license == "mit"). "tr" (savasy) has NO stated licence and stays
+          # internal-only: do not cite or publish results from it, use tr_mit instead.
           # amendment 4: second Indonesian row with the project's own IndoBERT (id_ner.py MODEL_NAME)
           "id_hf": "cahya/bert-base-indonesian-NER"}
 

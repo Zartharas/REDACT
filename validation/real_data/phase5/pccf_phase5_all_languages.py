@@ -93,9 +93,13 @@ LANGS["ru_factrueval"] = {"file": "RU_FACTRUEVAL_large.jsonl", "model": ("ru_cor
                           "layers_as": "ru"}
 LANGS["ar_anercorp"] = {"file": "AR_ANERCORP_large.jsonl", "model": ("xx_ent_wiki_sm", "PER"), "cues": None,
                         "hf_ner": True, "layers_as": "ar"}
+# added 2026-09-26: descriptive-only substitute for the still-pending "ko_legal" (K-LegalDeID) row --
+# no gold PERSON spans (see fetch_ko_legal_precedents), so it is never judged, same as Enron.
+LANGS["ko_legal_precedents"] = {"file": "KO_LEGAL_PRECEDENTS_large.jsonl", "model": ("ko_core_news_md", "PS"),
+                                "cues": None, "layers_as": "ko"}
 WAVE5_KEYS = {k for k in LANGS if k.startswith(("en_tab", "en_btc", "en_wnut"))} | {"de_germeval", "ru_factrueval",
                                                                                   "ar_anercorp"}
-DESC_KEYS = {"en_enron_redact", "en_enron_spacy"}  # descriptive only, excluded from every verdict
+DESC_KEYS = {"en_enron_redact", "en_enron_spacy", "ko_legal_precedents"}  # descriptive only, excluded from every verdict
 WAVE3_KEYS = {"bg", "pl", "cs", "lt", "et", "sv", "sk", "lv", "hu", "ro", "el", "da", "sl", "hr", "sr", "vi", "ms",
               "tl", "tr_mit", "ko_klue"}
 HYP = open(os.path.join(ROOT, "PCCF_PHASE5_PREREGISTRATION.md")).read().split("**Hypotheses")[1].split("**Troubleshooting")[0]

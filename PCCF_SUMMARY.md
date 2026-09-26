@@ -55,6 +55,7 @@ Code: `src/pccf.py`.
 | — | 10B | Throughput (descriptive) | — | PCCF filter ≈ 2 vCPU-s per 1M lines; NER dominates | PCCF_PHASE10B_RESULTS.md |
 | H41 | 11 | Rule floors hold on real documents | ✅ | 9/9 (TAB, BTC, WNUT-17, GermEval, FactRuEval, ANERcorp) | PCCF_PHASE11_RESULTS.md |
 | H42 | 11 | LR-UD useful and valid on real documents | ✅ | 6/9 (wnut_redact + anercorp: shift misses, ACI fixes both; factrueval: gain +0.012) | PCCF_PHASE11_RESULTS.md |
+| — | 11 | ko_legal_precedents (descriptive; no gold, sanity-check only) | — | 1,500 real Korean court precedents, 885 dict / 21,087 NER hits, 0 errors; P/R is 0.000 by construction (no gold), not a measurement | PCCF_PHASE11_RESULTS.md |
 | H43 | 11 | TAB direct identifiers kept once proposed | ✅ | 0.978 / 0.980 of covered (end-to-end 0.944 / 0.955) | PCCF_PHASE11_RESULTS.md |
 
 *Exploratory, not judged:* the phase-2 global alert certificate (E1); the
@@ -85,7 +86,10 @@ T7 E2/E3 rows; the H17b real-name population; the tl_gl split diagnostic
   TAB court judgments, BTC and WNUT-17 tweets, GermEval and FactRuEval news,
   ANERcorp (Arabic news, ad hoc split, unclear licence -- see caveats in
   PCCF_PHASE11_RESULTS.md), and Enron email (descriptive only).
-- **Licensing:** the Turkish savasy model has no licence. The MIT
-  replacement (`tr_mit`) is weaker.
+- **Licensing:** the Turkish savasy model (`tr`) has no licence and is
+  internal-only from 2026-09-26 -- never cited or published. `tr_mit`
+  (confirmed `license: mit` via the HF API) is the sole citable Turkish row
+  and is weaker (LR-UD P 0.621 vs 0.759 on the savasy row, for internal
+  comparison only).
 - **Numeric sensitivity:** cross-platform floating point moves single cells
   by about 0.01 (up to 0.06 for re-tuned thresholds).

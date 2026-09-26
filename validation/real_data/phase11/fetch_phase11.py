@@ -1,8 +1,21 @@
 """PCCF phase 11 data fetcher (PCCF_PHASE11_PREREGISTRATION.md). Runs in the
 redact-pccf-multilang image (needs network) or locally for the parsers.
-Writes <out>/{EN_TAB,EN_BTC,EN_WNUT,EN_ENRON,DE_GERMEVAL,RU_FACTRUEVAL,AR_ANERCORP}_large.jsonl
-and <out>/PHASE11_MANIFEST.json. Rows: {"split","id","text","ents":[{"t","o":[s,e],"s", ...}]}.
+Writes <out>/{EN_TAB,EN_BTC,EN_WNUT,EN_ENRON,DE_GERMEVAL,RU_FACTRUEVAL,AR_ANERCORP,
+KO_LEGAL_PRECEDENTS}_large.jsonl and <out>/PHASE11_MANIFEST.json.
+Rows: {"split","id","text","ents":[{"t","o":[s,e],"s", ...}]}.
   python fetch_phase11.py --out <datasets/large> [--only tab,btc,...] [--anercorp-dir <manual dir>] [--enron-dir <manual dir>]
+
+ko_legal_precedents (added 2026-09-26): NOT the K-LegalDeID benchmark (that
+row, "ko_legal", stays gitignored/restricted and waits on the authors --
+see phase5/convert_k_legaldeid.py). This is a substitute that needs no
+author permission at all: joonhok-exo-ai/korean_law_open_data_precedents
+on Hugging Face, openrail licence, 85k+ real Korean court precedents
+already anonymised by the courts before release. It has NO gold PERSON
+spans (the court's own placeholder anonymisation, e.g. names replaced by
+"A"/"B", is not recoverable), so every row is written with "ents": [] and
+the harness treats it as DESCRIPTIVE ONLY -- same status as Enron. It
+answers "does the framework behave sanely on this domain", not
+"what is its precision/recall here".
 """
 import argparse, collections, glob, io, json, os, random, re, sys, urllib.request, zipfile
 
@@ -229,6 +242,55 @@ def _enron_zip(fname, manual_dir, diag):
     raise RuntimeError(f"no zip for {fname}; put it in datasets/manual/enron/ (diagnostics in manifest)")
 
 
+KO_LEGAL_PRECEDENTS_DATASET = "joonhok-exo-ai/korean_law_open_data_precedents"
+KO_LEGAL_TEXT_KEYS = ("\uc804\ubb38", "\ud310\uacb0\uc694\uc9c0", "\ud310\uc2dc\uc0ac\ud56d")  # 전문, 판결요지, 판시사항
+KO_LEGAL_CAP_DOCS = 1500
+KO_LEGAL_CAP_CHARS = 6000  # cap per-document length; these are full judgments
+
+
+def fetch_ko_legal_precedents(out):
+    """Descriptive-only Korean legal-domain row (see module docstring).
+    Needs the `datasets` library and network to Hugging Face (same as the
+    other HF rows in this project, e.g. ar_wiki / KDPII). Field names come
+    from the dataset card (2026-09-26); if the live schema differs, this
+    falls back to the longest string field per row rather than failing, and
+    records exactly what happened in the manifest so it's debuggable."""
+    from datasets import load_dataset
+    ds = load_dataset(KO_LEGAL_PRECEDENTS_DATASET, split="train", streaming=True)
+    rows, seen_keys, n, first_keys = [], collections.Counter(), 0, None
+    for r in ds:
+        if n >= KO_LEGAL_CAP_DOCS:
+            break
+        if first_keys is None:
+            first_keys = sorted(r.keys())
+        text, used_key = None, None
+        for k in KO_LEGAL_TEXT_KEYS:
+            v = r.get(k)
+            if isinstance(v, str) and v.strip():
+                text, used_key = v.strip(), k
+                break
+        if not text:  # fallback: the longest string field in the row
+            strs = {k: v for k, v in r.items() if isinstance(v, str) and v.strip()}
+            if strs:
+                used_key = max(strs, key=lambda k: len(strs[k]))
+                text = strs[used_key]
+        if not text:
+            continue
+        seen_keys[used_key] += 1
+        rows.append({"split": "train", "id": f"ko-legal-precedent-{n}", "text": text[:KO_LEGAL_CAP_CHARS], "ents": []})
+        n += 1
+    return write(out, "KO_LEGAL_PRECEDENTS_large.jsonl", rows, {
+        "source": f"{KO_LEGAL_PRECEDENTS_DATASET} (Hugging Face, openrail licence, freely downloadable, "
+                  "no author permission needed)",
+        "descriptive_only": True,
+        "note": "text is ALREADY anonymised by the Korean courts before release (placeholder names such as "
+                "'\uac11'/'\uc744', A/B); there are no gold PERSON spans, so no P/R or floor verdict is computed "
+                "-- this row exists to sanity-check candidate behaviour on real legal text, nothing more.",
+        "text_field_used": dict(seen_keys),
+        "row_keys_seen": first_keys,
+    })
+
+
 def fetch_enron(out, manual_dir=None):
     rows, info = [], {"source": "Minkov et al. Enron-Meetings/Random (no licence stated)"}
     diag = []
@@ -278,7 +340,7 @@ def fetch_anercorp(out, d):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
-    ap.add_argument("--only", default="tab,btc,wnut,germeval,factrueval,enron,anercorp")
+    ap.add_argument("--only", default="tab,btc,wnut,germeval,factrueval,enron,anercorp,ko_legal_precedents")
     ap.add_argument("--anercorp-dir", default=None)
     ap.add_argument("--enron-dir", default=None)
     a = ap.parse_args()
@@ -292,7 +354,8 @@ def main():
                                              "germeval", {"PER"}),
             "factrueval": lambda: fetch_factrueval(a.out),
             "enron": lambda: fetch_enron(a.out, a.enron_dir),
-            "anercorp": lambda: fetch_anercorp(a.out, a.anercorp_dir)}
+            "anercorp": lambda: fetch_anercorp(a.out, a.anercorp_dir),
+            "ko_legal_precedents": lambda: fetch_ko_legal_precedents(a.out)}
     for k in a.only.split(","):
         try:
             man[k] = jobs[k]()

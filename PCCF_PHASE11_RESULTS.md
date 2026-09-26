@@ -1,56 +1,67 @@
 # PCCF phase 11 results: real documents
 
-## Summary (added 2026-09-26, after adding Enron and ANERcorp; figures are the Docker reference run)
+## Summary (updated 2026-09-26, after adding Enron, ANERcorp, and ko_legal_precedents; figures are the Docker reference run)
 
-**All three pre-registered hypotheses are SUPPORTED, now over 9 judged rows plus
-2 descriptive Enron arms** (court judgments, tweets, news, meeting/random email,
-Arabic news; English, German, Russian, Arabic).
+**All three pre-registered hypotheses are SUPPORTED, over 9 judged rows plus
+3 descriptive arms** (court judgments, tweets, news, meeting/random email,
+Arabic news, Korean legal precedents; English, German, Russian, Arabic, Korean).
 
-- **H41 (rule floors): 9/9 rows hold**, including the new `ar_anercorp` row.
+- **H41 (rule floors): 9/9 rows hold**, including `ar_anercorp`.
 - **H42 (LR-UD useful and valid): 6/9.** Three non-passes, all different in kind:
-  - `en_wnut_redact` and `ar_anercorp` are floor misses (ΔR −0.067 and −0.076).
-    Both are attributable to train→test shift, not the method: `en_wnut_redact`'s
-    {ner} recall is 0.949 pooled vs 0.890 original; `ar_anercorp`'s is 0.948 vs
-    0.891 (its {dict+ner} group similarly: 0.954 vs 0.925). ACI removes both
-    violations (1 → 0 each) at about equal precision — the same pattern seen in
-    phases 6, 8, and the first 8 phase-11 rows.
+  - `en_wnut_redact` and `ar_anercorp` are floor misses (ΔR −0.067 and −0.076),
+    both attributable to train→test shift, not the method (pooled-split
+    recall beats original-split recall in both). ACI removes both violations
+    (1 → 0 each) at about equal precision.
   - `ru_factrueval` is valid but not useful (ΔP +0.012 < 0.03); the union is
     already at P 0.946, leaving little noise to filter.
 - **H43 (TAB direct identifiers): 0.978 / 0.980 kept of those covered,** against
-  floors of 0.930 / 0.931 (unchanged by this run — TAB was already complete).
-- **Enron (descriptive only, as pre-registered):** now runs. Union P/R is
-  0.468/0.384 (REDACT layers) and 0.258/0.521 (spaCy layers) — the lowest
-  precision of any phase-11 row on the REDACT side, and PCCF still holds its
-  floor on both (rule ΔP +0.015 / +0.003, ok). Not judged; doesn't move H41-43.
+  floors of 0.930 / 0.931.
+- **Enron (descriptive, as pre-registered):** union P/R 0.468/0.384 (REDACT
+  layers) and 0.258/0.521 (spaCy layers). PCCF still holds its floor on both.
+- **ko_legal_precedents (descriptive, amendment 1, added and run 2026-09-26):**
+  1,500 real Korean court precedents (joonhok-exo-ai, openrail, no permission
+  needed), already anonymised by the courts before release. 885 dict hits,
+  21,087 NER hits over the 1,500 docs (~14 NER candidates/doc). Gold PERSON is
+  0 by construction, so the harness prints P/R as 0.000/0.000 -- **this is not
+  a precision measurement, it is the absence of a denominator**; do not quote
+  it as "0% precision". Rule floors trivially "hold" (0 eligible groups) and
+  LR-UD is skipped (single-class fit split), exactly as designed. It answers
+  one question honestly: the layers fire at a plausible rate (roughly the same
+  order of magnitude as GermEval/FactRuEval) on real Korean legal text, with no
+  errors over 1,500 documents -- nothing more, nothing less.
 
 ### Devil's advocate (read before citing)
 1. **The guarantee is conditional on a candidate.** End-to-end, TAB DIRECT
    recall is 486/515 = 0.944 (REDACT layers) and 492/515 = 0.955 (spaCy
    layers). A privacy claim must quote the end-to-end figure, not 0.98.
-2. **ar_anercorp's dataset provenance is weaker than the other rows.** It comes
-   from a Kaggle mirror of ANERcorp with no stated license and no official
-   train/test column; the split used here is an ad hoc 80/20 by sentence index
+2. **ar_anercorp's dataset provenance is weaker than the other rows.** Kaggle
+   mirror of ANERcorp, no stated license, no official train/test column; the
+   split used is an ad hoc 80/20 by sentence index
    (`datasets/manual/anercorp/_source/convert_anercorp.py`), not the CAMeL
-   Tools split other papers report against. Treat its numbers as indicative,
-   not as a reproduction of published ANERcorp baselines, and confirm licensing
-   before this row appears in anything public.
-3. **Enron's own licence is unstated** ("no licence stated" in the source
-   field) and it is emails, not security telemetry — its role here is a
-   sanity check on a very different text distribution, not evidence for the
-   framework's target domain.
-4. **The layers dominate the outcome.** BTC union recall is 0.16–0.17, and now
-   Enron union P is 0.26–0.47: no threshold recovers names the detectors never
+   Tools split other papers report against. Confirm licensing before this row
+   appears in anything public.
+3. **Enron's own licence is unstated.** Emails, not security telemetry --
+   a sanity check on a different distribution, not target-domain evidence.
+4. **ko_legal_precedents has no gold at all**, unlike Enron/ANERcorp (which
+   are merely weaker, not absent). The 21,087 NER hits could be almost
+   entirely false positives (court/law/place names a Korean PS tagger
+   mislabels) or a real signal on the small number of names courts do NOT
+   redact (witnesses, counsel, company reps) -- there is no way to tell from
+   this row alone, and it should never be cited as evidence of precision or
+   recall on Korean text.
+5. **The layers dominate the outcome.** BTC union recall is 0.16–0.17, Enron
+   union P is 0.26–0.47: no threshold recovers names the detectors never
    proposed (practitioner rule 6).
-5. **TAB NO_MASK PERSON (not judged)** keeps only 0.648 / 0.753 — expected,
+6. **TAB NO_MASK PERSON (not judged)** keeps only 0.648 / 0.753 — expected,
    since these are names annotators chose not to mask.
-6. **Shift keeps recurring.** With ar_anercorp added, 3 of 9 judged rows now
-   show a floor miss traced to split shift (not 1 of 8 as before). Static
-   calibration is not reliable enough on its own for a production deployment;
-   use ACI on analyst feedback (practitioner rule 3).
-7. **Minor:** one cache error each in `en_btc_redact` / `en_btc_spacy` (1 of
+7. **Shift keeps recurring.** 3 of 9 judged rows show a floor miss traced to
+   split shift. Static calibration alone is not reliable enough for
+   production; use ACI on analyst feedback (practitioner rule 3).
+8. **Minor:** one cache error each in `en_btc_redact` / `en_btc_spacy` (1 of
    3,500 docs, excluded).
 
 ---
+
 
 ## H41 / H42 (phase-5 harness; combined floor)
 

@@ -1,0 +1,127 @@
+Hypotheses (judged mechanically; a language counts only if it has a
+group with ≥ 19 true test candidates):**
+
+- **H22 (validity):** with fail-open fallback, the rule scorer's
+  per-group recall floor (≥ 0.95 − tol, for groups with n_true ≥ 19) holds
+  in every eligible language.
+- **H23 (utility):** LR-UD gains ≥ +0.03 precision over union with its
+  floors holding in at least half of the eligible languages.
+- **H24 (descriptive):** fail-open vs global fallback. Recall in the
+  groups that fell back.
+
+
+=== EN_TAB_REDACT: 1268 docs (fit 507 / cal 507 / test 254); gold person 16266; person labels ['PERSON']; dict hits 60, ner hits 15974; uncached/errors 0 ===
+  test pattern dict      n=    7 true=    0 precision=0.000
+  test pattern dict+ner  n=    1 true=    1 precision=1.000
+  test pattern ner       n= 2266 true= 2034 precision=0.898
+  union                              P=0.891 R=0.817
+  rule                               P=0.891 (+0.000) R=0.817 (+0.000) floors=ok floors_cv=ok (eligible groups 1) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict+ner: rec=1.00/n=1 | ner: rec=1.00/n=2034
+  LR-UD                              P=0.959 (+0.068) R=0.786 (-0.031) floors=ok floors_cv=ok (eligible groups 1) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict+ner: rec=1.00/n=1 | ner: rec=0.96/n=2034
+  LR-UD [fallback=global, H24]       P=0.962 (+0.071) R=0.786 (-0.031) floors=ok floors_cv=ok (eligible groups 1) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict+ner: rec=1.00/n=1 | ner: rec=0.96/n=2034
+
+=== EN_TAB_SPACY: 1268 docs (fit 507 / cal 507 / test 254); gold person 16266; person labels ['PERSON']; dict hits 52266, ner hits 15992; uncached/errors 0 ===
+  test pattern dict      n= 7116 true=  117 precision=0.016
+  test pattern dict+ner  n=  923 true=  895 precision=0.970
+  test pattern ner       n= 1344 true= 1140 precision=0.848
+  union                              P=0.225 R=0.851
+  rule                               P=0.229 (+0.004) R=0.839 (-0.012) floors=ok floors_cv=ok (eligible groups 3) fallback={'dict': False, 'ner': False, 'dict+ner': False}  dict: rec=0.99/n=117 | dict+ner: rec=0.97/n=895 | ner: rec=1.00/n=1140
+  LR-UD                              P=0.321 (+0.096) R=0.824 (-0.027) floors=ok floors_cv=ok (eligible groups 3) fallback={'dict': False, 'ner': False, 'dict+ner': False}  dict: rec=0.97/n=117 | dict+ner: rec=0.96/n=895 | ner: rec=0.97/n=1140
+  LR-UD [fallback=global, H24]       P=0.321 (+0.096) R=0.824 (-0.027) floors=ok floors_cv=ok (eligible groups 3) fallback={'dict': False, 'ner': False, 'dict+ner': False}  dict: rec=0.97/n=117 | dict+ner: rec=0.96/n=895 | ner: rec=0.97/n=1140
+
+=== EN_BTC_REDACT: 3499 docs (fit 999 / cal 1000 / test 1500); gold person 2374; person labels ['PERSON']; dict hits 49, ner hits 949; uncached/errors 1 ===
+  test pattern dict      n=   23 true=   23 precision=1.000
+  test pattern dict+ner  n=    1 true=    1 precision=1.000
+  test pattern ner       n=  368 true=  258 precision=0.701
+  union                              P=0.714 R=0.163
+  rule                               P=0.714 (+0.000) R=0.163 (+0.000) floors=ok floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=1.00/n=23 | dict+ner: rec=1.00/n=1 | ner: rec=1.00/n=258
+  LR-UD                              P=0.760 (+0.046) R=0.157 (-0.006) floors=ok floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=1.00/n=23 | dict+ner: rec=1.00/n=1 | ner: rec=0.96/n=258
+  LR-UD [fallback=global, H24]       P=0.760 (+0.046) R=0.157 (-0.006) floors=ok floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=1.00/n=23 | dict+ner: rec=1.00/n=1 | ner: rec=0.96/n=258
+
+=== EN_BTC_SPACY: 3499 docs (fit 999 / cal 1000 / test 1500); gold person 2374; person labels ['PERSON']; dict hits 1512, ner hits 1042; uncached/errors 1 ===
+  test pattern dict      n=  468 true=   30 precision=0.064
+  test pattern dict+ner  n=  127 true=  115 precision=0.906
+  test pattern ner       n=  299 true=  154 precision=0.515
+  union                              P=0.327 R=0.172
+  rule                               P=0.330 (+0.003) R=0.172 (+0.000) floors=ok floors_cv=ok (eligible groups 3) fallback={'ner': False, 'dict': False, 'dict+ner': False}  dict: rec=1.00/n=30 | dict+ner: rec=1.00/n=115 | ner: rec=1.00/n=154
+  LR-UD                              P=0.416 (+0.089) R=0.161 (-0.010) floors=ok floors_cv=ok (eligible groups 3) fallback={'ner': False, 'dict': False, 'dict+ner': False}  dict: rec=0.93/n=30 | dict+ner: rec=0.94/n=115 | ner: rec=0.94/n=154
+  LR-UD [fallback=global, H24]       P=0.416 (+0.089) R=0.161 (-0.010) floors=ok floors_cv=ok (eligible groups 3) fallback={'ner': False, 'dict': False, 'dict+ner': False}  dict: rec=0.93/n=30 | dict+ner: rec=0.94/n=115 | ner: rec=0.94/n=154
+
+=== EN_WNUT_REDACT: 3500 docs (fit 1000 / cal 1000 / test 1500); gold person 1017; person labels ['PERSON']; dict hits 30, ner hits 1039; uncached/errors 0 ===
+  test pattern dict      n=    3 true=    0 precision=0.000
+  test pattern dict+ner  n=    1 true=    1 precision=1.000
+  test pattern ner       n=  515 true=  381 precision=0.740
+  union                              P=0.736 R=0.623
+  rule                               P=0.736 (+0.000) R=0.620 (-0.003) floors=ok floors_cv=ok (eligible groups 1) fallback={'ner': False, 'dict': True}  dict+ner: rec=1.00/n=1 | ner: rec=0.99/n=381
+  LR-UD                              P=0.779 (+0.043) R=0.556 (-0.067) floors=FAIL floors_cv=FAIL (eligible groups 1) fallback={'ner': False, 'dict': True}  dict+ner: rec=1.00/n=1 | ner: rec=0.89/n=381
+  LR-UD [fallback=global, H24]       P=0.784 (+0.048) R=0.556 (-0.067) floors=FAIL floors_cv=FAIL (eligible groups 1) fallback={'ner': False, 'dict': True}  dict+ner: rec=1.00/n=1 | ner: rec=0.89/n=381
+
+=== EN_WNUT_SPACY: 3500 docs (fit 1000 / cal 1000 / test 1500); gold person 1017; person labels ['PERSON']; dict hits 1765, ner hits 1173; uncached/errors 0 ===
+  test pattern dict      n=  420 true=   70 precision=0.167
+  test pattern dict+ner  n=  202 true=  183 precision=0.906
+  test pattern ner       n=  318 true=  199 precision=0.626
+  union                              P=0.477 R=0.731
+  rule                               P=0.477 (-0.000) R=0.729 (-0.002) floors=ok floors_cv=ok (eligible groups 3) fallback={'ner': False, 'dict+ner': False, 'dict': False}  dict: rec=1.00/n=70 | dict+ner: rec=1.00/n=183 | ner: rec=0.99/n=199
+  LR-UD                              P=0.582 (+0.106) R=0.675 (-0.055) floors=ok floors_cv=ok (eligible groups 3) fallback={'ner': False, 'dict+ner': False, 'dict': False}  dict: rec=0.91/n=70 | dict+ner: rec=0.93/n=183 | ner: rec=0.92/n=199
+  LR-UD [fallback=global, H24]       P=0.582 (+0.106) R=0.675 (-0.055) floors=ok floors_cv=ok (eligible groups 3) fallback={'ner': False, 'dict+ner': False, 'dict': False}  dict: rec=0.91/n=70 | dict+ner: rec=0.93/n=183 | ner: rec=0.92/n=199
+
+=== DE_GERMEVAL: 3500 docs (fit 1000 / cal 1000 / test 1500); gold person 1118; person labels ['PERSON']; dict hits 582, ner hits 1188; uncached/errors 0 ===
+  test pattern dict      n=   49 true=   11 precision=0.224
+  test pattern dict+ner  n=  215 true=  208 precision=0.967
+  test pattern ner       n=  313 true=  213 precision=0.681
+  union                              P=0.744 R=0.881
+  rule                               P=0.742 (-0.002) R=0.861 (-0.020) floors=ok floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict': True, 'dict+ner': False}  dict: rec=1.00/n=11 | dict+ner: rec=0.96/n=208 | ner: rec=0.99/n=213
+  LR-UD                              P=0.786 (+0.042) R=0.850 (-0.031) floors=ok floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict': True, 'dict+ner': False}  dict: rec=1.00/n=11 | dict+ner: rec=0.97/n=208 | ner: rec=0.96/n=213
+  LR-UD [fallback=global, H24]       P=0.831 (+0.087) R=0.838 (-0.043) floors=ok floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict': True, 'dict+ner': False}  dict: rec=0.45/n=11 | dict+ner: rec=0.97/n=208 | ner: rec=0.96/n=213
+
+=== RU_FACTRUEVAL: 254 docs (fit 63 / cal 63 / test 128); gold person 3388; person labels ['PERSON']; dict hits 821, ner hits 2064; uncached/errors 0 ===
+  test pattern dict      n=   18 true=   14 precision=0.778
+  test pattern dict+ner  n=  429 true=  427 precision=0.995
+  test pattern ner       n=  647 true=  594 precision=0.918
+  union                              P=0.946 R=0.583
+  rule                               P=0.952 (+0.006) R=0.567 (-0.015) floors=ok floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict+ner': False, 'dict': True}  dict: rec=1.00/n=14 | dict+ner: rec=0.98/n=427 | ner: rec=0.97/n=594
+  LR-UD                              P=0.958 (+0.012) R=0.547 (-0.036) floors=FAIL floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict+ner': False, 'dict': True}  dict: rec=1.00/n=14 | dict+ner: rec=0.96/n=427 | ner: rec=0.92/n=594
+  LR-UD [fallback=global, H24]       P=0.961 (+0.015) R=0.539 (-0.044) floors=FAIL floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict+ner': False, 'dict': True}  dict: rec=0.00/n=14 | dict+ner: rec=0.96/n=427 | ner: rec=0.92/n=594
+
+=== AR_ANERCORP: 2952 docs (fit 1000 / cal 1000 / test 952); gold person 2273; person labels ['PERSON']; dict hits 1407, ner hits 2632; uncached/errors 0 ===
+  test pattern dict      n=  257 true=    1 precision=0.004
+  test pattern dict+ner  n=  211 true=  205 precision=0.972
+  test pattern ner       n=  788 true=  706 precision=0.896
+  union                              P=0.632 R=0.891
+  rule                               P=0.630 (-0.002) R=0.878 (-0.013) floors=ok floors_cv=ok (eligible groups 2) fallback={'dict': True, 'ner': False, 'dict+ner': False}  dict: rec=1.00/n=1 | dict+ner: rec=0.99/n=205 | ner: rec=0.98/n=706
+  LR-UD                              P=0.649 (+0.017) R=0.815 (-0.076) floors=FAIL floors_cv=FAIL (eligible groups 2) fallback={'dict': True, 'ner': False, 'dict+ner': False}  dict: rec=1.00/n=1 | dict+ner: rec=0.92/n=205 | ner: rec=0.88/n=706
+  LR-UD [fallback=global, H24]       P=0.839 (+0.207) R=0.814 (-0.077) floors=FAIL floors_cv=FAIL (eligible groups 2) fallback={'dict': True, 'ner': False, 'dict+ner': False}  dict: rec=0.00/n=1 | dict+ner: rec=0.92/n=205 | ner: rec=0.88/n=706
+
+=== EN_ENRON_REDACT: 1656 docs (fit 414 / cal 414 / test 828); gold person 7450; person labels ['PERSON']; dict hits 58, ner hits 6086; uncached/errors 0 ===
+  test pattern dict      n=   13 true=    3 precision=0.231
+  test pattern dict+ner  n=   11 true=    9 precision=0.818
+  test pattern ner       n= 2974 true= 1563 precision=0.526
+  union                              P=0.468 R=0.384
+  rule                               P=0.482 (+0.015) R=0.377 (-0.007) floors=ok floors_cv=ok (eligible groups 1) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=1.00/n=3 | dict+ner: rec=1.00/n=9 | ner: rec=0.98/n=1563
+  LR-UD                              P=0.526 (+0.058) R=0.362 (-0.021) floors=ok floors_cv=ok (eligible groups 1) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=1.00/n=3 | dict+ner: rec=1.00/n=9 | ner: rec=0.95/n=1563
+  LR-UD [fallback=global, H24]       P=0.528 (+0.060) R=0.362 (-0.022) floors=ok floors_cv=ok (eligible groups 1) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=0.33/n=3 | dict+ner: rec=1.00/n=9 | ner: rec=0.95/n=1563
+
+=== EN_ENRON_SPACY: 1656 docs (fit 414 / cal 414 / test 828); gold person 7450; person labels ['PERSON']; dict hits 12983, ner hits 7237; uncached/errors 0 ===
+  test pattern dict      n= 3266 true=  453 precision=0.139
+  test pattern dict+ner  n= 2718 true= 1715 precision=0.631
+  test pattern ner       n=  872 true=  275 precision=0.315
+  union                              P=0.258 R=0.521
+  rule                               P=0.261 (+0.003) R=0.514 (-0.007) floors=ok floors_cv=ok (eligible groups 3) fallback={'dict': False, 'dict+ner': False, 'ner': False}  dict: rec=1.00/n=453 | dict+ner: rec=0.99/n=1715 | ner: rec=0.96/n=275
+  LR-UD                              P=0.303 (+0.046) R=0.499 (-0.022) floors=ok floors_cv=ok (eligible groups 3) fallback={'dict': False, 'dict+ner': False, 'ner': False}  dict: rec=0.94/n=453 | dict+ner: rec=0.96/n=1715 | ner: rec=0.97/n=275
+  LR-UD [fallback=global, H24]       P=0.303 (+0.046) R=0.499 (-0.022) floors=ok floors_cv=ok (eligible groups 3) fallback={'dict': False, 'dict+ner': False, 'ner': False}  dict: rec=0.94/n=453 | dict+ner: rec=0.96/n=1715 | ner: rec=0.97/n=275
+
+=== KO_LEGAL_PRECEDENTS: 1500 docs (fit 375 / cal 375 / test 750); gold person 0; person labels []; dict hits 885, ner hits 21087; uncached/errors 0 ===
+  test pattern dict      n=   75 true=    0 precision=0.000
+  test pattern dict+ner  n=  353 true=    0 precision=0.000
+  test pattern ner       n=10011 true=    0 precision=0.000
+  union                              P=0.000 R=0.000
+  rule                               P=0.000 (+0.000) R=0.000 (+0.000) floors=ok floors_cv=ok (eligible groups 0) fallback={'ner': True, 'dict+ner': True, 'dict': True}  
+  LR-UD                              skipped: fit split has 5226 candidates / 1 class(es)
+  LR-UD [fallback=global, H24]       skipped: fit split has 5226 candidates / 1 class(es)
+
+eligible languages: []; LR-UD useful+valid in: []
+=== Verdicts (mechanical) ===
+  H22: NOT SUPPORTED
+  H23: NOT SUPPORTED
+phase-11 real-document rows: ['ar_anercorp', 'de_germeval', 'en_btc_redact', 'en_btc_spacy', 'en_tab_redact', 'en_tab_spacy', 'en_wnut_redact', 'en_wnut_spacy', 'ru_factrueval']; LR-UD useful+valid in: ['en_tab_redact', 'en_tab_spacy', 'en_btc_redact', 'en_btc_spacy', 'en_wnut_spacy', 'de_germeval']
+  H41: SUPPORTED
+  H42: SUPPORTED
