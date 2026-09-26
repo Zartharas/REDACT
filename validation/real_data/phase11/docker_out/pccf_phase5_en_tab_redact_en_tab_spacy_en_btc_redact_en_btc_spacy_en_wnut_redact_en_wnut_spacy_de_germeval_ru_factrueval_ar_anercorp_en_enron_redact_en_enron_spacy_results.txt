@@ -82,16 +82,37 @@ group with ≥ 19 true test candidates):**
   LR-UD                              P=0.958 (+0.012) R=0.547 (-0.036) floors=FAIL floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict+ner': False, 'dict': True}  dict: rec=1.00/n=14 | dict+ner: rec=0.96/n=427 | ner: rec=0.92/n=594
   LR-UD [fallback=global, H24]       P=0.961 (+0.015) R=0.539 (-0.044) floors=FAIL floors_cv=ok (eligible groups 2) fallback={'ner': False, 'dict+ner': False, 'dict': True}  dict: rec=0.00/n=14 | dict+ner: rec=0.96/n=427 | ner: rec=0.92/n=594
 
-=== ar_anercorp: no data file ===
+=== AR_ANERCORP: 2952 docs (fit 1000 / cal 1000 / test 952); gold person 2273; person labels ['PERSON']; dict hits 1407, ner hits 2632; uncached/errors 0 ===
+  test pattern dict      n=  257 true=    1 precision=0.004
+  test pattern dict+ner  n=  211 true=  205 precision=0.972
+  test pattern ner       n=  788 true=  706 precision=0.896
+  union                              P=0.632 R=0.891
+  rule                               P=0.630 (-0.002) R=0.878 (-0.013) floors=ok floors_cv=ok (eligible groups 2) fallback={'dict': True, 'ner': False, 'dict+ner': False}  dict: rec=1.00/n=1 | dict+ner: rec=0.99/n=205 | ner: rec=0.98/n=706
+  LR-UD                              P=0.649 (+0.017) R=0.815 (-0.076) floors=FAIL floors_cv=FAIL (eligible groups 2) fallback={'dict': True, 'ner': False, 'dict+ner': False}  dict: rec=1.00/n=1 | dict+ner: rec=0.92/n=205 | ner: rec=0.88/n=706
+  LR-UD [fallback=global, H24]       P=0.839 (+0.207) R=0.814 (-0.077) floors=FAIL floors_cv=FAIL (eligible groups 2) fallback={'dict': True, 'ner': False, 'dict+ner': False}  dict: rec=0.00/n=1 | dict+ner: rec=0.92/n=205 | ner: rec=0.88/n=706
 
-=== en_enron_redact: no data file ===
+=== EN_ENRON_REDACT: 1656 docs (fit 414 / cal 414 / test 828); gold person 7450; person labels ['PERSON']; dict hits 58, ner hits 6086; uncached/errors 0 ===
+  test pattern dict      n=   13 true=    3 precision=0.231
+  test pattern dict+ner  n=   11 true=    9 precision=0.818
+  test pattern ner       n= 2974 true= 1563 precision=0.526
+  union                              P=0.468 R=0.384
+  rule                               P=0.482 (+0.015) R=0.377 (-0.007) floors=ok floors_cv=ok (eligible groups 1) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=1.00/n=3 | dict+ner: rec=1.00/n=9 | ner: rec=0.98/n=1563
+  LR-UD                              P=0.526 (+0.058) R=0.362 (-0.021) floors=ok floors_cv=ok (eligible groups 1) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=1.00/n=3 | dict+ner: rec=1.00/n=9 | ner: rec=0.95/n=1563
+  LR-UD [fallback=global, H24]       P=0.528 (+0.060) R=0.362 (-0.022) floors=ok floors_cv=ok (eligible groups 1) fallback={'ner': False, 'dict': True, 'dict+ner': True}  dict: rec=0.33/n=3 | dict+ner: rec=1.00/n=9 | ner: rec=0.95/n=1563
 
-=== en_enron_spacy: no data file ===
+=== EN_ENRON_SPACY: 1656 docs (fit 414 / cal 414 / test 828); gold person 7450; person labels ['PERSON']; dict hits 12983, ner hits 7237; uncached/errors 0 ===
+  test pattern dict      n= 3266 true=  453 precision=0.139
+  test pattern dict+ner  n= 2718 true= 1715 precision=0.631
+  test pattern ner       n=  872 true=  275 precision=0.315
+  union                              P=0.258 R=0.521
+  rule                               P=0.261 (+0.003) R=0.514 (-0.007) floors=ok floors_cv=ok (eligible groups 3) fallback={'dict': False, 'dict+ner': False, 'ner': False}  dict: rec=1.00/n=453 | dict+ner: rec=0.99/n=1715 | ner: rec=0.96/n=275
+  LR-UD                              P=0.303 (+0.046) R=0.499 (-0.022) floors=ok floors_cv=ok (eligible groups 3) fallback={'dict': False, 'dict+ner': False, 'ner': False}  dict: rec=0.94/n=453 | dict+ner: rec=0.96/n=1715 | ner: rec=0.97/n=275
+  LR-UD [fallback=global, H24]       P=0.303 (+0.046) R=0.499 (-0.022) floors=ok floors_cv=ok (eligible groups 3) fallback={'dict': False, 'dict+ner': False, 'ner': False}  dict: rec=0.94/n=453 | dict+ner: rec=0.96/n=1715 | ner: rec=0.97/n=275
 
 eligible languages: []; LR-UD useful+valid in: []
-=== Verdicts (mechanical) ===  PROVISIONAL: no results for ['ar_anercorp', 'en_enron_redact', 'en_enron_spacy']
+=== Verdicts (mechanical) ===
   H22: NOT SUPPORTED
   H23: NOT SUPPORTED
-phase-11 real-document rows: ['de_germeval', 'en_btc_redact', 'en_btc_spacy', 'en_tab_redact', 'en_tab_spacy', 'en_wnut_redact', 'en_wnut_spacy', 'ru_factrueval']; LR-UD useful+valid in: ['en_tab_redact', 'en_tab_spacy', 'en_btc_redact', 'en_btc_spacy', 'en_wnut_spacy', 'de_germeval']
+phase-11 real-document rows: ['ar_anercorp', 'de_germeval', 'en_btc_redact', 'en_btc_spacy', 'en_tab_redact', 'en_tab_spacy', 'en_wnut_redact', 'en_wnut_spacy', 'ru_factrueval']; LR-UD useful+valid in: ['en_tab_redact', 'en_tab_spacy', 'en_btc_redact', 'en_btc_spacy', 'en_wnut_spacy', 'de_germeval']
   H41: SUPPORTED
   H42: SUPPORTED

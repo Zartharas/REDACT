@@ -12,9 +12,9 @@
 | en_wnut_spacy | 0.477 / 0.731 | -0.000 (ok) | +0.106 / -0.055 (ok) | useful+valid |
 | de_germeval | 0.744 / 0.881 | -0.002 (ok) | +0.042 / -0.031 (ok) | useful+valid |
 | ru_factrueval | 0.946 / 0.583 | +0.006 (ok) | +0.012 / -0.036 (ok) | gain < 0.03 |
-| ar_anercorp | no data | | | |
-| en_enron_redact | no data | | | |
-| en_enron_spacy | no data | | | |
+| ar_anercorp | 0.632 / 0.891 | -0.002 (ok) | +0.017 / -0.076 (miss) | floor miss |
+| en_enron_redact | 0.468 / 0.384 | +0.015 (ok) | +0.058 / -0.021 (ok) | descriptive |
+| en_enron_spacy | 0.258 / 0.521 | +0.003 (ok) | +0.046 / -0.022 (ok) | descriptive |
 
 ## H43: TAB direct identifiers kept by LR-UD PCCF
 
@@ -39,6 +39,10 @@
 | en_wnut_spacy | True | 0.582/0.675 | 0.532/0.687 | 0 / 0 |
 | de_germeval | True | 0.786/0.850 | 0.786/0.850 | 0 / 0 |
 | ru_factrueval | False | 0.958/0.547 | 0.956/0.555 | 0 / 0 |
+| ar_anercorp | True | 0.649/0.815 | 0.647/0.846 | 1 / 0 |
+| en_enron_redact | False | 0.526/0.362 | 0.520/0.363 | 0 / 0 |
+| en_enron_spacy | False | 0.303/0.499 | 0.304/0.496 | 0 / 0 |
+- ar_anercorp pooled (E1) vs original (E2) LR-UD recall: {dict} 1.000 vs nan; {dict+ner} 0.954 vs 0.925; {ner} 0.948 vs 0.891
 - de_germeval pooled (E1) vs original (E2) LR-UD recall: {dict} 1.000 vs nan; {dict+ner} 0.956 vs 0.960; {ner} 0.957 vs 0.943
 - en_btc_redact pooled (E1) vs original (E2) LR-UD recall: {dict} 1.000 vs 1.000; {ner} 0.955 vs 0.957
 - en_btc_spacy pooled (E1) vs original (E2) LR-UD recall: {dict} 0.983 vs 0.969; {dict+ner} 0.963 vs 0.962; {ner} 0.953 vs 0.925

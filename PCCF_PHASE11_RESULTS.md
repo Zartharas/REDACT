@@ -1,45 +1,54 @@
 # PCCF phase 11 results: real documents
 
-## Summary (added 2026-09-24; figures are the Docker reference run)
+## Summary (added 2026-09-26, after adding Enron and ANERcorp; figures are the Docker reference run)
 
-**All three pre-registered hypotheses are SUPPORTED on real, human-annotated
-documents** (court judgments, tweets, news; English, German, Russian).
+**All three pre-registered hypotheses are SUPPORTED, now over 9 judged rows plus
+2 descriptive Enron arms** (court judgments, tweets, news, meeting/random email,
+Arabic news; English, German, Russian, Arabic).
 
-- **H41 (rule floors): 8/8 rows hold.** The rule scorer never cuts recall
-  below its floor on real text.
-- **H42 (LR-UD useful and valid): 6/8.** The two non-passes are different in
-  kind:
-  - `en_wnut_redact` is a floor miss (ΔR −0.067 against the floor). The
-    split diagnostic attributes it to train→test shift, not to the method:
-    the {ner} group's recall is 0.949 under pooled (exchangeable) splits
-    versus 0.890 on the original split. ACI removes the violation (1 → 0)
-    at equal precision, the same pattern as phases 6 and 8.
-  - `ru_factrueval` is valid but not useful (ΔP +0.012 < 0.03). The union is
-    already at P 0.946, so there is little noise left to filter.
-- **H43 (TAB direct identifiers): 0.978 / 0.980 kept of those covered,**
-  against floors of 0.930 / 0.931.
+- **H41 (rule floors): 9/9 rows hold**, including the new `ar_anercorp` row.
+- **H42 (LR-UD useful and valid): 6/9.** Three non-passes, all different in kind:
+  - `en_wnut_redact` and `ar_anercorp` are floor misses (ΔR −0.067 and −0.076).
+    Both are attributable to train→test shift, not the method: `en_wnut_redact`'s
+    {ner} recall is 0.949 pooled vs 0.890 original; `ar_anercorp`'s is 0.948 vs
+    0.891 (its {dict+ner} group similarly: 0.954 vs 0.925). ACI removes both
+    violations (1 → 0 each) at about equal precision — the same pattern seen in
+    phases 6, 8, and the first 8 phase-11 rows.
+  - `ru_factrueval` is valid but not useful (ΔP +0.012 < 0.03); the union is
+    already at P 0.946, leaving little noise to filter.
+- **H43 (TAB direct identifiers): 0.978 / 0.980 kept of those covered,** against
+  floors of 0.930 / 0.931 (unchanged by this run — TAB was already complete).
+- **Enron (descriptive only, as pre-registered):** now runs. Union P/R is
+  0.468/0.384 (REDACT layers) and 0.258/0.521 (spaCy layers) — the lowest
+  precision of any phase-11 row on the REDACT side, and PCCF still holds its
+  floor on both (rule ΔP +0.015 / +0.003, ok). Not judged; doesn't move H41-43.
 
 ### Devil's advocate (read before citing)
 1. **The guarantee is conditional on a candidate.** End-to-end, TAB DIRECT
    recall is 486/515 = 0.944 (REDACT layers) and 492/515 = 0.955 (spaCy
-   layers). 18 and 13 direct identifiers are missed by every layer, and 11
-   and 10 more are dropped by PCCF. A privacy claim must quote the
-   end-to-end figure, not 0.98.
-2. **The layers dominate the outcome.** BTC union recall is 0.16–0.17: the
-   detectors miss most tweet names, and no threshold can recover them
-   (practitioner rule 6).
-3. **TAB NO_MASK PERSON (not judged)** keeps only 0.648 / 0.753. These are
-   names the annotators chose not to mask (e.g. public officials), so the
-   low figure is expected. It is also why they are excluded from H43.
-4. **Shift again.** 7 of 8 rows test as shifted. Static calibration held
-   here, but the only miss came from shift. For a real deployment, use ACI
-   on analyst feedback (rule 3).
-5. **Not run:** Enron (descriptive; the download returned a non-zip) and
-   ANERcorp (manual licence download not supplied). Neither affects the
-   verdicts, which were pre-registered over the rows that have data.
-6. **Minor:** there was one cache error each in `en_btc_redact` and
-   `en_btc_spacy` (1 of 3,500 docs). That document is excluded, which is
-   negligible.
+   layers). A privacy claim must quote the end-to-end figure, not 0.98.
+2. **ar_anercorp's dataset provenance is weaker than the other rows.** It comes
+   from a Kaggle mirror of ANERcorp with no stated license and no official
+   train/test column; the split used here is an ad hoc 80/20 by sentence index
+   (`datasets/manual/anercorp/_source/convert_anercorp.py`), not the CAMeL
+   Tools split other papers report against. Treat its numbers as indicative,
+   not as a reproduction of published ANERcorp baselines, and confirm licensing
+   before this row appears in anything public.
+3. **Enron's own licence is unstated** ("no licence stated" in the source
+   field) and it is emails, not security telemetry — its role here is a
+   sanity check on a very different text distribution, not evidence for the
+   framework's target domain.
+4. **The layers dominate the outcome.** BTC union recall is 0.16–0.17, and now
+   Enron union P is 0.26–0.47: no threshold recovers names the detectors never
+   proposed (practitioner rule 6).
+5. **TAB NO_MASK PERSON (not judged)** keeps only 0.648 / 0.753 — expected,
+   since these are names annotators chose not to mask.
+6. **Shift keeps recurring.** With ar_anercorp added, 3 of 9 judged rows now
+   show a floor miss traced to split shift (not 1 of 8 as before). Static
+   calibration is not reliable enough on its own for a production deployment;
+   use ACI on analyst feedback (practitioner rule 3).
+7. **Minor:** one cache error each in `en_btc_redact` / `en_btc_spacy` (1 of
+   3,500 docs, excluded).
 
 ---
 
@@ -55,9 +64,9 @@ documents** (court judgments, tweets, news; English, German, Russian).
 | en_wnut_spacy | 0.477 / 0.731 | -0.000 (ok) | +0.106 / -0.055 (ok) | useful+valid |
 | de_germeval | 0.744 / 0.881 | -0.002 (ok) | +0.042 / -0.031 (ok) | useful+valid |
 | ru_factrueval | 0.946 / 0.583 | +0.006 (ok) | +0.012 / -0.036 (ok) | gain < 0.03 |
-| ar_anercorp | no data | | | |
-| en_enron_redact | no data | | | |
-| en_enron_spacy | no data | | | |
+| ar_anercorp | 0.632 / 0.891 | -0.002 (ok) | +0.017 / -0.076 (miss) | floor miss |
+| en_enron_redact | 0.468 / 0.384 | +0.015 (ok) | +0.058 / -0.021 (ok) | descriptive |
+| en_enron_spacy | 0.258 / 0.521 | +0.003 (ok) | +0.046 / -0.022 (ok) | descriptive |
 
 ## H43: TAB direct identifiers kept by LR-UD PCCF
 
@@ -82,6 +91,10 @@ documents** (court judgments, tweets, news; English, German, Russian).
 | en_wnut_spacy | True | 0.582/0.675 | 0.532/0.687 | 0 / 0 |
 | de_germeval | True | 0.786/0.850 | 0.786/0.850 | 0 / 0 |
 | ru_factrueval | False | 0.958/0.547 | 0.956/0.555 | 0 / 0 |
+| ar_anercorp | True | 0.649/0.815 | 0.647/0.846 | 1 / 0 |
+| en_enron_redact | False | 0.526/0.362 | 0.520/0.363 | 0 / 0 |
+| en_enron_spacy | False | 0.303/0.499 | 0.304/0.496 | 0 / 0 |
+- ar_anercorp pooled (E1) vs original (E2) LR-UD recall: {dict} 1.000 vs nan; {dict+ner} 0.954 vs 0.925; {ner} 0.948 vs 0.891
 - de_germeval pooled (E1) vs original (E2) LR-UD recall: {dict} 1.000 vs nan; {dict+ner} 0.956 vs 0.960; {ner} 0.957 vs 0.943
 - en_btc_redact pooled (E1) vs original (E2) LR-UD recall: {dict} 1.000 vs 1.000; {ner} 0.955 vs 0.957
 - en_btc_spacy pooled (E1) vs original (E2) LR-UD recall: {dict} 0.983 vs 0.969; {dict+ner} 0.963 vs 0.962; {ner} 0.953 vs 0.925

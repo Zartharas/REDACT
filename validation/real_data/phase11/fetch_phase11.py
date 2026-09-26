@@ -267,7 +267,12 @@ def fetch_anercorp(out, d):
         if toks:
             sents.append((toks, tags))
         rows += bio_rows([s[0] for s in sents], [s[1] for s in sents], split, "anercorp", {"PERS", "PER"})
-    return write(out, "AR_ANERCORP_large.jsonl", capped(rows), {"source": "ANERcorp CAMeL splits (CC BY-SA 4.0), manual"})
+    return write(out, "AR_ANERCORP_large.jsonl", capped(rows), {
+        "source": "ANERcorp text via Kaggle mirror youcefbahgat/arabic-anercorp-name-entity-rec "
+                   "(single sheet, no train/test column; licence not stated by the uploader -- "
+                   "original ANERcorp/CAMeL Tools splits are CC BY-SA 4.0, verify before any external use). "
+                   "Split here is an ad hoc 80/20 by sentence index, NOT the official CAMeL split "
+                   "(see datasets/manual/anercorp/_source/convert_anercorp.py)."})
 
 
 def main():

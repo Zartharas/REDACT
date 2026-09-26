@@ -1155,6 +1155,441 @@
     },
     "eligible_groups": 2
    }
+  },
+  "ar_anercorp": {
+   "union": {
+    "tp": 801,
+    "fp": 466,
+    "fn": 98,
+    "P": 0.6322020520915549,
+    "R": 0.8909899888765295,
+    "F1": 0.7396121883656509,
+    "F2": 0.823565700185071
+   },
+   "rule": {
+    "tp": 789,
+    "fp": 463,
+    "fn": 110,
+    "P": 0.6301916932907349,
+    "R": 0.8776418242491657,
+    "F1": 0.7336122733612275,
+    "F2": 0.8137376237623762,
+    "checks": {
+     "dict+ner": {
+      "n_true": 205,
+      "cand_recall": 0.9853658536585366,
+      "kept": 208,
+      "kept_precision": 0.9711538461538461,
+      "threshold": 0.06000000000000005
+     },
+     "dict": {
+      "n_true": 1,
+      "cand_recall": 1.0,
+      "kept": 257,
+      "kept_precision": 0.0038910505836575876,
+      "threshold": Infinity
+     },
+     "ner": {
+      "n_true": 706,
+      "cand_recall": 0.9830028328611898,
+      "kept": 776,
+      "kept_precision": 0.8943298969072165,
+      "threshold": 0.9
+     }
+    },
+    "fallback": {
+     "dict": true,
+     "ner": false,
+     "dict+ner": false
+    },
+    "floors_hold": true,
+    "floors_hold_cv": true,
+    "cal_true": {
+     "ner": 521,
+     "dict+ner": 175
+    },
+    "eligible_groups": 2
+   },
+   "LR-UD": {
+    "tp": 733,
+    "fp": 396,
+    "fn": 166,
+    "P": 0.6492471213463242,
+    "R": 0.8153503893214683,
+    "F1": 0.7228796844181461,
+    "F2": 0.7756613756613756,
+    "checks": {
+     "dict+ner": {
+      "n_true": 205,
+      "cand_recall": 0.9219512195121952,
+      "kept": 193,
+      "kept_precision": 0.9792746113989638,
+      "threshold": 0.006772872269906527
+     },
+     "dict": {
+      "n_true": 1,
+      "cand_recall": 1.0,
+      "kept": 257,
+      "kept_precision": 0.0038910505836575876,
+      "threshold": Infinity
+     },
+     "ner": {
+      "n_true": 706,
+      "cand_recall": 0.8796033994334278,
+      "kept": 668,
+      "kept_precision": 0.9296407185628742,
+      "threshold": 0.013732975097923594
+     }
+    },
+    "fallback": {
+     "dict": true,
+     "ner": false,
+     "dict+ner": false
+    },
+    "floors_hold": false,
+    "floors_hold_cv": false,
+    "cal_true": {
+     "ner": 521,
+     "dict+ner": 175
+    },
+    "eligible_groups": 2
+   },
+   "LR-UD [fallback=global, H24]": {
+    "tp": 732,
+    "fp": 140,
+    "fn": 167,
+    "P": 0.8394495412844036,
+    "R": 0.814238042269188,
+    "F1": 0.8266516092603049,
+    "F2": 0.819158460161146,
+    "checks": {
+     "dict+ner": {
+      "n_true": 205,
+      "cand_recall": 0.9219512195121952,
+      "kept": 193,
+      "kept_precision": 0.9792746113989638,
+      "threshold": 0.006772872269906527
+     },
+     "dict": {
+      "n_true": 1,
+      "cand_recall": 0.0,
+      "kept": 0,
+      "kept_precision": null,
+      "threshold": 0.012706787687357224
+     },
+     "ner": {
+      "n_true": 706,
+      "cand_recall": 0.8796033994334278,
+      "kept": 668,
+      "kept_precision": 0.9296407185628742,
+      "threshold": 0.013732975097923594
+     }
+    },
+    "fallback": {
+     "dict": true,
+     "ner": false,
+     "dict+ner": false
+    },
+    "floors_hold": false,
+    "floors_hold_cv": false,
+    "cal_true": {
+     "ner": 521,
+     "dict+ner": 175
+    },
+    "eligible_groups": 2
+   }
+  },
+  "en_enron_redact": {
+   "union": {
+    "tp": 1402,
+    "fp": 1596,
+    "fn": 2253,
+    "P": 0.4676450967311541,
+    "R": 0.3835841313269494,
+    "F1": 0.4214640012024651,
+    "F2": 0.39788852310137357
+   },
+   "rule": {
+    "tp": 1378,
+    "fp": 1479,
+    "fn": 2277,
+    "P": 0.4823241162058103,
+    "R": 0.37701778385772916,
+    "F1": 0.42321867321867324,
+    "F2": 0.3942324197516736,
+    "checks": {
+     "ner": {
+      "n_true": 1563,
+      "cand_recall": 0.9801663467690339,
+      "kept": 2833,
+      "kept_precision": 0.5407695022943876,
+      "threshold": 0.95
+     },
+     "dict+ner": {
+      "n_true": 9,
+      "cand_recall": 1.0,
+      "kept": 11,
+      "kept_precision": 0.8181818181818182,
+      "threshold": Infinity
+     },
+     "dict": {
+      "n_true": 3,
+      "cand_recall": 1.0,
+      "kept": 13,
+      "kept_precision": 0.23076923076923078,
+      "threshold": Infinity
+     }
+    },
+    "fallback": {
+     "ner": false,
+     "dict": true,
+     "dict+ner": true
+    },
+    "floors_hold": true,
+    "floors_hold_cv": true,
+    "cal_true": {
+     "ner": 829,
+     "dict": 5,
+     "dict+ner": 8
+    },
+    "eligible_groups": 1
+   },
+   "LR-UD": {
+    "tp": 1324,
+    "fp": 1195,
+    "fn": 2331,
+    "P": 0.5256053989678444,
+    "R": 0.3622435020519836,
+    "F1": 0.4288953676708779,
+    "F2": 0.38625357372075386,
+    "checks": {
+     "ner": {
+      "n_true": 1563,
+      "cand_recall": 0.946257197696737,
+      "kept": 2495,
+      "kept_precision": 0.5927855711422846,
+      "threshold": 0.6940476685341841
+     },
+     "dict+ner": {
+      "n_true": 9,
+      "cand_recall": 1.0,
+      "kept": 11,
+      "kept_precision": 0.8181818181818182,
+      "threshold": Infinity
+     },
+     "dict": {
+      "n_true": 3,
+      "cand_recall": 1.0,
+      "kept": 13,
+      "kept_precision": 0.23076923076923078,
+      "threshold": Infinity
+     }
+    },
+    "fallback": {
+     "ner": false,
+     "dict": true,
+     "dict+ner": true
+    },
+    "floors_hold": true,
+    "floors_hold_cv": true,
+    "cal_true": {
+     "ner": 829,
+     "dict": 5,
+     "dict+ner": 8
+    },
+    "eligible_groups": 1
+   },
+   "LR-UD [fallback=global, H24]": {
+    "tp": 1323,
+    "fp": 1185,
+    "fn": 2332,
+    "P": 0.527511961722488,
+    "R": 0.3619699042407661,
+    "F1": 0.42933636216128507,
+    "F2": 0.3862097150864082,
+    "checks": {
+     "ner": {
+      "n_true": 1563,
+      "cand_recall": 0.946257197696737,
+      "kept": 2495,
+      "kept_precision": 0.5927855711422846,
+      "threshold": 0.6940476685341841
+     },
+     "dict+ner": {
+      "n_true": 9,
+      "cand_recall": 1.0,
+      "kept": 11,
+      "kept_precision": 0.8181818181818182,
+      "threshold": 0.6958377613618174
+     },
+     "dict": {
+      "n_true": 3,
+      "cand_recall": 0.3333333333333333,
+      "kept": 2,
+      "kept_precision": 0.5,
+      "threshold": 0.6958377613618174
+     }
+    },
+    "fallback": {
+     "ner": false,
+     "dict": true,
+     "dict+ner": true
+    },
+    "floors_hold": true,
+    "floors_hold_cv": true,
+    "cal_true": {
+     "ner": 829,
+     "dict": 5,
+     "dict+ner": 8
+    },
+    "eligible_groups": 1
+   }
+  },
+  "en_enron_spacy": {
+   "union": {
+    "tp": 1905,
+    "fp": 5489,
+    "fn": 1750,
+    "P": 0.25764133080876384,
+    "R": 0.521203830369357,
+    "F1": 0.3448275862068966,
+    "F2": 0.4326792041428182
+   },
+   "rule": {
+    "tp": 1880,
+    "fp": 5336,
+    "fn": 1775,
+    "P": 0.26053215077605324,
+    "R": 0.5143638850889193,
+    "F1": 0.34587434458651456,
+    "F2": 0.43048177321853826,
+    "checks": {
+     "dict": {
+      "n_true": 453,
+      "cand_recall": 0.9955849889624724,
+      "kept": 3234,
+      "kept_precision": 0.13945578231292516,
+      "threshold": 0.95
+     },
+     "dict+ner": {
+      "n_true": 1715,
+      "cand_recall": 0.9877551020408163,
+      "kept": 2671,
+      "kept_precision": 0.6342193934855859,
+      "threshold": 0.95
+     },
+     "ner": {
+      "n_true": 275,
+      "cand_recall": 0.9636363636363636,
+      "kept": 775,
+      "kept_precision": 0.3419354838709677,
+      "threshold": 0.95
+     }
+    },
+    "fallback": {
+     "dict": false,
+     "dict+ner": false,
+     "ner": false
+    },
+    "floors_hold": true,
+    "floors_hold_cv": true,
+    "cal_true": {
+     "dict+ner": 914,
+     "ner": 168,
+     "dict": 224
+    },
+    "eligible_groups": 3
+   },
+   "LR-UD": {
+    "tp": 1825,
+    "fp": 4189,
+    "fn": 1830,
+    "P": 0.30345859660791485,
+    "R": 0.4993160054719562,
+    "F1": 0.37749508739269827,
+    "F2": 0.442231268779684,
+    "checks": {
+     "dict": {
+      "n_true": 453,
+      "cand_recall": 0.9448123620309051,
+      "kept": 2313,
+      "kept_precision": 0.18504107220060528,
+      "threshold": 0.9636026751577561
+     },
+     "dict+ner": {
+      "n_true": 1715,
+      "cand_recall": 0.9580174927113703,
+      "kept": 2465,
+      "kept_precision": 0.6665314401622718,
+      "threshold": 0.6751558394053465
+     },
+     "ner": {
+      "n_true": 275,
+      "cand_recall": 0.9745454545454545,
+      "kept": 710,
+      "kept_precision": 0.37746478873239436,
+      "threshold": 0.8117037927092055
+     }
+    },
+    "fallback": {
+     "dict": false,
+     "dict+ner": false,
+     "ner": false
+    },
+    "floors_hold": true,
+    "floors_hold_cv": true,
+    "cal_true": {
+     "dict+ner": 914,
+     "ner": 168,
+     "dict": 224
+    },
+    "eligible_groups": 3
+   },
+   "LR-UD [fallback=global, H24]": {
+    "tp": 1825,
+    "fp": 4189,
+    "fn": 1830,
+    "P": 0.30345859660791485,
+    "R": 0.4993160054719562,
+    "F1": 0.37749508739269827,
+    "F2": 0.442231268779684,
+    "checks": {
+     "dict": {
+      "n_true": 453,
+      "cand_recall": 0.9448123620309051,
+      "kept": 2313,
+      "kept_precision": 0.18504107220060528,
+      "threshold": 0.9636026751577561
+     },
+     "dict+ner": {
+      "n_true": 1715,
+      "cand_recall": 0.9580174927113703,
+      "kept": 2465,
+      "kept_precision": 0.6665314401622718,
+      "threshold": 0.6751558394053465
+     },
+     "ner": {
+      "n_true": 275,
+      "cand_recall": 0.9745454545454545,
+      "kept": 710,
+      "kept_precision": 0.37746478873239436,
+      "threshold": 0.8117037927092055
+     }
+    },
+    "fallback": {
+     "dict": false,
+     "dict+ner": false,
+     "ner": false
+    },
+    "floors_hold": true,
+    "floors_hold_cv": true,
+    "cal_true": {
+     "dict+ner": 914,
+     "ner": 168,
+     "dict": 224
+    },
+    "eligible_groups": 3
+   }
   }
  },
  "verdicts": {
